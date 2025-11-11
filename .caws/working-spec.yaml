@@ -1,7 +1,7 @@
 id: PROJ-388
 title: distill
 risk_tier: 2
-mode: feature
+mode: chore
 change_budget:
   max_files: 25
   max_loc: 1000
