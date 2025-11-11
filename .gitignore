@@ -185,3 +185,16 @@ DerivedData/
 # Placeholder markers (smoke test artifacts)
 .placeholder
 **/.placeholder
+
+# CAWS Runtime Tracking
+.agent/
+
+# CAWS Tools Infrastructure
+apps/tools/caws/
+
+# IDE-specific configurations
+.windsurf/
+.github/copilot/
+
+# Documentation Archive
+docs/archive/
