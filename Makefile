@@ -44,7 +44,7 @@ proc:
 	python -m training.distill_process --checkpoint models/student/checkpoints/latest.pt --config configs/worker_9b.yaml configs/process_supervision.yaml --steps 10000
 
 qat:
-	python -m training.quant_qat_int8 --config configs/quant_qat_int8.yaml
+	python -m training.quant_qat_int8 --checkpoint models/student/checkpoints/process_supervised_latest.pt --config configs/worker_9b.yaml configs/quant_qat_int8.yaml --steps 30000
 
 # Export targets
 onnx-worker:
