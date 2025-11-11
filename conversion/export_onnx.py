@@ -80,7 +80,7 @@ def main(config: str = "conversion/shape_sets.json", mode: str = "both"):
     if mode in ["prefill", "both"]:
         for T in seqs:
             dummy = torch.zeros((1, T), dtype=torch.int32)
-            path = f"artifacts/onnx/student_prefill_T{T}.onnx"
+            path = f"artifacts/onnx/student_T{T}.onnx"
             torch.onnx.export(
                 model,
                 (dummy, None),
@@ -91,7 +91,7 @@ def main(config: str = "conversion/shape_sets.json", mode: str = "both"):
                 do_constant_folding=True,
                 dynamic_axes=None,  # enumerated shapes only
             )
-            print(f"Exported prefill model: {path}")
+            print(f"Exported {path}")
 
     # Export decode models (single token with KV cache)
     if mode in ["decode", "both"]:
