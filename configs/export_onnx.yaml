@@ -1,0 +1,16 @@
+export:
+  opset: 19
+  dynamic_axes: false
+  enumerated_shapes: [2048, 4096, 8192]
+  use_external_data: true
+  fold_layernorms: false
+  fold_rope: false
+contract:
+  inputs:
+    - name: "input_ids"
+      dtype: int32
+      shape: ["B","T"]
+  outputs:
+    - name: "logits"
+      dtype: float16
+      shape: ["B","T","V"]

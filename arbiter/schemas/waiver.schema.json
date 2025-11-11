@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-2020-12/schema",
+  "title": "CAWS Waiver Schema",
+  "description": "Waiver record for exceptional circumstances under CAWS",
+  "type": "object",
+  "required": ["waiver_id", "title", "reason", "description", "gates", "expires_at", "approved_by", "impact_level", "mitigation_plan"],
+  "properties": {
+    "waiver_id": {
+      "type": "string",
+      "pattern": "^CAWS-WAIVER-[A-Z0-9]{16}$",
+      "description": "Unique waiver identifier"
+    },
+    "title": {
+      "type": "string",
+      "description": "Short title for the waiver"
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "emergency_hotfix",
+        "legacy_integration",
+        "experimental_feature",
+        "third_party_constraint",
+        "performance_critical",
+        "security_patch",
+        "infrastructure_limitation",
+        "other"
+      ],
+      "description": "Category of waiver reason"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of why waiver is needed"
+    },
+    "gates": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["naming", "code_freeze", "duplication", "god_objects", "documentation"]
+      },
+      "description": "Quality gates being waived"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Expiration date for the waiver"
+    },
+    "approved_by": {
+      "type": "string",
+      "description": "Person or entity approving the waiver"
+    },
+    "impact_level": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"],
+      "description": "Risk impact level"
+    },
+    "mitigation_plan": {
+      "type": "string",
+      "description": "Plan to mitigate risks introduced by the waiver"
+    },
+    "change_ids": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Change IDs covered by this waiver"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Creation timestamp"
+    }
+  }
+}
+

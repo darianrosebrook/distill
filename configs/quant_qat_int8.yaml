@@ -1,0 +1,10 @@
+qat:
+  weight_bits: 8
+  act_bits: 8
+  observers: "minmax_per_channel"
+  fake_quant_in_attention: true
+  clamp_pre_softmax: true
+  rope_pre_rotate_qk: false
+schedule:
+  warmup_steps: 2000
+  total_steps: 30000

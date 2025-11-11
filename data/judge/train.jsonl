@@ -1,0 +1,3 @@
+{"id":"t1","prompt":"Add input validation to function foo().","a":{"text":"Adds type checks and unit tests.","clauses":["EVIDENCE_COMPLETENESS","GATE_INTEGRITY"]},"b":{"text":"Refactors naming only.","clauses":["BUDGET_ADHERENCE"]},"winner":"a"}
+{"id":"t2","prompt":"Summarize RFC-123 in 3 bullets.","a":{"text":"Three precise bullets with citations.","clauses":["PROVENANCE_CLARITY","EVIDENCE_COMPLETENESS"]},"b":{"text":"Vague summary without sources.","clauses":["WAIVER_JUSTIFICATION"]},"winner":"a"}
+

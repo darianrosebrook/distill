@@ -1,0 +1,11 @@
+schema:
+  name: "ToolCall"
+  required: ["name","arguments"]
+  properties:
+    name: {type: "string"}
+    arguments: {type: "object"}
+training:
+  loss_json_validity_weight: 0.3
+  loss_tool_select_weight: 0.7
+  constrained_decoding: true
+  negative_examples: true

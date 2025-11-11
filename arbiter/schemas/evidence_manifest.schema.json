@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-2020-12/schema",
+  "title": "CAWS Evidence Manifest Schema",
+  "description": "Evidence manifest for CAWS claim verification",
+  "type": "object",
+  "required": ["manifest_id", "change_id", "evidence_items"],
+  "properties": {
+    "manifest_id": {
+      "type": "string",
+      "pattern": "^CAWS-EVIDENCE-[A-Z0-9]{16}$",
+      "description": "Unique manifest identifier"
+    },
+    "change_id": {
+      "type": "string",
+      "description": "Associated change identifier"
+    },
+    "evidence_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["evidence_id", "type", "content", "verification_status"],
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "description": "Unique evidence item identifier"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "test_result",
+              "code_diff",
+              "documentation",
+              "benchmark_result",
+              "lint_report",
+              "coverage_report",
+              "manual_review",
+              "external_reference"
+            ],
+            "description": "Type of evidence"
+          },
+          "content": {
+            "type": "string",
+            "description": "Evidence content or reference"
+          },
+          "verification_status": {
+            "type": "string",
+            "enum": ["verified", "unverified", "insufficient"],
+            "description": "Verification status"
+          },
+          "quality_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Evidence quality score"
+          },
+          "source": {
+            "type": "string",
+            "description": "Source of the evidence"
+          }
+        }
+      }
+    },
+    "overall_quality": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Overall evidence quality score"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Creation timestamp"
+    }
+  }
+}
+

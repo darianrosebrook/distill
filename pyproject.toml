@@ -1,0 +1,27 @@
+[project]
+name = "kimi-student"
+version = "0.1.0"
+description = "Distilled student model for CoreML/ANE on Apple Silicon"
+requires-python = ">=3.10"
+dependencies = [
+  "torch>=2.3",
+  "transformers>=4.43",
+  "accelerate>=0.33",
+  "datasets>=2.20",
+  "tokenizers>=0.15",
+  "sentencepiece>=0.1.99",
+  "onnx>=1.16",
+  "onnxruntime>=1.18",
+  "coremltools>=7.0",
+  "numpy",
+  "scipy",
+  "typer>=0.12",
+  "rich>=13.7",
+  "pydantic>=2.8",
+  "jsonschema>=4.22",
+  "pytest>=8.0",
+  "pyyaml>=6.0",
+]
+
+[tool.ruff]
+line-length = 100

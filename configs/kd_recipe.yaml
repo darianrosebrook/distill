@@ -1,0 +1,14 @@
+teacher:
+  endpoint: "http://localhost:8000"
+  temperature: 1.5
+  top_p: 0.95
+losses:
+  ce_on_teacher: true
+  kl_div: true
+  kl_weight: 0.5
+  kd_temperature: 2.0
+sampling:
+  mix:
+    general: 0.5
+    domain_specific: 0.3
+    tool_traces: 0.2

@@ -1,0 +1,25 @@
+model:
+  hf_name: "microsoft/deberta-v3-small"   # any HF encoder; localize later
+  max_len: 512
+train:
+  batch_size: 16
+  lr: 2.0e-5
+  weight_decay: 0.01
+  warmup_steps: 500
+  total_steps: 20000
+  margin: 0.2           # pairwise ranking margin
+  clause_loss_weight: 0.5
+  log_every: 50
+  val_every: 1000
+clauses: [
+  "EVIDENCE_COMPLETENESS",
+  "BUDGET_ADHERENCE",
+  "GATE_INTEGRITY",
+  "PROVENANCE_CLARITY",
+  "WAIVER_JUSTIFICATION"
+]
+paths:
+  train_jsonl: "data/judge/train.jsonl"
+  val_jsonl:   "data/judge/val.jsonl"
+  out_dir:     "arbiter/judge_training/artifacts"
+

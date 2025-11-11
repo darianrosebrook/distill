@@ -1,0 +1,35 @@
+arch:
+  d_model: 4096
+  n_layers: 32
+  n_heads: 32
+  n_kv_heads: 8
+  d_head: 128
+  vocab_size: 32000
+  rope_theta: 10000
+  rope_scaling: "dynamic"
+  norm: "rms"
+  mlp: "swiglu"
+  dropout: 0.0
+init:
+  base_checkpoint: null
+optimizer:
+  name: adamw
+  lr: 2.0e-4
+  betas: [0.9, 0.95]
+  weight_decay: 0.1
+train:
+  seq_lengths: [4096, 8192, 16384]  # Long context for 8-16k
+  micro_batch_size: 2
+  grad_accum: 16
+  steps: 200000
+  fp16: true
+  grad_checkpointing: true
+tokenizer:
+  path: models/student/tokenizer
+role: "worker"
+distillation:
+  type: "standard_kd"
+  kd_weight: 0.5
+  process_supervision_weight: 0.3
+  long_ctx_weight: 0.2
+

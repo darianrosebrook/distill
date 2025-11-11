@@ -1,0 +1,10 @@
+coreml:
+  precision: "fp16"
+  compute_units: "all"
+  allow_low_precision: true
+  mlprogram: true
+  enumerate_shapes: [2048, 4096, 8192]
+validation:
+  probe_points: ["embed","ln1","qkt","masked_logits","softmax","attn_out"]
+  rel_err_tol: 0.02
+  mse_tol: 1.0e-3
