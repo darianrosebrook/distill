@@ -1,0 +1,9 @@
+{
+  "score_platt": {
+    "a": 1.2,
+    "b": -0.5
+  },
+  "clause_temperature": 1.5,
+  "clause_thresholds": [0.7, 0.6, 0.8, 0.65, 0.75]
+}
+
