@@ -1,12 +1,12 @@
+process_supervision:
+  constrained_decoding: true
+  negative_examples: true
+  loss_json_validity_weight: 0.3
+  loss_tool_select_weight: 0.7
+  tool_names: []  # List of available tool names (e.g., ["web_search", "read_file", "write_file"])
 schema:
   name: ToolCall
   required: [name, arguments]
   properties:
     name: { type: string }
     arguments: { type: object }
-training:
-  constrained_decoding: true
-  negative_examples: true
-  loss_json_validity_weight: 0.3
-  loss_tool_select_weight: 0.7
-  argument_validator: validators/tool_args.py

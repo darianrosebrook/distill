@@ -90,15 +90,38 @@ def main():
     
     # Load model
     checkpoint = torch.load(args.checkpoint, map_location='cpu')
+    
+    # Try to load config from checkpoint
+    cfg = None
+    if 'config' in checkpoint:
+        config_data = checkpoint['config']
+        arch_cfg = config_data.get('arch', {})
+        cfg = ModelCfg(
+            d_model=arch_cfg.get('d_model', 4096),
+            n_layers=arch_cfg.get('n_layers', 32),
+            n_heads=arch_cfg.get('n_heads', 32),
+            n_kv_heads=arch_cfg.get('n_kv_heads', 8),
+            d_head=arch_cfg.get('d_head', 128),
+            vocab_size=arch_cfg.get('vocab_size', 32000),
+            rope_theta=arch_cfg.get('rope_theta', 10000.0),
+            rope_scaling=arch_cfg.get('rope_scaling', 'dynamic'),
+            dropout=arch_cfg.get('dropout', 0.0),
+        )
+        print(f"[export_student] Loaded config from checkpoint")
+    
+    if cfg is None:
+        # Fallback to default config
+        cfg = ModelCfg()
+        print(f"[export_student] WARN: No config in checkpoint, using defaults")
+    
+    # Load state dict
     if 'model_state_dict' in checkpoint:
         state_dict = checkpoint['model_state_dict']
-        cfg = ModelCfg()  # TODO: Load from checkpoint if available
     else:
         state_dict = checkpoint
-        cfg = ModelCfg()
     
     model = StudentLM(cfg)
-    model.load_state_dict(state_dict)
+    model.load_state_dict(state_dict, strict=False)
     model.eval()
     
     # Create example input

@@ -41,7 +41,7 @@ inter:
 	python -m training.distill_intermediate --config configs/student_7b_gqa.yaml
 
 proc:
-	python -m training.distill_process --config configs/process_supervision.yaml
+	python -m training.distill_process --checkpoint models/student/checkpoints/latest.pt --config configs/worker_9b.yaml configs/process_supervision.yaml --steps 10000
 
 qat:
 	python -m training.quant_qat_int8 --config configs/quant_qat_int8.yaml
@@ -55,14 +55,30 @@ onnx-judge:
 
 onnx: onnx-worker onnx-judge
 
-# CoreML conversion
+# PyTorch export (production path)
+pytorch-worker:
+	python -m conversion.export_pytorch --checkpoint models/student/checkpoints/latest.pt --out models/student/exported/ --mode both
+
+pytorch-judge:
+	python -m conversion.export_pytorch --checkpoint arbiter/judge_training/artifacts/judge.pt --out arbiter/judge_training/artifacts/exported/ --mode prefill
+
+pytorch: pytorch-worker pytorch-judge
+
+# CoreML conversion (PyTorch backend - production)
 coreml-worker:
-	python -m conversion.convert_coreml --config configs/convert_coreml.yaml
+	python -m conversion.convert_coreml --backend pytorch --in models/student/exported/student_fp16.pt --out coreml/artifacts/worker/model.mlpackage --contract models/student/exported/contract.json
 
 coreml-judge:
-	python -m conversion.judge_export_coreml artifacts/onnx/judge/judge_T2048.onnx
+	python -m conversion.convert_coreml --backend pytorch --in arbiter/judge_training/artifacts/exported/judge_prefill_T512.pt --out coreml/artifacts/judge/model.mlpackage
 
 coreml: coreml-worker coreml-judge
+
+# Knowledge Distillation Dataset Generation
+teacher-audit:
+	python -m scripts.teacher_audit --teacher $(TEACHER_ENDPOINT) --out reports/teacher_audit.json
+
+kd-dataset:
+	python -m scripts.make_kd_mix --out data/kd_mix.jsonl --teacher $(TEACHER_ENDPOINT) --total 1000 --cache-dir data/logits/
 
 # Evaluation
 probes:
@@ -109,6 +125,7 @@ deps-ort:
 TOY_SEQ?=128
 TOY_VOCAB?=256
 TOY_DMODEL?=64
+TEACHER_ENDPOINT ?= http://localhost:8000
 
 .PHONY: toy-onnx onnx-surgery coreml-stub probes-skip ane-skip smoke_toy
 
@@ -131,19 +148,25 @@ smoke_toy: check-versions toy-onnx onnx-surgery coreml-stub ane-skip probes-skip
 	@echo "✅ Smoke test PASSED (may include SKIP for placeholder)"
 
 # Full parity test: Requires onnxruntime, fails loud if conversion unavailable
-.PHONY: convert_coreml probes-full ane-checks parity_full
+.PHONY: convert_coreml probes-full ane-checks parity_full toy-block
+
+toy-block:
+	python -m conversion.make_toy_block --dmodel $(TOY_DMODEL) --nheads 4 --seq $(TOY_SEQ) --out models/toy_block.pt
 
 convert_coreml:
-	python -m conversion.convert_coreml --backend onnx --in onnx/toy.sanitized.onnx --out coreml/artifacts/toy/model.mlpackage
+	python -m conversion.convert_coreml --backend pytorch --in models/toy_block.pt --out coreml/artifacts/toy_block/model.mlpackage
+
+generate-probes:
+	python -m coreml.probes.generate_probes --pt-model models/toy_block.pt --ml-model coreml/artifacts/toy_block/model.mlpackage --out coreml/probes/toy_block --seq $(TOY_SEQ) --dmodel $(TOY_DMODEL)
 
 probes-full:
-	python -m coreml.probes.compare_probes --onnx onnx/toy.sanitized.onnx --ml coreml/artifacts/toy/model.mlpackage --seq $(TOY_SEQ) --dmodel $(TOY_DMODEL)
+	python -m coreml.probes.compare_probes --pt coreml/probes/toy_block/toy_block_pt.npz --ml coreml/probes/toy_block/toy_block_ml.npz
 
 ane-checks:
-	python -m coreml.ane_checks --mlpackage coreml/artifacts/toy/model.mlpackage
+	python -m coreml.ane_checks --mlpackage coreml/artifacts/toy_block/model.mlpackage
 
-parity_full: check-versions deps-ort toy-onnx onnx-surgery convert_coreml ane-checks probes-full
-	@echo "✅ Parity test PASSED"
+parity_full: check-versions toy-block convert_coreml generate-probes ane-checks probes-full
+	@echo "✅ Parity test PASSED (real PyTorch→CoreML conversion)"
 
 # PyTorch smoke test: Real mlpackage from PyTorch (proves supported front-end)
 .PHONY: toy-torch smoke_torch
