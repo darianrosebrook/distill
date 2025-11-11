@@ -62,7 +62,10 @@ non_functional:
     api_p95_ms: 250
   security:
     - validation
-contracts: []
+contracts:
+  - type: 'project_setup'
+    path: '.caws/working-spec.yaml'
+    description: 'Project-level CAWS configuration. Feature-specific contracts will be added as features are developed.'
 observability:
   logs: []
   metrics: []
