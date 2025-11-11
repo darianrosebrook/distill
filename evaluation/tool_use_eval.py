@@ -1,4 +1,287 @@
+"""
+Tool-use evaluation: JSON validity and tool selection accuracy.
+
+Evaluates model on tool-calling tasks:
+- JSON validity: % of outputs with valid JSON
+- Tool selection: % of correct tool names selected
+
+Usage:
+    python -m evaluation.tool_use_eval --checkpoint models/student/checkpoints/latest.pt --config configs/worker_9b.yaml
+"""
+import argparse
+import json
+from pathlib import Path
+from typing import Dict, Any, List, Optional
+
+import torch
+import torch.nn as nn
+
+from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
+from coreml.runtime.constrained_decode import JsonConstrainedDecoder
+
+
+def load_model(checkpoint_path: str, device: torch.device) -> nn.Module:
+    """Load model from checkpoint."""
+    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+    
+    # Load config from checkpoint
+    cfg = None
+    if 'config' in checkpoint:
+        config_data = checkpoint['config']
+        arch_cfg = config_data.get('arch', {})
+        cfg = ModelCfg(
+            d_model=arch_cfg.get('d_model', 4096),
+            n_layers=arch_cfg.get('n_layers', 32),
+            n_heads=arch_cfg.get('n_heads', 32),
+            n_kv_heads=arch_cfg.get('n_kv_heads', 8),
+            d_head=arch_cfg.get('d_head', 128),
+            vocab_size=arch_cfg.get('vocab_size', 32000),
+            rope_theta=arch_cfg.get('rope_theta', 10000.0),
+            rope_scaling=arch_cfg.get('rope_scaling', 'dynamic'),
+            dropout=arch_cfg.get('dropout', 0.0),
+        )
+    
+    if cfg is None:
+        cfg = ModelCfg()
+    
+    model = StudentLM(cfg)
+    
+    if 'model_state_dict' in checkpoint:
+        model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+    else:
+        model.load_state_dict(checkpoint, strict=False)
+    
+    model = model.to(device)
+    model.eval()
+    return model
+
+
+def generate_text(model: nn.Module, tokenizer, prompt: str, max_new_tokens: int = 512,
+                  device: torch.device = None) -> str:
+    """Generate text from model using greedy decoding."""
+    if device is None:
+        device = next(model.parameters()).device
+    
+    # Tokenize prompt
+    inputs = tokenizer(prompt, return_tensors="pt", padding=False)
+    input_ids = inputs["input_ids"].to(device)
+    
+    # Generate tokens
+    generated_ids = input_ids.clone()
+    
+    with torch.no_grad():
+        for _ in range(max_new_tokens):
+            # Forward pass
+            logits = model(input_ids=generated_ids, attn_mask=None)
+            
+            # Get next token (greedy)
+            next_token_id = logits[0, -1, :].argmax(dim=-1).unsqueeze(0).unsqueeze(0)
+            
+            # Append to sequence
+            generated_ids = torch.cat([generated_ids, next_token_id], dim=1)
+            
+            # Check for EOS token
+            if tokenizer.eos_token_id and next_token_id.item() == tokenizer.eos_token_id:
+                break
+    
+    # Decode
+    generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+    
+    # Remove prompt from output
+    if generated_text.startswith(prompt):
+        generated_text = generated_text[len(prompt):].strip()
+    
+    return generated_text
+
+
+def validate_json(text: str) -> bool:
+    """Check if text contains valid JSON."""
+    import re
+    
+    # Try to find JSON in text
+    json_patterns = [
+        r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}',  # Simple JSON object
+        r'\[[^\[\]]*(?:\[[^\[\]]*\][^\[\]]*)*\]',  # JSON array
+    ]
+    
+    for pattern in json_patterns:
+        matches = re.findall(pattern, text)
+        for match in matches:
+            try:
+                json.loads(match)
+                return True
+            except:
+                continue
+    
+    # Try parsing entire text
+    try:
+        json.loads(text.strip())
+        return True
+    except:
+        pass
+    
+    return False
+
+
+def extract_tool_call(text: str) -> Optional[Dict[str, Any]]:
+    """Extract tool call from text."""
+    import re
+    
+    # Look for JSON tool call
+    json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+    matches = re.findall(json_pattern, text)
+    
+    for match in matches:
+        try:
+            obj = json.loads(match)
+            if isinstance(obj, dict) and 'name' in obj:
+                return obj
+        except:
+            continue
+    
+    # Try parsing entire text
+    try:
+        obj = json.loads(text.strip())
+        if isinstance(obj, dict) and 'name' in obj:
+            return obj
+    except:
+        pass
+    
+    return None
+
+
+def evaluate_tool_use(model: nn.Module, tokenizer, test_prompts: List[Dict[str, Any]],
+                     device: torch.device) -> Dict[str, Any]:
+    """
+    Evaluate tool-use capabilities.
+    
+    Args:
+        model: Trained model
+        tokenizer: Tokenizer for encoding/decoding
+        test_prompts: List of dicts with 'prompt' and 'expected_tool' (optional)
+        device: Device to run on
+        
+    Returns:
+        Dictionary with metrics
+    """
+    json_valid_count = 0
+    tool_correct_count = 0
+    total = len(test_prompts)
+    
+    results = []
+    
+    for i, test_case in enumerate(test_prompts):
+        prompt = test_case.get('prompt', '')
+        expected_tool = test_case.get('expected_tool', None)
+        
+        # Generate text
+        generated_text = generate_text(model, tokenizer, prompt, max_new_tokens=256, device=device)
+        
+        # Check JSON validity
+        is_valid_json = validate_json(generated_text)
+        if is_valid_json:
+            json_valid_count += 1
+        
+        # Check tool selection
+        tool_call = extract_tool_call(generated_text)
+        tool_correct = False
+        if tool_call and expected_tool:
+            predicted_tool = tool_call.get('name', '')
+            tool_correct = (predicted_tool == expected_tool)
+            if tool_correct:
+                tool_correct_count += 1
+        
+        results.append({
+            'prompt': prompt,
+            'generated': generated_text,
+            'valid_json': is_valid_json,
+            'tool_call': tool_call,
+            'expected_tool': expected_tool,
+            'tool_correct': tool_correct,
+        })
+        
+        if (i + 1) % 10 == 0:
+            print(f"[tool_use_eval] Processed {i + 1}/{total}")
+    
+    json_validity_rate = json_valid_count / total if total > 0 else 0.0
+    tool_selection_rate = tool_correct_count / total if total > 0 else 0.0
+    
+    return {
+        'json_validity_rate': json_validity_rate,
+        'tool_selection_rate': tool_selection_rate,
+        'json_valid_count': json_valid_count,
+        'tool_correct_count': tool_correct_count,
+        'total': total,
+        'results': results,
+    }
+
+
 def main():
-    print("Tool-use eval stub: JSON validity and selection accuracy.")
-if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description="Tool-use evaluation")
+    ap.add_argument('--checkpoint', required=True, help='Model checkpoint path')
+    ap.add_argument('--config', nargs='+', help='Config file(s)')
+    ap.add_argument('--test-data', default='data/tool_traces.jsonl', help='Test data JSONL')
+    ap.add_argument('--output', default='reports/tool_use_eval.json', help='Output report path')
+    ap.add_argument('--tokenizer', default='models/student/tokenizer', help='Tokenizer path')
+    args = ap.parse_args()
+    
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    # Load tokenizer
+    try:
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
+    except ImportError:
+        raise RuntimeError("transformers required for evaluation")
+    
+    # Load model
+    print(f"[tool_use_eval] Loading model from: {args.checkpoint}")
+    model = load_model(args.checkpoint, device)
+    
+    # Load test data
+    test_prompts = []
+    if Path(args.test_data).exists():
+        with open(args.test_data, 'r') as f:
+            for line in f:
+                if line.strip():
+                    test_prompts.append(json.loads(line))
+    else:
+        # Default test prompts
+        test_prompts = [
+            {'prompt': 'Search for information about Python async programming', 'expected_tool': 'web_search'},
+            {'prompt': 'Read the file config.yaml', 'expected_tool': 'read_file'},
+            {'prompt': 'Write "Hello World" to output.txt', 'expected_tool': 'write_file'},
+        ]
+        print(f"[tool_use_eval] WARN: Test data not found, using default prompts")
+    
+    # Run evaluation
+    print(f"[tool_use_eval] Evaluating on {len(test_prompts)} test cases...")
+    results = evaluate_tool_use(model, tokenizer, test_prompts, device)
+    
+    # Save results
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    report = {
+        'checkpoint': args.checkpoint,
+        'metrics': {
+            'json_validity_rate': results['json_validity_rate'],
+            'tool_selection_rate': results['tool_selection_rate'],
+            'json_valid_count': results['json_valid_count'],
+            'tool_correct_count': results['tool_correct_count'],
+            'total': results['total'],
+        },
+        'results': results['results'],
+    }
+    
+    with open(output_path, 'w') as f:
+        json.dump(report, f, indent=2)
+    
+    print(f"[tool_use_eval] ✅ Evaluation complete:")
+    print(f"  JSON validity: {results['json_validity_rate']:.2%}")
+    print(f"  Tool selection: {results['tool_selection_rate']:.2%}")
+    print(f"  Report saved to: {output_path}")
+
+
+if __name__ == '__main__':
     main()
