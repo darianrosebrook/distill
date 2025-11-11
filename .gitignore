@@ -174,3 +174,10 @@ config.local.yaml
 config.local.yml
 *.local.yaml
 *.local.yml
+
+# Swift Package Manager
+.swiftpm/
+.build/
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
