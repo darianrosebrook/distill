@@ -82,3 +82,76 @@ release:
 
 format:
 	ruff check --fix .; ruff format .
+
+# Version gate: Check Python and dependencies
+.PHONY: check-versions
+check-versions:
+	python -m infra.version_gate --skip-ort
+
+# Dependencies
+.PHONY: deps-core deps-ort
+deps-core:
+	pip install --upgrade pip==24.0 setuptools==69.0.0 wheel==0.43.0
+	pip install -r requirements-core.txt
+
+deps-ort:
+	@echo "Detecting platform for onnxruntime..."
+	@if [ "$$(uname -m)" = "arm64" ]; then \
+		echo "Installing onnxruntime-silicon for Apple Silicon..."; \
+		pip install onnxruntime-silicon==1.19.2 || pip install onnxruntime==1.19.2; \
+	else \
+		echo "Installing onnxruntime for x86_64..."; \
+		pip install onnxruntime==1.19.2; \
+	fi
+
+# Smoke test: Build a tiny ONNX, convert to CoreML, run checks and probes
+# Never requires onnxruntime; uses placeholder if conversion unavailable
+TOY_SEQ?=128
+TOY_VOCAB?=256
+TOY_DMODEL?=64
+
+.PHONY: toy-onnx onnx-surgery coreml-stub probes-skip ane-skip smoke_toy
+
+toy-onnx:
+	python -m conversion.make_toy_onnx --seq $(TOY_SEQ) --vocab $(TOY_VOCAB) --dmodel $(TOY_DMODEL) --out onnx/toy.onnx
+
+onnx-surgery:
+	python -m conversion.onnx_surgery --inp onnx/toy.onnx --out onnx/toy.sanitized.onnx --infer
+
+coreml-stub:
+	python -m conversion.convert_coreml --backend onnx --in onnx/toy.sanitized.onnx --out coreml/artifacts/toy/model.mlpackage --allow-placeholder
+
+ane-skip:
+	python -m coreml.ane_checks --mlpackage coreml/artifacts/toy/model.mlpackage
+
+probes-skip:
+	python -m coreml.probes.compare_probes --onnx onnx/toy.sanitized.onnx --ml coreml/artifacts/toy/model.mlpackage --seq $(TOY_SEQ) --dmodel $(TOY_DMODEL)
+
+smoke_toy: check-versions toy-onnx onnx-surgery coreml-stub ane-skip probes-skip
+	@echo "✅ Smoke test PASSED (may include SKIP for placeholder)"
+
+# Full parity test: Requires onnxruntime, fails loud if conversion unavailable
+.PHONY: convert_coreml probes-full ane-checks parity_full
+
+convert_coreml:
+	python -m conversion.convert_coreml --backend onnx --in onnx/toy.sanitized.onnx --out coreml/artifacts/toy/model.mlpackage
+
+probes-full:
+	python -m coreml.probes.compare_probes --onnx onnx/toy.sanitized.onnx --ml coreml/artifacts/toy/model.mlpackage --seq $(TOY_SEQ) --dmodel $(TOY_DMODEL)
+
+ane-checks:
+	python -m coreml.ane_checks --mlpackage coreml/artifacts/toy/model.mlpackage
+
+parity_full: check-versions deps-ort toy-onnx onnx-surgery convert_coreml ane-checks probes-full
+	@echo "✅ Parity test PASSED"
+
+# PyTorch smoke test: Real mlpackage from PyTorch (proves supported front-end)
+.PHONY: toy-torch smoke_torch
+
+toy-torch:
+	python -m conversion.make_toy_torch --seq $(TOY_SEQ) --vocab $(TOY_VOCAB) --dmodel $(TOY_DMODEL) --out models/toy_torch.pt
+
+smoke_torch: check-versions toy-torch
+	python -m conversion.convert_coreml --backend pytorch --in models/toy_torch.pt --out coreml/artifacts/toy_torch/model.mlpackage
+	python -m coreml.ane_checks --mlpackage coreml/artifacts/toy_torch/model.mlpackage
+	@echo "✅ PyTorch smoke test PASSED (real mlpackage created)"

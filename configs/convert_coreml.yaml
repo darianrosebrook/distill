@@ -1,10 +1,20 @@
 coreml:
-  precision: "fp16"
-  compute_units: "all"
-  allow_low_precision: true
+  precision: fp16
   mlprogram: true
-  enumerate_shapes: [2048, 4096, 8192]
+  compute_units: all        # prefer ANE, fall back GPU
+  enumerate_shapes: [4096, 8192, 16384]
+  allow_low_precision: true
+  weight_dequant_strategy: matmul_dequant  # exporter option if available
+
+ane:
+  must_place: ["attention_qk", "attention_softmax", "attention_value", "proj_out"]
+  allow_gpu: ["embedding", "final_logits"]
+  fail_if_cpu_ops_gt: 0
+
 validation:
   probe_points: ["embed","ln1","qkt","masked_logits","softmax","attn_out"]
   rel_err_tol: 0.02
   mse_tol: 1.0e-3
+
+artifacts:
+  out_dir: coreml/artifacts/student/

@@ -181,3 +181,7 @@ config.local.yml
 *.xcodeproj/
 *.xcworkspace/
 DerivedData/
+
+# Placeholder markers (smoke test artifacts)
+.placeholder
+**/.placeholder

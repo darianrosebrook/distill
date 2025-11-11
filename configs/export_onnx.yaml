@@ -1,16 +1,17 @@
 export:
   opset: 19
   dynamic_axes: false
-  enumerated_shapes: [2048, 4096, 8192]
+  enumerated_shapes: [4096, 8192, 16384]
+  batch_sizes: [1]
   use_external_data: true
   fold_layernorms: false
   fold_rope: false
 contract:
   inputs:
-    - name: "input_ids"
-      dtype: int32
-      shape: ["B","T"]
+    - { name: input_ids, dtype: int32, shape: [1, T] }
+    - { name: attention_mask, dtype: int32, shape: [1, T] }
   outputs:
-    - name: "logits"
-      dtype: float16
-      shape: ["B","T","V"]
+    - { name: logits, dtype: float16, shape: [1, T, V] }
+validation:
+  sample_prompts: data/export_prompts.jsonl
+  check_nans: true

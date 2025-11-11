@@ -1,0 +1,8 @@
+# Optional: onnxruntime for parity tests
+# Install platform-specific version:
+# - Apple Silicon (arm64): onnxruntime-silicon==1.19.2
+# - Intel (x86_64): onnxruntime==1.19.2
+
+# Note: onnxruntime-silicon is preferred on Apple Silicon for better performance
+# This file is a template - actual installation handled by Makefile based on platform
+

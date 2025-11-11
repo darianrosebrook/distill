@@ -1,0 +1,10 @@
+# Core dependencies for smoke tests and basic conversion
+# Pin versions for reproducibility
+
+coremltools==9.0
+onnx==1.19.1
+numpy<2.0.0  # PyTorch compatibility
+protobuf>=4.21.0,<5.0.0
+typing-extensions>=4.0.0
+torch>=2.0.0  # For PyTorch→CoreML conversion
+

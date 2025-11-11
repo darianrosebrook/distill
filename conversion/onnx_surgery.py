@@ -1,9 +1,25 @@
 # conversion/onnx_surgery.py
-# Basic surgeries: enforce int32 inputs, remove stray casts, ensure FP16 outputs.
-# @author: @darianrosebrook
+"""
+Lightweight ONNX surgery for smoke runs.
+
+- Cast stray int64 initializers to int32 when safe
+- (Optional) run shape inference
+- (Optional) onnxsim if available
+
+Usage:
+  python -m conversion.onnx_surgery --inp onnx/in.onnx --out onnx/out.onnx --infer --simplify
+"""
+import argparse
+import sys
+from pathlib import Path
 
 import onnx
-from onnx import helper, TensorProto
+from onnx import TensorProto, numpy_helper, shape_inference
+
+try:
+    import onnxsim  # type: ignore
+except Exception:  # pragma: no cover
+    onnxsim = None
 
 
 def force_input_dtype(model: onnx.ModelProto, name: str, dtype=TensorProto.INT32):
@@ -36,6 +52,25 @@ def strip_redundant_casts(model: onnx.ModelProto) -> onnx.ModelProto:
     return model
 
 
+def cast_int64_initializers(model: onnx.ModelProto) -> int:
+    changed = 0
+    new_inits = []
+    for init in model.graph.initializer:
+        if init.data_type == TensorProto.INT64:
+            arr = numpy_helper.to_array(init)
+            if arr.min() >= -(2**31) and arr.max() < 2**31:
+                new = numpy_helper.from_array(arr.astype('int32'), init.name)
+                new_inits.append(new)
+                changed += 1
+            else:
+                new_inits.append(init)
+        else:
+            new_inits.append(init)
+    del model.graph.initializer[:]
+    model.graph.initializer.extend(new_inits)
+    return changed
+
+
 def run(path_in: str, path_out: str):
     m = onnx.load(path_in)
     m = force_input_dtype(m, "input_ids", TensorProto.INT32)
@@ -44,6 +79,35 @@ def run(path_in: str, path_out: str):
     onnx.save(m, path_out)
 
 
-if __name__ == "__main__":
-    import sys
-    run(sys.argv[1], sys.argv[2])
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--inp', required=True)
+    ap.add_argument('--out', required=True)
+    ap.add_argument('--infer', action='store_true')
+    ap.add_argument('--simplify', action='store_true')
+    args = ap.parse_args()
+
+    model = onnx.load(args.inp)
+    changed = cast_int64_initializers(model)
+
+    if args.infer:
+        try:
+            model = shape_inference.infer_shapes(model)
+        except Exception as e:
+            print(f"[onnx_surgery] shape inference skipped: {e}")
+
+    if args.simplify and onnxsim is not None:
+        try:
+            model, _ = onnxsim.simplify(model)
+        except Exception as e:
+            print(f"[onnx_surgery] onnxsim simplify skipped: {e}")
+    elif args.simplify:
+        print("[onnx_surgery] onnxsim not installed; skipping simplify")
+
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+    onnx.save(model, args.out)
+    print(f"[onnx_surgery] saved → {args.out} (int64→int32 changed: {changed})")
+
+
+if __name__ == '__main__':
+    sys.exit(main() if len(sys.argv) > 1 else run(sys.argv[1], sys.argv[2]))

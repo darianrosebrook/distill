@@ -1,0 +1,37 @@
+arch:
+  d_model: 4096
+  n_layers: 32
+  n_heads: 32
+  n_kv_heads: 8
+  d_head: 128
+  norm: rms
+  mlp: swiglu
+  mlp_hidden_mult: 3.25
+  vocab_size: 32000
+  rope:
+    theta: 10000
+    scaling: dynamic
+
+init: { base_checkpoint: null }
+
+optimizer: { name: adamw, lr: 2.0e-4, betas: [0.9,0.95], weight_decay: 0.1 }
+
+train:
+  seq_lengths: [2048,4096,8192,16384]
+  micro_batch_size: 6
+  grad_accum: 6
+  steps: 180000
+  fp16: true
+  grad_checkpointing: true
+
+kd:
+  teacher_endpoint: "http://teacher.local"
+  kd_temperature: 2.0
+  kl_weight: 0.5
+
+process_supervision:
+  constrained_decoding: true
+  schema_file: configs/tool_schema.json
+
+io: { tokenizer_path: models/student/tokenizer, train_shards: [data/kd_mix.jsonl], val_shards: [data/val.jsonl] }
+

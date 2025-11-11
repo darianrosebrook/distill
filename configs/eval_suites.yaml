@@ -1,0 +1,25 @@
+perf:
+  ttfa_s:
+    ctx_4k_max: 2.0
+    ctx_16k_max: 3.0
+  toks_per_s_min:
+    ctx_4k: 25
+    ctx_16k: 15
+  peak_mem_gb_max:
+    ctx_4k: 12
+    ctx_16k: 28
+
+accuracy:
+  tool_use:
+    json_valid_min: 0.98
+    tool_select_min: 0.90
+  long_ctx_needles:
+    at_4k_min: 0.95
+    at_16k_min: 0.90
+
+stability:
+  no_nan_inf: true
+
+parity:
+  rel_err_attn_out_max: 0.02
+
