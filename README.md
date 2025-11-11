@@ -24,38 +24,57 @@ Distilled student models for specialized roles in CAWS-compliant multi-model orc
 
 ## Getting Started
 
+### Stage 1: Distillation MVP (Current Focus)
+
+**Goal**: Distill K2-Thinking into ANE-friendly student that runs on M1 Max.
+
 1) Create a Python 3.10+ env and install deps:
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
 ```
 
-2) Build datasets:
+2) Build KD dataset:
 ```bash
 python -m scripts.make_kd_mix --out data/kd_mix.jsonl --teacher http://localhost:8000
 ```
 
-3) Train models (recommended order):
+3) Train Worker model (8-9B GQA):
 ```bash
-# Judge first (de-risk quickly)
-make judge
-make onnx-judge
-make coreml-judge
-
-# Worker pilot
 make worker
 make onnx-worker
 make coreml-worker
-
-# Optional: Drafter for latency
-make drafter
 ```
 
-4) Evaluate:
+4) Validate with probes and perf gates:
 ```bash
-make eval  # Includes CAWS evaluation
-make caws-eval  # CAWS-specific evaluation only
+make probes
+make eval
 ```
+
+5) Add process supervision and QAT:
+```bash
+make proc  # Process supervision
+make qat   # Quantization-aware training
+```
+
+### Stage 2: Governance (After MVP)
+
+**Goal**: Add CAWS governance and runtime enforcement.
+
+6) Train Judge model (after student passes gates):
+```bash
+make judge_train
+make judge_onnx
+make judge_coreml
+```
+
+7) Evaluate CAWS compliance:
+```bash
+make caws-eval
+```
+
+See `docs/DISTILLATION_ROADMAP.md` for detailed prioritization and sequence.
 
 ## Directory Structure
 
