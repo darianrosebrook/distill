@@ -1,0 +1,98 @@
+id: FEAT-002
+title: Comprehensive Test Suite for Training Pipeline
+risk_tier: 2
+mode: feature
+change_budget:
+  max_files: 30
+  max_loc: 2000
+blast_radius:
+  modules:
+    - tests/
+    - training/
+    - models/
+    - evaluation/
+  data_migration: false
+operational_rollback_slo: 0m
+threats: []
+scope:
+  in:
+    - tests/
+    - pytest.ini
+    - training/
+    - models/student/architectures/
+    - evaluation/
+  out:
+    - venv/
+    - __pycache__/
+    - .pytest_cache/
+    - htmlcov/
+    - coreml/artifacts/
+    - onnx/
+invariants:
+  - Test suite maintains 80%+ coverage on training components
+  - All tests are isolated and deterministic
+  - Test fixtures are reusable across test modules
+acceptance:
+  - id: A1
+    given: Test infrastructure is set up (pytest, fixtures, config)
+    when: Unit tests are written for training/losses.py
+    then: Coverage ≥80% on losses.py and all tests pass
+    status: completed
+    tests_written: 9
+    tests_passing: 9
+    coverage: 83
+  - id: A2
+    given: Test infrastructure exists
+    when: Unit tests are written for training/dataset.py
+    then: Coverage ≥80% on dataset.py, tests cover JSONL loading, tokenization, batching
+    status: pending
+  - id: A3
+    given: Test infrastructure exists
+    when: Unit tests are written for training/process_losses.py
+    then: Coverage ≥80% on process_losses.py, tests cover JSON validation and tool selection
+    status: pending
+  - id: A4
+    given: Test infrastructure exists
+    when: Unit tests are written for models/student/architectures/gqa_transformer.py
+    then: Coverage ≥80% on gqa_transformer.py, tests cover forward pass, decode mode, RoPE
+    status: pending
+  - id: A5
+    given: Unit tests exist for core components
+    when: Integration tests are written for training pipeline
+    then: Tests cover full KD training loop with small model, checkpoint save/load
+    status: pending
+  - id: A6
+    given: Test suite is implemented
+    when: Coverage report is generated
+    then: Overall training components coverage ≥80%, all tests pass in CI
+    status: pending
+non_functional:
+  perf:
+    test_execution_s: 60
+  security:
+    - test_isolation
+    - no_hardcoded_secrets
+contracts:
+  - type: pytest_config
+    path: pytest.ini
+    description: Pytest configuration with coverage thresholds
+observability:
+  logs: []
+  metrics:
+    - test_coverage_percentage
+    - test_execution_time
+    - tests_passing_count
+  traces: []
+migrations: []
+rollback:
+  - "Remove test files: rm -rf tests/"
+  - "Remove pytest config: rm pytest.ini"
+  - "Remove coverage reports: rm -rf htmlcov/ .pytest_cache/"
+ai_assessment:
+  confidence_level: 0.9
+  uncertainty_areas: []
+  complexity_factors:
+    - Mock tokenizer implementation
+    - Integration test setup/teardown
+  risk_factors: []
+
