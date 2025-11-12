@@ -109,6 +109,7 @@ def tool_selection_loss(
     target_tool_names: List[str],
     tool_names: List[str],
     tokenizer,
+    ignore_index: int = -100,
 ) -> torch.Tensor:
     """
     Compute loss for correct tool selection.
@@ -119,6 +120,7 @@ def tool_selection_loss(
         target_tool_names: List of target tool names (ground truth)
         tool_names: List of available tool names
         tokenizer: Tokenizer for encoding tool names
+        ignore_index: Index to ignore in loss computation
         
     Returns:
         Cross-entropy loss for tool name prediction
@@ -204,6 +206,7 @@ def process_supervision_loss(
     
     losses["total"] = total_loss
     return losses
+
 
 
 
