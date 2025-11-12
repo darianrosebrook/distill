@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/schemas/trace.schema.json",
+  "title": "Process Supervision Trace",
+  "type": "object",
+  "required": [
+    "trace_id",
+    "context",
+    "events",
+    "telemetry"
+  ],
+  "properties": {
+    "trace_id": {
+      "type": "string"
+    },
+    "consent": {
+      "type": "boolean"
+    },
+    "timestamps": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "number"
+        },
+        "end": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ]
+    },
+    "context": {
+      "type": "object",
+      "required": [
+        "system",
+        "tools"
+      ],
+      "properties": {
+        "system": {
+          "type": "string"
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "schema"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "policies": {
+          "type": "object"
+        }
+      }
+    },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant",
+              "system",
+              "tool"
+            ]
+          },
+          "content": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "oneOf": [
+          {
+            "properties": {
+              "type": {
+                "const": "assistant.delta"
+              },
+              "time": {
+                "type": "number"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "time",
+              "text"
+            ]
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "assistant.tool_call"
+              },
+              "time": {
+                "type": "number"
+              },
+              "tool": {
+                "type": "string"
+              },
+              "arguments": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "time",
+              "tool",
+              "arguments"
+            ]
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "tool.result"
+              },
+              "time": {
+                "type": "number"
+              },
+              "tool": {
+                "type": "string"
+              },
+              "ok": {
+                "type": "boolean"
+              },
+              "latency_ms": {
+                "type": "number"
+              },
+              "result": {}
+            },
+            "required": [
+              "type",
+              "time",
+              "tool",
+              "ok"
+            ]
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "assistant.final"
+              },
+              "time": {
+                "type": "number"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "time",
+              "text"
+            ]
+          }
+        ]
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "properties": {
+        "prompt_tokens": {
+          "type": "integer"
+        },
+        "completion_tokens": {
+          "type": "integer"
+        },
+        "tool_calls": {
+          "type": "integer"
+        },
+        "json_validity_errors": {
+          "type": "integer"
+        }
+      }
+    },
+    "code_outcome": {
+      "type": "object",
+      "properties": {
+        "language": {
+          "type": "string"
+        },
+        "compiled": {
+          "type": "boolean"
+        },
+        "tests_passed": {
+          "type": "number"
+        },
+        "tests_total": {
+          "type": "number"
+        },
+        "runtime_s": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}

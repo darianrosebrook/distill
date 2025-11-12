@@ -1,0 +1,164 @@
+# CAWS Policy Configuration
+# Defines tier-specific budgets, quality gates, and enforcement rules
+
+policy:
+  version: "1.0"
+  project: "distill"
+  
+  # Tier Definitions
+  tiers:
+    tier_1:
+      name: "Critical Systems"
+      description: "Core model training, export, and conversion pipelines"
+      modules:
+        - training/distill_kd.py
+        - training/distill_process.py
+        - conversion/export_onnx.py
+        - conversion/convert_coreml.py
+        - models/student/architectures/
+      change_budget:
+        max_files: 15
+        max_loc: 600
+        max_days: 3
+        max_complexity: 8
+      quality_gates:
+        test_coverage:
+          line: 85
+          branch: 90
+        mutation_score: 70
+        linting:
+          errors: 0
+          warnings: 10
+        type_checking: required
+        security_scan: required
+      contracts: required
+      review: manual_required
+      
+    tier_2:
+      name: "Standard Features"
+      description: "Standard model components, evaluation, and utilities"
+      modules:
+        - training/
+        - evaluation/
+        - conversion/
+        - coreml/
+        - models/
+        - arbiter/
+      change_budget:
+        max_files: 25
+        max_loc: 1000
+        max_days: 5
+        max_complexity: 10
+      quality_gates:
+        test_coverage:
+          line: 80
+          branch: 85
+        mutation_score: 60
+        linting:
+          errors: 0
+          warnings: 15
+        type_checking: required
+        security_scan: required
+      contracts: required
+      review: optional
+      
+    tier_3:
+      name: "Low Risk"
+      description: "Scripts, utilities, and documentation"
+      modules:
+        - scripts/
+        - docs/
+        - configs/
+      change_budget:
+        max_files: 30
+        max_loc: 1500
+        max_days: 7
+        max_complexity: 15
+      quality_gates:
+        test_coverage:
+          line: 70
+          branch: 75
+        mutation_score: 50
+        linting:
+          errors: 0
+          warnings: 20
+        type_checking: recommended
+        security_scan: recommended
+      contracts: optional
+      review: optional
+
+  # Global Quality Gates
+  quality_gates:
+    # Testing Requirements
+    testing:
+      unit_tests: required
+      integration_tests: required
+      e2e_tests: recommended
+      test_isolation: required
+      test_data_cleanup: required
+      
+    # Code Quality
+    code_quality:
+      max_cyclomatic_complexity: 10
+      max_cognitive_complexity: 15
+      max_nesting_depth: 4
+      max_function_lines: 50
+      max_file_lines: 1000
+      max_parameters: 5
+      
+    # Performance Gates (from roadmap)
+    performance:
+      model_inference_ms: 100
+      training_iteration_s: 60
+      export_timeout_s: 300
+      conversion_timeout_s: 600
+      
+    # Model-Specific Gates
+    model_gates:
+      parity_error_threshold: 0.02  # 2% relative error
+      json_validity_threshold: 0.98  # 98%
+      tool_selection_threshold: 0.90  # 90%
+      needle_retrieval_4k: 0.95  # 95%
+      needle_retrieval_16k: 0.90  # 90%
+      ttfa_4k_s: 2.0
+      ttfa_16k_s: 3.0
+      throughput_4k_tok_s: 25
+      throughput_16k_tok_s: 15
+      memory_4k_gb: 12
+      memory_16k_gb: 28
+      
+  # Scope Enforcement
+  scope:
+    strict_enforcement: true
+    auto_detect_violations: true
+    require_justification: true
+    
+  # Budget Enforcement
+  budget:
+    strict_enforcement: true
+    allow_emergency_overrides: true
+    require_waiver_for_overrides: true
+    
+  # Waiver Management
+  waivers:
+    max_active_waivers: 5
+    require_expiration_date: true
+    require_mitigation_plan: true
+    auto_expire: true
+    
+  # Provenance Tracking
+  provenance:
+    track_all_commits: true
+    track_file_changes: true
+    track_ai_generated_code: true
+    require_commit_messages: true
+    
+  # CI/CD Integration
+  ci_cd:
+    run_on_all_branches: false
+    run_on_main: true
+    run_on_pr: true
+    block_on_failure: true
+    parallel_execution: true
+
+

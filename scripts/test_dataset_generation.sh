@@ -14,6 +14,9 @@
 
 set -euo pipefail
 
+# Use PYTHON env var if set, otherwise default to python3
+PYTHON="${PYTHON:-python3}"
+
 echo "=========================================="
 echo "Dataset Generation Test"
 echo "=========================================="
@@ -24,8 +27,7 @@ if [ -z "${VIRTUAL_ENV:-}" ]; then
     if [ -f "venv/bin/activate" ]; then
         source venv/bin/activate
     else
-        echo "❌ Virtual environment not found"
-        exit 1
+        echo "⚠️  Virtual environment not found, using system Python: $PYTHON"
     fi
 fi
 
@@ -43,7 +45,7 @@ echo ""
 
 # Step 1: Generate small dataset
 echo "Step 1: Generating test dataset (20 samples)..."
-python -m scripts.make_kd_mix_hardened \
+$PYTHON -m scripts.make_kd_mix_hardened \
     --out "${TEST_DATASET}" \
     --teacher https://api.moonshot.ai/v1 \
     --total 20 \
@@ -64,7 +66,7 @@ echo ""
 
 # Step 2: Verify dataset format
 echo "Step 2: Verifying dataset format..."
-python3 << 'PYTHON_EOF'
+$PYTHON << 'PYTHON_EOF'
 import json
 from pathlib import Path
 
@@ -120,7 +122,7 @@ echo ""
 
 # Step 3: Verify dataset loads in training script
 echo "Step 3: Verifying dataset loads in training script..."
-python3 << 'PYTHON_EOF'
+$PYTHON << 'PYTHON_EOF'
 from training.dataset import KDDataset
 import sys
 
@@ -183,7 +185,7 @@ echo "Dataset: ${TEST_DATASET}"
 echo "Samples: ${SAMPLE_COUNT}"
 echo ""
 echo "Next steps:"
-echo "1. Review sample quality: head -3 ${TEST_DATASET} | python -m json.tool"
+echo "1. Review sample quality: head -3 ${TEST_DATASET} | $PYTHON -m json.tool"
 echo "2. Test training with this dataset"
 echo "3. If quality is good, generate full dataset"
 echo ""

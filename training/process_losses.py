@@ -149,10 +149,19 @@ def tool_selection_loss(
                 seq_len = logits.size(1)
                 pos = seq_len // 2  # Approximate position
                 
+                # Extract logits for this position and ensure proper shape
+                # Metal/MPS requires contiguous tensors and proper shapes
+                logits_slice = logits[i, pos, :].unsqueeze(0)  # [1, vocab_size]
+                targets = torch.tensor([target_token_id], device=logits.device, dtype=torch.long)
+                
+                # Ensure logits are contiguous for Metal compatibility
+                if not logits_slice.is_contiguous():
+                    logits_slice = logits_slice.contiguous()
+                
                 # Cross-entropy loss
                 ce_loss = F.cross_entropy(
-                    logits[i, pos:pos+1, :].view(1, -1),
-                    torch.tensor([target_token_id], device=logits.device),
+                    logits_slice,
+                    targets,
                     ignore_index=ignore_index
                 )
                 losses.append(ce_loss)

@@ -21,7 +21,37 @@ dependencies = [
   "jsonschema>=4.22",
   "pytest>=8.0",
   "pyyaml>=6.0",
+  "requests>=2.31.0",
+  "urllib3>=2.0.0",
+  "fastapi>=0.110",
+  "uvicorn>=0.29",
+  "httpx>=0.27",
 ]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = [
+    "models",
+    "coreml",
+    "capture",
+    "schemas",
+    "training",
+    "evaluation",
+    "scripts",
+    "tools",
+    "build",
+    "arbiter",
+    "codemod",
+    "conversion",
+    "infra",
+    "onnx",
+]
+
+[tool.setuptools.package-data]
+"*" = ["*.json", "*.yaml", "*.yml"]
 
 [tool.ruff]
 line-length = 100

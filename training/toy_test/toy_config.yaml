@@ -1,0 +1,48 @@
+arch:
+  d_head: 16
+  d_model: 64
+  dropout: 0.0
+  n_heads: 4
+  n_kv_heads: 2
+  n_layers: 2
+  rope_scaling: dynamic
+  rope_theta: 10000.0
+  vocab_size: 32000
+distillation:
+  ce_ground_truth_weight: 0.2
+  ce_teacher_weight: 0.3
+  kl_weight: 0.5
+  type: standard_kd
+init:
+  base_checkpoint: null
+io:
+  tokenizer_path: models/student/tokenizer
+  train_shards:
+  - training/toy_test/toy_dataset.jsonl
+  val_shards: []
+kd:
+  kd_temperature: 2.0
+  teacher_endpoint: mock
+  teacher_logits_available: false
+optimizer:
+  betas:
+  - 0.9
+  - 0.95
+  lr: 0.0001
+  name: adamw
+  weight_decay: 0.1
+role: worker
+tracing:
+  console_log: true
+  json_log: true
+  log_dir: training/toy_test/toy_config.yaml/runs
+  use_tensorboard: false
+  use_wandb: false
+train:
+  fp16: false
+  grad_accum: 2
+  grad_checkpointing: false
+  micro_batch_size: 1
+  seq_lengths:
+  - 128
+  steps: 5

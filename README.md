@@ -36,8 +36,17 @@ pip install -e .
 
 2) Build KD dataset:
 ```bash
+# Option A: Use Kimi K2 Thinking API (recommended for M1 Max)
+python -m scripts.make_kd_mix --out data/kd_mix.jsonl --teacher https://api.kimi.com/v1
+
+# Option B: Use local HTTP endpoint
 python -m scripts.make_kd_mix --out data/kd_mix.jsonl --teacher http://localhost:8000
+
+# Option C: Use HuggingFace model (requires GPU with 80GB+ VRAM)
+python -m scripts.make_kd_mix --out data/kd_mix.jsonl --teacher hf:moonshotai/Kimi-K2-Thinking
 ```
+
+**Note**: Kimi K2 Thinking (32B active params) cannot run locally on M1 Max. See `docs/KIMI_K2_SETUP.md` for API setup.
 
 3) Train Worker model (8-9B GQA):
 ```bash

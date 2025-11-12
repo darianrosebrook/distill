@@ -14,12 +14,26 @@
 
 set -euo pipefail
 
+# Use Python 3.11 if available, fallback to python3.10
+if command -v python3.11 &> /dev/null; then
+    export PYTHON=python3.11
+elif command -v python3.10 &> /dev/null; then
+    export PYTHON=python3.10
+else
+    echo "❌ Python 3.10 or 3.11 required but not found"
+    exit 1
+fi
+
+echo "Using Python: $PYTHON"
+$PYTHON --version
+echo ""
+
 echo "=========================================="
 echo "Pre-Training Test Suite"
 echo "=========================================="
 echo ""
 echo "This will run all critical tests before spending money on training."
-echo "Estimated cost: < $1"
+echo "Estimated cost: < \$1"
 echo "Estimated time: 15-30 minutes"
 echo ""
 read -p "Continue? (y/N): " -n 1 -r

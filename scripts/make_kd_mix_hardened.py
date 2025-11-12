@@ -72,7 +72,7 @@ class BudgetTracker:
                 f"Budget limit exceeded: ${self.total_cost:.2f} > ${self.budget_limit:.2f}"
             )
     
-    def get_estimate(self, total_samples: int, avg_input_tokens: int = 200, avg_output_tokens: int = 1024) -> float:
+    def get_estimate(self, total_samples: int, avg_input_tokens: int = 200, avg_output_tokens: int = 16384) -> float:
         """Estimate total cost for dataset generation."""
         total_input = total_samples * avg_input_tokens
         total_output = total_samples * avg_output_tokens
@@ -216,7 +216,7 @@ def save_cache(cache_dir: Path, prompt: str, result: Dict[str, Any]):
             temp_file.unlink()
 
 
-def estimate_cost(total_samples: int, avg_input: int = 200, avg_output: int = 1024) -> Dict[str, Any]:
+def estimate_cost(total_samples: int, avg_input: int = 200, avg_output: int = 16384) -> Dict[str, Any]:
     """Estimate API costs for dataset generation."""
     tracker = BudgetTracker()
     estimated_cost = tracker.get_estimate(total_samples, avg_input, avg_output)
@@ -249,12 +249,14 @@ def main():
     ap.add_argument('--budget-limit', type=float, help='Maximum budget in USD (stops if exceeded)')
     ap.add_argument('--resume', action='store_true', help='Resume from checkpoint if available')
     ap.add_argument('--clear-checkpoint', action='store_true', help='Clear existing checkpoint before starting')
-    ap.add_argument('--temperature', type=float, default=1.5, help='Sampling temperature')
+    ap.add_argument('--temperature', type=float, default=1.0, help='Sampling temperature (max 1.0 for Moonshot API, recommended 1.0 for kimi-k2-thinking)')
     ap.add_argument('--top-p', type=float, default=0.95, help='Top-p sampling')
-    ap.add_argument('--max-tokens', type=int, default=1024, help='Maximum tokens to generate')
+    ap.add_argument('--max-tokens', type=int, default=16384, help='Maximum tokens to generate (recommended ≥16,000 for kimi-k2-thinking to capture full reasoning_content)')
     ap.add_argument('--return-logits', action='store_true', help='Request logits from teacher (if supported)')
     ap.add_argument('--batch-size', type=int, default=1, help='Batch size for teacher queries')
     ap.add_argument('--delay', type=float, default=0.1, help='Delay between requests (seconds)')
+    ap.add_argument('--tier', choices=['free', 'tier1', 'tier2', 'tier3', 'tier4', 'tier5'], 
+                    help='Manually specify API tier (overrides auto-detection)')
     args = ap.parse_args()
     
     # Estimate costs before starting
@@ -324,6 +326,14 @@ def main():
             retry_backoff_factor=2.0
         )
     
+    # Override tier if manually specified
+    if args.tier:
+        from models.teacher.teacher_client import APITier, TIER_LIMITS
+        manual_tier = APITier[args.tier.upper()]
+        client._tier = manual_tier
+        client._tier_limits = TIER_LIMITS[manual_tier]
+        print(f"[make_kd_mix_hardened] Using manually specified tier: {manual_tier.value}")
+    
     # Display tier info
     if hasattr(client, 'get_tier'):
         tier = client.get_tier()
@@ -337,6 +347,8 @@ def main():
         # Warn if delay doesn't match tier
         if args.delay > 0 and abs(args.delay - tier_limits.delay) > tier_limits.delay * 0.5:
             print(f"[make_kd_mix_hardened] WARN: Delay ({args.delay}s) doesn't match tier recommendation ({tier_limits.delay}s)")
+            if not args.tier:
+                print(f"[make_kd_mix_hardened] WARN: If you're on a higher tier, specify with --tier tier1 (or tier2/tier3/etc)")
             print(f"[make_kd_mix_hardened] WARN: Consider using --delay {tier_limits.delay} for optimal rate limit compliance")
     
     # Setup cache
@@ -408,6 +420,10 @@ def main():
                             "timestamp": datetime.now().isoformat(),
                         }
                     }
+                    
+                    # Include reasoning_content if present (kimi-k2-thinking feature)
+                    if "reasoning_content" in teacher_results[0]:
+                        result["reasoning_content"] = teacher_results[0]["reasoning_content"]
                     
                     results.append(result)
                     completed_indices.add(i)

@@ -100,9 +100,11 @@ format:
 	ruff check --fix .; ruff format .
 
 # Version gate: Check Python and dependencies
+# Use PYTHON env var if set, otherwise default to python
+PYTHON ?= python
 .PHONY: check-versions
 check-versions:
-	python -m infra.version_gate --skip-ort
+	$(PYTHON) -m infra.version_gate --skip-ort
 
 # Dependencies
 .PHONY: deps-core deps-ort
@@ -183,7 +185,7 @@ smoke_torch: check-versions toy-torch
 .PHONY: toy-training smoke_training
 
 toy-training:
-	python -m training.make_toy_training --out-dir training/toy_test --samples 10 --steps 5 --dmodel 64 --nlayers 2 --vocab 32000
+	$(PYTHON) -m training.make_toy_training --out-dir training/toy_test --samples 10 --steps 5 --dmodel 64 --nlayers 2 --vocab 32000
 
 smoke_training: check-versions toy-training
 	bash scripts/test_toy_training.sh

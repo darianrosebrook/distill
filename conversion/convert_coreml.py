@@ -20,12 +20,21 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="coremltools")
 
 
+def load_contract(contract_path: str):
+    """Load contract.json and return input specifications."""
+    import json
+    with open(contract_path, 'r') as f:
+        contract = json.load(f)
+    return contract
+
+
 def convert_pytorch_to_coreml(
     pytorch_model,
     output_path: str,
     compute_units: str = "all",
     target: str = "macOS13",
     allow_placeholder: bool = False,
+    contract_path: str = None,
 ):
     """
     Convert PyTorch model (TorchScript or ExportedProgram) to CoreML.
@@ -65,13 +74,49 @@ def convert_pytorch_to_coreml(
     
     try:
         # For TorchScript, we need to provide input specification
-        # Infer input shape from model if possible, or use defaults
+        # Try to read from contract.json first, fallback to defaults
         import torch
         import numpy as np
+        
         if isinstance(pytorch_model, torch.jit.ScriptModule):
-            # Get input shape from model's forward signature or use example
-            # For now, use a reasonable default - in production, read from contract.json
-            inputs = [ct.TensorType(name="input_ids", shape=(1, 128), dtype=np.int32)]
+            # Try to load contract.json for input specs
+            if contract_path and Path(contract_path).exists():
+                contract = load_contract(contract_path)
+                input_spec = contract.get("inputs", [{}])[0]
+                input_name = input_spec.get("name", "input_ids")
+                input_shape = input_spec.get("shape", ["B", "T"])
+                input_dtype = input_spec.get("dtype", "int32")
+                
+                # Convert shape: ["B", "T"] -> (1, T) for example
+                # Use first enumerated_T if available, else default to 128
+                enumerated_T = contract.get("enumerated_T", [128])
+                seq_len = enumerated_T[0] if enumerated_T else 128
+                shape = (1, seq_len)
+                
+                # Convert dtype string to numpy dtype
+                dtype_map = {"int32": np.int32, "int64": np.int64, "float32": np.float32, "float16": np.float16}
+                dtype = dtype_map.get(input_dtype, np.int32)
+                
+                inputs = [ct.TensorType(name=input_name, shape=shape, dtype=dtype)]
+                print(f"[convert_coreml] Using contract.json: {input_name} shape={shape} dtype={input_dtype}")
+            else:
+                # Fallback: try to infer input shape from model
+                # Run a dummy forward pass to get input shape
+                try:
+                    dummy_input = torch.zeros((1, 128), dtype=torch.int32)
+                    _ = pytorch_model(dummy_input)
+                    # If that worked, use int32 input
+                    inputs = [ct.TensorType(name="input_ids", shape=(1, 128), dtype=np.int32)]
+                except Exception:
+                    # Try float32 input (for transformer blocks)
+                    try:
+                        dummy_input = torch.randn((1, 128, 64), dtype=torch.float32)
+                        _ = pytorch_model(dummy_input)
+                        inputs = [ct.TensorType(name="input", shape=(1, 128, 64), dtype=np.float32)]
+                    except Exception:
+                        # Last resort: use defaults
+                        inputs = [ct.TensorType(name="input_ids", shape=(1, 128), dtype=np.int32)]
+                        print(f"[convert_coreml] WARN: Could not infer input shape, using defaults")
             mlmodel = ct.convert(
                 pytorch_model,
                 inputs=inputs,
@@ -250,6 +295,8 @@ Examples:
                     help='Input model path (ONNX file for --backend onnx, PyTorch model for --backend pytorch)')
     ap.add_argument('--out', '--output', dest='output_path', required=True,
                     help='Output .mlpackage path')
+    ap.add_argument('--contract', dest='contract_path',
+                    help='Path to contract.json for input specifications')
     ap.add_argument('--compute-units', default='all',
                     choices=['all', 'cpuandgpu', 'cpuonly'],
                     help='Compute units (default: all)')
@@ -284,12 +331,23 @@ Examples:
                     f"Expected TorchScript (.pt) or ExportedProgram. Error: {e}"
                 )
         
+        # Try to find contract.json automatically if not provided
+        contract_path = args.contract_path
+        if not contract_path:
+            # Look for contract.json in the same directory as the model
+            model_dir = Path(args.input_path).parent
+            potential_contract = model_dir / "contract.json"
+            if potential_contract.exists():
+                contract_path = str(potential_contract)
+                print(f"[convert_coreml] Found contract.json: {contract_path}")
+        
         convert_pytorch_to_coreml(
             pytorch_model=pytorch_model,
             output_path=args.output_path,
             compute_units=args.compute_units,
             target=args.target,
             allow_placeholder=args.allow_placeholder,
+            contract_path=contract_path,
         )
     else:  # onnx backend
         convert_onnx_to_coreml(

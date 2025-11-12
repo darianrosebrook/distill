@@ -14,6 +14,9 @@
 
 set -euo pipefail
 
+# Use PYTHON env var if set, otherwise default to python3
+PYTHON="${PYTHON:-python3}"
+
 echo "=========================================="
 echo "Toy Training Smoke Test"
 echo "=========================================="
@@ -24,8 +27,7 @@ if [ -z "${VIRTUAL_ENV:-}" ]; then
     if [ -f "venv/bin/activate" ]; then
         source venv/bin/activate
     else
-        echo "❌ Virtual environment not found"
-        exit 1
+        echo "⚠️  Virtual environment not found, using system Python: $PYTHON"
     fi
 fi
 
@@ -34,7 +36,7 @@ TOY_CONFIG="${TOY_DIR}/toy_config.yaml"
 
 # Step 1: Create toy training setup
 echo "Step 1: Creating toy training setup..."
-python -m training.make_toy_training \
+$PYTHON -m training.make_toy_training \
     --out-dir "${TOY_DIR}" \
     --samples 10 \
     --steps 5 \
@@ -53,7 +55,7 @@ echo ""
 
 # Step 2: Verify dataset loads
 echo "Step 2: Verifying dataset loading..."
-python3 << 'PYTHON_EOF'
+$PYTHON << 'PYTHON_EOF'
 from training.dataset import KDDataset
 import sys
 
@@ -89,7 +91,7 @@ echo ""
 
 # Step 3: Verify model creation
 echo "Step 3: Verifying model creation..."
-python3 << 'PYTHON_EOF'
+$PYTHON << 'PYTHON_EOF'
 from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
 import torch
 import sys
@@ -136,7 +138,7 @@ echo ""
 
 # Step 4: Test training step (without full training loop)
 echo "Step 4: Testing training step..."
-python3 << 'PYTHON_EOF'
+$PYTHON << 'PYTHON_EOF'
 from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
 from training.dataset import KDDataset, collate_kd_batch
 from training.losses import combined_kd_loss
@@ -218,7 +220,7 @@ echo ""
 
 # Step 5: Test checkpoint save/load
 echo "Step 5: Testing checkpoint save/load..."
-python3 << 'PYTHON_EOF'
+$PYTHON << 'PYTHON_EOF'
 from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
 import torch
 import sys
@@ -293,6 +295,6 @@ echo ""
 echo "Training pipeline is ready!"
 echo ""
 echo "To run full toy training:"
-echo "  python -m training.distill_kd --config ${TOY_CONFIG}"
+echo "  $PYTHON -m training.distill_kd --config ${TOY_CONFIG}"
 echo ""
 

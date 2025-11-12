@@ -17,7 +17,7 @@ import torch
 import torch.nn as nn
 
 from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
-from coreml.runtime.constrained_decode import JsonConstrainedDecoder
+from coreml.runtime.constrained_decode import JSONConstrainedDecoder
 
 
 def load_model(checkpoint_path: str, device: torch.device) -> nn.Module:
@@ -174,16 +174,74 @@ def evaluate_tool_use(model: nn.Module, tokenizer, test_prompts: List[Dict[str, 
         prompt = test_case.get('prompt', '')
         expected_tool = test_case.get('expected_tool', None)
         
-        # Generate text
-        generated_text = generate_text(model, tokenizer, prompt, max_new_tokens=256, device=device)
+        # Generate text with constrained decoding
+        # Create decoder for tool call schema
+        tool_schema = {
+            "type": "object",
+            "required": ["name", "arguments"],
+            "properties": {
+                "name": {"type": "string"},
+                "arguments": {"type": "object"}
+            }
+        }
+        decoder = JSONConstrainedDecoder(schema=tool_schema, tokenizer=tokenizer)
         
-        # Check JSON validity
-        is_valid_json = validate_json(generated_text)
-        if is_valid_json:
-            json_valid_count += 1
+        # Generate with constrained decoding
+        state = decoder.start()
+        generated_tokens = []
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(device)
+        
+        model.eval()
+        with torch.no_grad():
+            for _ in range(256):  # max_new_tokens
+                # Forward pass
+                outputs = model(input_ids)
+                logits = outputs[0] if isinstance(outputs, tuple) else outputs
+                next_token_logits = logits[0, -1, :].cpu().numpy()  # [V]
+                
+                # Apply constrained decoding mask
+                mask = decoder.allowed_token_mask(state, next_token_logits.shape)
+                next_token_logits[~mask] = -float("inf")
+                
+                # Sample token (greedy)
+                tok_id = int(next_token_logits.argmax())
+                generated_tokens.append(tok_id)
+                
+                # Update decoder state
+                state = decoder.push(state, tok_id)
+                
+                # Update input_ids for next iteration
+                input_ids = torch.cat([input_ids, torch.tensor([[tok_id]], device=device)], dim=1)
+                
+                # Stop if decoder says we're complete or hit EOS
+                if state.complete:
+                    break
+                if hasattr(tokenizer, "eos_token_id") and tokenizer.eos_token_id is not None and tok_id == tokenizer.eos_token_id:
+                    break
+        
+        # Decode generated tokens
+        generated_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+        
+        # Validate JSON using constrained decoder
+        is_valid_json = False
+        tool_call = None
+        try:
+            if state.complete:
+                tool_call = decoder.finalize(state)  # Validates schema
+                is_valid_json = True
+                json_valid_count += 1
+            else:
+                # Try to parse anyway (might be valid JSON but decoder didn't mark complete)
+                tool_call = extract_tool_call(generated_text)
+                is_valid_json = validate_json(generated_text)
+                if is_valid_json:
+                    json_valid_count += 1
+        except ValueError:
+            # Invalid JSON according to decoder
+            tool_call = extract_tool_call(generated_text)
+            is_valid_json = False
         
         # Check tool selection
-        tool_call = extract_tool_call(generated_text)
         tool_correct = False
         if tool_call and expected_tool:
             predicted_tool = tool_call.get('name', '')

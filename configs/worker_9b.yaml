@@ -24,12 +24,26 @@ train:
   steps: 200000
   fp16: true
   grad_checkpointing: true
-tokenizer:
-  path: models/student/tokenizer
+io:
+  tokenizer_path: models/student/tokenizer  # HuggingFace tokenizer path (e.g., "meta-llama/Llama-2-7b-hf" or local path)
+  train_shards: [data/kd_mix.jsonl]
+  val_shards: [data/val.jsonl]
 role: "worker"
 distillation:
   type: "standard_kd"
-  kd_weight: 0.5
-  process_supervision_weight: 0.3
-  long_ctx_weight: 0.2
+  kl_weight: 0.5
+  ce_teacher_weight: 0.3
+  ce_ground_truth_weight: 0.2
+kd:
+  teacher_endpoint: "http://teacher.local"
+  kd_temperature: 2.0
+  teacher_logits_available: false
+curriculum:
+  schedule: [20000, 60000, 120000, 200000]  # Step boundaries for sequence length progression
+tracing:
+  log_dir: "runs"
+  use_tensorboard: true
+  use_wandb: false
+  json_log: true
+  console_log: true
 

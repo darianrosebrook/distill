@@ -198,3 +198,6 @@ apps/tools/caws/
 
 # Documentation Archive
 docs/archive/
+docs_status
+external/
+internal/

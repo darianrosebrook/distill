@@ -1,18 +1,19 @@
-id: PROJ-388
+id: PROJ-695
 title: distill
 risk_tier: 2
-mode: chore
+mode: feature
 change_budget:
   max_files: 25
   max_loc: 1000
 blast_radius:
   modules:
-    - arbiter
-    - training
-    - evaluation
-    - conversion
-    - coreml
-    - models
+    - arbiter/
+    - training/
+    - evaluation/
+    - conversion/
+    - coreml/
+    - models/
+    - tests/
   data_migration: false
 operational_rollback_slo: 5m
 threats: []
@@ -25,47 +26,75 @@ scope:
     - coreml/
     - models/
     - configs/
-    - scripts/
-    - infra/
     - tests/
+    - scripts/
   out:
     - venv/
     - __pycache__/
-    - .git/
+    - .caws/
+    - node_modules/
     - dist/
     - build/
     - coreml/artifacts/
     - onnx/
-    - '*.pyc'
 invariants:
-  - System maintains data consistency
-  - All changes tracked via CAWS provenance
-  - Quality gates enforced before merge
-  - Scope boundaries respected
+  - Model distillation maintains teacher-student knowledge transfer fidelity
+  - CAWS arbiter stack maintains constitutional compliance
+  - CoreML/ANE conversion preserves model accuracy within acceptable thresholds
 acceptance:
   - id: A1
-    given: CAWS is initialized in the project
-    when: running caws validate
-    then: working spec validates without errors
+    given: Student model architecture is defined and teacher model is accessible
+    when: Knowledge distillation training completes
+    then: Model checkpoint is saved with validation loss metrics and export-ready format
+    status: pending
   - id: A2
-    given: CAWS hooks are installed
-    when: making a commit
-    then: provenance tracking is automatically updated
+    given: Trained student model checkpoint exists
+    when: Model is exported to ONNX format
+    then: ONNX export succeeds for enumerated shapes (4k/8k/16k) without errors
+    status: pending
   - id: A3
-    given: working spec exists
-    when: implementing features
-    then: changes stay within scope and budget boundaries
+    given: ONNX model files exist for target shapes
+    when: CoreML conversion is executed
+    then: CoreML .mlpackage files are generated and pass ANE compatibility checks
+    status: pending
+  - id: A4
+    given: CoreML model is available
+    when: Parity probes are executed
+    then: Relative error ≤2% at attention output for all enumerated shapes
+    status: pending
+  - id: A5
+    given: CoreML model with process supervision training
+    when: Tool-use evaluation runs
+    then: JSON validity ≥98% and tool selection accuracy ≥90% on validation set
+    status: pending
+  - id: A6
+    given: Quantized INT8 model is trained
+    when: Performance evaluation executes
+    then: TTFA ≤2.0s @4k, ≤3.0s @16k; throughput ≥25 tok/s @4k, ≥15 tok/s @16k
+    status: pending
+  - id: A7
+    given: Long-context model with curriculum training
+    when: Long-context evaluation runs
+    then: Needle retrieval ≥95% @4k, ≥90% @16k on test set
+    status: pending
+  - id: A8
+    given: Complete model pipeline (training → export → conversion)
+    when: All acceptance gates are evaluated
+    then: All gates pass (parity, perf, memory, tool-use, long-ctx, stability)
+    status: pending
 non_functional:
-  a11y:
-    - keyboard
   perf:
-    api_p95_ms: 250
+    model_inference_ms: 100
+    training_iteration_s: 60
   security:
     - validation
+    - model_verification
 contracts:
-  - type: 'project_setup'
-    path: '.caws/working-spec.yaml'
-    description: 'Project-level CAWS configuration. Feature-specific contracts will be added as features are developed.'
+  - type: project_setup
+    path: .caws/working-spec.yaml
+    description: >-
+      Project-level CAWS configuration. Feature-specific contracts will be added
+      as features are developed.
 observability:
   logs: []
   metrics: []

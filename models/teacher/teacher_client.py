@@ -96,7 +96,9 @@ class TeacherClient:
                 endpoint = endpoint[:-3]
             self.endpoint = endpoint.rstrip("/")
             self.api_key = kwargs.get("api_key") or self._load_api_key_from_env()
-            self.timeout = kwargs.get("timeout", 300)
+            # Increased timeout for kimi-k2-thinking which can take longer due to reasoning_content
+            # Docs recommend streaming for long responses, but we use longer timeout as fallback
+            self.timeout = kwargs.get("timeout", 600)  # 10 minutes for long reasoning responses
             self._setup_retry_session()
             # Don't detect tier on initialization (saves a request)
             # Tier will be detected from first API response headers
@@ -114,7 +116,7 @@ class TeacherClient:
         cls, 
         endpoint: str, 
         api_key: Optional[str] = None, 
-        timeout: int = 300,
+        timeout: int = 600,
         max_retries: int = 5,
         retry_backoff_factor: float = 2.0
     ):
@@ -122,9 +124,9 @@ class TeacherClient:
         Create client from HTTP endpoint.
         
         Args:
-            endpoint: API endpoint URL
-            api_key: API key (or set KIMI_API_KEY env var)
-            timeout: Request timeout in seconds
+            endpoint: API endpoint URL (e.g., https://api.moonshot.ai/v1 or https://api.moonshot.cn/v1)
+            api_key: API key (or set MOONSHOT_API_KEY env var)
+            timeout: Request timeout in seconds (default 600s for kimi-k2-thinking long responses)
             max_retries: Maximum retry attempts
             retry_backoff_factor: Exponential backoff multiplier
         """
@@ -356,7 +358,7 @@ class TeacherClient:
         prompts: List[str],
         temperature: float = 1.0,
         top_p: float = 0.95,
-        max_tokens: int = 1024,
+        max_tokens: Optional[int] = None,
         return_logits: bool = False,
         **kwargs
     ) -> List[Dict[str, Any]]:
@@ -365,15 +367,28 @@ class TeacherClient:
         
         Args:
             prompts: List of input prompts
-            temperature: Sampling temperature
+            temperature: Sampling temperature (default 1.0 for kimi-k2-thinking)
             top_p: Top-p sampling parameter
-            max_tokens: Maximum tokens to generate
+            max_tokens: Maximum tokens to generate. If None, uses model-aware defaults:
+                - kimi-k2-thinking: 16,384 (16K) to ensure full reasoning_content + content
+                - Other models: 1,024
             return_logits: Whether to return logits (for KD)
-            **kwargs: Additional backend-specific parameters
+            **kwargs: Additional backend-specific parameters (model name, etc.)
             
         Returns:
-            List of dicts with keys: "prompt", "text", "logits" (if return_logits=True)
+            List of dicts with keys: "prompt", "text", "reasoning_content" (if present), "logits" (if return_logits=True)
         """
+        # Model-aware default max_tokens
+        model_name = kwargs.get("model", "kimi-k2-thinking")
+        if max_tokens is None:
+            if "kimi-k2-thinking" in model_name.lower():
+                # kimi-k2-thinking requires ≥16K tokens for full reasoning_content + content
+                # Note: This is the OUTPUT limit. The model supports 256K CONTEXT window
+                # (input + output combined), which is handled automatically by the API.
+                max_tokens = 16_384
+            else:
+                max_tokens = 1024
+        
         if self.backend == "http":
             return self._sample_http(prompts, temperature, top_p, max_tokens, return_logits, **kwargs)
         elif self.backend == "hf":
@@ -418,16 +433,42 @@ class TeacherClient:
         - Network errors with reconnection
         - Server errors (5xx) with retry
         - Token limit errors (400)
+        
+        Args:
+            prompt: Input prompt (ignored if payload_override provided)
+            temperature: Sampling temperature
+            top_p: Top-p sampling parameter
+            max_tokens: Maximum tokens to generate
+            return_logits: Whether to return logits
+            **kwargs: Additional parameters including:
+                - payload_override: Dict to override default payload construction (for multi-step)
+                - model: Model name (default: kimi-k2-thinking)
+                - stream: Enable streaming (default: False)
         """
-        # Default model: kimi-k2-thinking (long-thinking version)
-        # Other options: kimi-k2-turbo-preview, kimi-k2-0905-preview, kimi-k2-thinking-turbo
-        payload = {
-            "model": kwargs.get("model", "kimi-k2-thinking"),
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": temperature,
-            "top_p": top_p,
-            "max_tokens": max_tokens,
-        }
+        # Support payload override for multi-step calls
+        payload_override = kwargs.get("payload_override")
+        if payload_override:
+            payload = payload_override
+        else:
+            # Default model: kimi-k2-thinking (long-thinking version)
+            # Other options: kimi-k2-turbo-preview, kimi-k2-0905-preview, kimi-k2-thinking-turbo
+            model_name = kwargs.get("model", "kimi-k2-thinking")
+            is_thinking_model = "kimi-k2-thinking" in model_name.lower()
+            
+            payload = {
+                "model": model_name,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": temperature,
+                "top_p": top_p,
+                "max_tokens": max_tokens,
+            }
+            
+            # For kimi-k2-thinking: enable streaming recommended for long reasoning_content
+            # Docs recommend streaming to avoid network timeouts and better UX
+            # However, we use non-streaming by default for simplicity in batch processing
+            # Streaming can be enabled via kwargs["stream"] = True if needed
+            if kwargs.get("stream", False) and is_thinking_model:
+                payload["stream"] = True
         
         if return_logits:
             payload["logprobs"] = True
@@ -441,58 +482,160 @@ class TeacherClient:
         retry_count = 0
         max_attempts = self._max_retries + 1
         
+        # Debug: Log initial request details
+        model_name = payload.get("model", "unknown")
+        prompt_length = len(prompt)
+        print(f"[TeacherClient] Starting request: endpoint={self.endpoint}/v1/chat/completions, model={model_name}, "
+              f"prompt_len={prompt_length}, max_tokens={max_tokens}, max_attempts={max_attempts}")
+        if self._tier:
+            print(f"[TeacherClient] Current tier: {self._tier.value}, limits: {self._tier_limits.rpm} RPM, "
+                  f"{self._tier_limits.tpm:,} TPM, delay={self._tier_limits.delay}s")
+        
         while retry_count < max_attempts:
+            # Debug: Log attempt details
+            if retry_count > 0:
+                print(f"[TeacherClient] Retry attempt {retry_count + 1}/{max_attempts}")
+            else:
+                print(f"[TeacherClient] Initial attempt 1/{max_attempts}")
             try:
+                request_start = time.time()
                 response = self.session.post(
                     f"{self.endpoint}/v1/chat/completions",
                     json=payload,
                     headers=headers,
                     timeout=self.timeout
                 )
+                request_duration = time.time() - request_start
+                
+                # Debug: Log response details
+                print(f"[TeacherClient] Response: status={response.status_code}, duration={request_duration:.2f}s")
+                
+                # Extract rate limit headers for debugging
+                rate_limit_headers = {
+                    "x-ratelimit-limit-rpm": response.headers.get("x-ratelimit-limit-rpm"),
+                    "x-ratelimit-remaining-rpm": response.headers.get("x-ratelimit-remaining-rpm"),
+                    "x-ratelimit-limit-tpm": response.headers.get("x-ratelimit-limit-tpm"),
+                    "x-ratelimit-remaining-tpm": response.headers.get("x-ratelimit-remaining-tpm"),
+                    "retry-after": response.headers.get("retry-after"),
+                }
+                
+                # Debug: Show all headers that might contain rate limit info
+                all_rate_headers = {k: v for k, v in response.headers.items() if 'rate' in k.lower() or 'limit' in k.lower() or 'retry' in k.lower()}
+                if all_rate_headers:
+                    print(f"[TeacherClient] Rate limit related headers: {', '.join(f'{k}={v}' for k, v in all_rate_headers.items())}")
+                elif any(rate_limit_headers.values()):
+                    print(f"[TeacherClient] Rate limit headers: {', '.join(f'{k}={v}' for k, v in rate_limit_headers.items() if v)}")
+                else:
+                    print(f"[TeacherClient] No rate limit headers found in response")
+                
+                # Try to detect tier from ANY response (success or error) - tier info may be in headers
+                # This is important because tier detection should happen even on error responses
+                old_tier = self._tier
+                self._update_tier_from_response(response)
+                if old_tier != self._tier:
+                    print(f"[TeacherClient] Tier detected from response: {old_tier.value} → {self._tier.value}")
                 
                 # Success
                 if response.status_code == 200:
-                    # Extract tier info from response headers (if available)
-                    # This allows us to detect tier from a single API call
-                    self._update_tier_from_response(response)
-                    
                     data = response.json()
                     choice = data["choices"][0]
-                    text = choice["message"]["content"]
+                    message = choice.get("message", {})
                     
-                    result = {
-                        "prompt": prompt,
-                        "text": text,
-                        "logits": None,
-                    }
+                    # Extract content (regular response)
+                    text = message.get("content", "")
+                    
+                    # Extract reasoning_content if present (kimi-k2-thinking feature)
+                    reasoning_content = None
+                    if "reasoning_content" in message:
+                        reasoning_content = message["reasoning_content"]
+                        print(f"[TeacherClient] Reasoning content present: {len(reasoning_content)} chars")
+                    elif hasattr(message, "reasoning_content"):
+                        # Handle case where reasoning_content exists but not in dict
+                        reasoning_content = getattr(message, "reasoning_content", None)
+                        if reasoning_content:
+                            print(f"[TeacherClient] Reasoning content present: {len(reasoning_content)} chars")
+                    
+                    # Debug: Log success details
+                    usage = data.get("usage", {})
+                    reasoning_info = f", reasoning={len(reasoning_content) if reasoning_content else 0} chars" if reasoning_content else ""
+                    print(f"[TeacherClient] Success: response_len={len(text)}{reasoning_info}, "
+                          f"tokens={usage.get('total_tokens', 'unknown')} "
+                          f"(input: {usage.get('prompt_tokens', 'unknown')}, "
+                          f"output: {usage.get('completion_tokens', 'unknown')})")
+                    
+                    # For multi-step calls (payload_override), return full message structure
+                    if payload_override:
+                        result = {
+                            "message": message.copy(),  # Full message with reasoning_content, tool_calls, etc.
+                            "text": text,
+                            "logits": None,
+                        }
+                        # Preserve reasoning_content in message for multi-step continuity
+                        if reasoning_content:
+                            result["message"]["reasoning_content"] = reasoning_content
+                        # Include tool_calls if present
+                        if "tool_calls" in message:
+                            result["tool_calls"] = message["tool_calls"]
+                    else:
+                        # Single-step call - return simplified structure
+                        result = {
+                            "prompt": prompt,
+                            "text": text,
+                            "logits": None,
+                        }
+                    
+                    # Include reasoning_content if present (for KD, we may want both reasoning and final answer)
+                    # For kimi-k2-thinking: reasoning_content contains the model's reasoning process
+                    # This is valuable for distillation as it shows the thinking process
+                    if reasoning_content and not payload_override:
+                        result["reasoning_content"] = reasoning_content
+                        # Note: reasoning_content tokens count towards max_tokens limit
+                        # We ensure max_tokens ≥ 16K for kimi-k2-thinking to accommodate both
                     
                     if return_logits and "logprobs" in choice:
-                        result["logprobs"] = choice.get("logprobs")
+                        result["logits"] = choice.get("logprobs")
                     
                     return result
                 
                 # Rate limit (429) - tier-aware exponential backoff
                 elif response.status_code == 429:
-                    # Try to extract tier info from 429 response headers
-                    self._update_tier_from_response(response)
+                    # Debug: Log error response body if available
+                    try:
+                        error_data = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
+                        error_msg = error_data.get("error", {}).get("message", response.text[:200]) if isinstance(error_data, dict) else str(response.text[:200])
+                        print(f"[TeacherClient] Rate limit error message: {error_msg}")
+                    except Exception:
+                        pass
                     
                     retry_after = self._get_retry_after(response)
                     
                     # Use tier-specific backoff if available
-                    if retry_after:
+                    if retry_after and self._tier_limits:
+                        # Respect Retry-After but ensure minimum tier delay
+                        # For FREE tier, API may return short Retry-After (1s) but we need 20s
+                        min_delay = self._tier_limits.delay
+                        tier_backoff = min_delay * (self._retry_backoff_factor ** retry_count)
+                        wait_time = max(retry_after, tier_backoff)
+                        tier_info = f" (Retry-After: {retry_after}s, tier min: {min_delay}s, tier backoff: {tier_backoff:.1f}s, using: {wait_time:.1f}s)"
+                    elif retry_after:
+                        # Retry-After without tier info - use as-is but warn
                         wait_time = retry_after
-                        tier_info = f" (Retry-After header)"
+                        tier_info = f" (Retry-After header: {retry_after}s)"
+                        if retry_after < 5.0:
+                            print(f"[TeacherClient] WARN: Short Retry-After ({retry_after}s) may not be sufficient for rate limits")
                     elif self._tier_limits:
                         # Tier-aware backoff: start with tier delay, then exponential
                         base_delay = self._tier_limits.delay
                         wait_time = base_delay * (self._retry_backoff_factor ** retry_count)
-                        tier_info = f" (tier: {self._tier.value}, base: {base_delay}s)"
+                        tier_info = f" (tier: {self._tier.value}, base: {base_delay}s, exponential: {wait_time:.1f}s)"
                     else:
                         # Fallback to standard exponential backoff
                         wait_time = self._retry_backoff_factor ** retry_count
-                        tier_info = ""
+                        tier_info = f" (fallback exponential: {wait_time:.1f}s)"
                     
                     print(f"[TeacherClient] Rate limited (429), waiting {wait_time:.1f}s before retry {retry_count + 1}/{max_attempts}{tier_info}")
+                    if retry_count + 1 >= max_attempts:
+                        print(f"[TeacherClient] ERROR: Max retries ({max_attempts}) exceeded. Last error: Rate limit (429)")
                     time.sleep(wait_time)
                     retry_count += 1
                     continue
@@ -500,28 +643,54 @@ class TeacherClient:
                 # Token limit exceeded (400) - don't retry
                 elif response.status_code == 400:
                     error_data = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
-                    error_msg = error_data.get("error", {}).get("message", response.text)
+                    error_msg = error_data.get("error", {}).get("message", response.text) if isinstance(error_data, dict) else str(response.text)
+                    
+                    print(f"[TeacherClient] Bad request (400): {error_msg}")
+                    # Note: Tier detection already happened above, so we should have detected tier from headers if available
                     
                     if "token" in error_msg.lower() or "limit" in error_msg.lower():
+                        print(f"[TeacherClient] Token limit exceeded - not retrying")
                         return {
                             "prompt": prompt,
                             "text": "",
                             "logits": None,
                             "error": f"Token limit exceeded: {error_msg}",
                         }
+                    else:
+                        print(f"[TeacherClient] Other 400 error - not retrying")
+                        return {
+                            "prompt": prompt,
+                            "text": "",
+                            "logits": None,
+                            "error": f"Bad request (400): {error_msg}",
+                        }
                 
                 # Server errors (5xx) - retry with backoff
                 elif response.status_code >= 500:
+                    try:
+                        error_data = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
+                        error_msg = error_data.get("error", {}).get("message", response.text[:200]) if isinstance(error_data, dict) else str(response.text[:200])
+                        print(f"[TeacherClient] Server error ({response.status_code}): {error_msg}")
+                    except Exception:
+                        print(f"[TeacherClient] Server error ({response.status_code}): {response.text[:200]}")
+                    
                     wait_time = self._retry_backoff_factor ** retry_count
-                    print(f"[TeacherClient] Server error ({response.status_code}), retrying in {wait_time:.1f}s ({retry_count + 1}/{max_attempts})")
+                    print(f"[TeacherClient] Retrying in {wait_time:.1f}s ({retry_count + 1}/{max_attempts})")
+                    if retry_count + 1 >= max_attempts:
+                        print(f"[TeacherClient] ERROR: Max retries ({max_attempts}) exceeded. Last error: Server error ({response.status_code})")
                     time.sleep(wait_time)
                     retry_count += 1
                     continue
                 
                 # Other errors - return error with status code
                 else:
-                    error_data = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
-                    error_msg = error_data.get("error", {}).get("message", response.text) if isinstance(error_data, dict) else str(response.text)
+                    try:
+                        error_data = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
+                        error_msg = error_data.get("error", {}).get("message", response.text[:200]) if isinstance(error_data, dict) else str(response.text[:200])
+                    except Exception:
+                        error_msg = str(response.text[:200])
+                    
+                    print(f"[TeacherClient] API error ({response.status_code}): {error_msg}")
                     return {
                         "prompt": prompt,
                         "text": "",
@@ -532,7 +701,10 @@ class TeacherClient:
             except requests.exceptions.ConnectionError as e:
                 # Network connection error - retry with exponential backoff
                 wait_time = self._retry_backoff_factor ** retry_count
-                print(f"[TeacherClient] Connection error, retrying in {wait_time:.1f}s ({retry_count + 1}/{max_attempts}): {e}")
+                print(f"[TeacherClient] Connection error (attempt {retry_count + 1}/{max_attempts}): {e}")
+                print(f"[TeacherClient] Retrying in {wait_time:.1f}s")
+                if retry_count + 1 >= max_attempts:
+                    print(f"[TeacherClient] ERROR: Max retries ({max_attempts}) exceeded. Last error: Connection error")
                 time.sleep(wait_time)
                 retry_count += 1
                 last_exception = e
@@ -541,7 +713,10 @@ class TeacherClient:
             except requests.exceptions.Timeout as e:
                 # Timeout - retry with exponential backoff
                 wait_time = self._retry_backoff_factor ** retry_count
-                print(f"[TeacherClient] Timeout, retrying in {wait_time:.1f}s ({retry_count + 1}/{max_attempts})")
+                print(f"[TeacherClient] Timeout (attempt {retry_count + 1}/{max_attempts}, timeout={self.timeout}s): {e}")
+                print(f"[TeacherClient] Retrying in {wait_time:.1f}s")
+                if retry_count + 1 >= max_attempts:
+                    print(f"[TeacherClient] ERROR: Max retries ({max_attempts}) exceeded. Last error: Timeout")
                 time.sleep(wait_time)
                 retry_count += 1
                 last_exception = e
@@ -549,12 +724,22 @@ class TeacherClient:
             
             except requests.exceptions.RequestException as e:
                 # Other request errors
-                print(f"[TeacherClient] Request error: {e}")
+                print(f"[TeacherClient] Request error (attempt {retry_count + 1}/{max_attempts}): {e}")
+                print(f"[TeacherClient] Not retrying - fatal request error")
+                last_exception = e
+                break
+            
+            except Exception as e:
+                # Unexpected errors
+                print(f"[TeacherClient] Unexpected error (attempt {retry_count + 1}/{max_attempts}): {type(e).__name__}: {e}")
+                import traceback
+                print(f"[TeacherClient] Traceback: {traceback.format_exc()}")
                 last_exception = e
                 break
         
         # All retries exhausted
         error_msg = str(last_exception) if last_exception else "Max retries exceeded"
+        print(f"[TeacherClient] ERROR: All retries exhausted. Final error: {error_msg}")
         return {
             "prompt": prompt,
             "text": "",
@@ -666,6 +851,93 @@ class TeacherClient:
                 })
         
         return results
+    
+    def sample_multi_step(
+        self,
+        messages: List[Dict[str, Any]],
+        temperature: float = 1.0,
+        top_p: float = 0.95,
+        max_tokens: Optional[int] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Sample from teacher model with multi-step tool calls.
+        
+        For kimi-k2-thinking: preserves reasoning_content in message history for continuity.
+        
+        Args:
+            messages: List of message dicts with "role" and "content".
+                For assistant messages, include "reasoning_content" if present.
+            temperature: Sampling temperature (default 1.0 for kimi-k2-thinking)
+            top_p: Top-p sampling parameter
+            max_tokens: Maximum tokens to generate. If None, uses model-aware defaults.
+            tools: Optional list of tool definitions for tool calling
+            **kwargs: Additional parameters (model name, etc.)
+            
+        Returns:
+            Dict with keys: "message" (full message with reasoning_content), "tool_calls" (if any)
+            
+        Example:
+            # First call
+            result1 = client.sample_multi_step([
+                {"role": "user", "content": "What's the weather?"}
+            ], tools=tools)
+            
+            # Second call - preserve reasoning_content from first response
+            messages = [
+                {"role": "user", "content": "What's the weather?"},
+                result1["message"]  # Includes reasoning_content if present
+            ]
+            if result1["message"].get("tool_calls"):
+                # Add tool results
+                messages.append({"role": "tool", "tool_call_id": ..., "content": ...})
+            
+            result2 = client.sample_multi_step(messages, tools=tools)
+        """
+        if self.backend != "http":
+            raise ValueError("Multi-step tool calls only supported for HTTP backend")
+        
+        model_name = kwargs.get("model", "kimi-k2-thinking")
+        is_thinking_model = "kimi-k2-thinking" in model_name.lower()
+        
+        # Model-aware default max_tokens
+        if max_tokens is None:
+            if is_thinking_model:
+                max_tokens = 16_384
+            else:
+                max_tokens = 1024
+        
+        # Ensure messages preserve reasoning_content from previous responses
+        # The API server handles this automatically, but we document it here
+        payload = {
+            "model": model_name,
+            "messages": messages,
+            "temperature": temperature,
+            "top_p": top_p,
+            "max_tokens": max_tokens,
+        }
+        
+        if tools:
+            payload["tools"] = tools
+        
+        if kwargs.get("stream", False) and is_thinking_model:
+            payload["stream"] = True
+        
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        
+        # Use single retry logic
+        return self._sample_single_with_retry(
+            prompt="",  # Not used for multi-step
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens,
+            return_logits=False,
+            payload_override=payload,  # Override default payload construction
+            **kwargs
+        )
     
     def health_check(self) -> bool:
         """
