@@ -1,0 +1,40 @@
+{
+  "header": {
+    "report_version": "1.0.0",
+    "dataset_sha256": "6bfeac057d0effad230d406b96f0b1111c8d0362b8f83cd1672153190b1fb2bf",
+    "tool_registry_sha256": null,
+    "tokenizer_fingerprint": null,
+    "config": {
+      "runner": "verification_only",
+      "model": "none",
+      "seed": 42,
+      "temperature": 0.0
+    },
+    "gates": {
+      "integration_f1_macro_lax": {
+        "threshold": 0.9,
+        "policy": "count_based_misses"
+      },
+      "controls_with_integration": {
+        "threshold": 0,
+        "policy": "hard_fail"
+      },
+      "privacy_ok_rate": {
+        "threshold": 1.0,
+        "policy": "hard_fail"
+      }
+    }
+  },
+  "summary": {
+    "total": 20,
+    "num_eligible": 18.88,
+    "controls_with_integration": 0,
+    "avg_integration_f1_macro_lax": 0.5,
+    "avg_integration_f1_macro_strict": 0.5,
+    "privacy_ok_rate": 1.0,
+    "multi_call_parity_rate": 1.0,
+    "wall_time_sec": 0
+  },
+  "gates_ok": false,
+  "note": "Generated from verification report - no actual model evaluation performed"
+}

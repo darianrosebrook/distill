@@ -129,7 +129,7 @@ class ToolBroker:
     
     def lookup(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any] | None:
         """
-        Lookup tool result (alias for call, returns None on miss instead of error dict).
+        Lookup tool result (returns None on miss instead of error dict).
         
         Args:
             name: Tool name
@@ -138,8 +138,12 @@ class ToolBroker:
         Returns:
             Tool result dict or None if not found
         """
-        result = self.call(name, arguments)
-        if result.get("ok") is False and result.get("error") == "fixture_miss":
-            return None
-        return result
+        _, key_norm = self._norm_key(name, arguments or {})
+        hit = self.index.get(name, {}).get(key_norm)
+        if hit is not None:
+            return hit
+        # Try normalized name (dots vs underscores)
+        normalized_name = name.replace(".", "_")
+        hit = self.index.get(normalized_name, {}).get(key_norm)
+        return hit
 

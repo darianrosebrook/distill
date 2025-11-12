@@ -34,20 +34,21 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = [
-    "models",
-    "coreml",
-    "capture",
-    "schemas",
-    "training",
-    "evaluation",
-    "scripts",
-    "tools",
-    "build",
-    "arbiter",
-    "codemod",
-    "conversion",
-    "infra",
-    "onnx",
+  "models",
+  "coreml",
+  "capture",
+  "schemas",
+  "training",
+  "evaluation",
+  "eval",
+  "scripts",
+  "tools",
+  "build",
+  "arbiter",
+  "codemod",
+  "conversion",
+  "infra",
+  "onnx",
 ]
 
 [tool.setuptools.package-data]

@@ -235,8 +235,64 @@ eval-smoke:
 		--min-eligible-for-gates 15 \
 		--fail-on-fingerprint-mismatch
 
+eval-real-local:
+	python -m eval.cli \
+		--runner hf_local \
+		--model $(MODEL) \
+		--in $(IN) \
+		--out $(OUT) \
+		--report $(REPORT) \
+		--fixtures eval/tool_broker/fixtures \
+		--num-shards 2 \
+		--shard-index 0 \
+		--seed 42 \
+		--temperature 0.0 \
+		--min-eligible-for-gates 15 \
+		--fail-on-fingerprint-mismatch
+
+eval-fixture-stats:
+	@jq '.summary | {fixture_hit_rate, fixture_miss_count, total, num_eligible}' eval/reports/latest.json || echo "Report not found: eval/reports/latest.json"
+
+# Sharding determinism validation defaults (override on CLI or in env)
+DATASET ?= data/contextual_final.jsonl
+MODEL ?= 
+RUNNER ?= hf_local
+SHARDS ?= 4
+
+validate-sharding:
+	python -m scripts.validate_sharding_determinism \
+		--dataset $(DATASET) \
+		--model $(MODEL) \
+		--runner $(RUNNER) \
+		--num-shards $(SHARDS) \
+		--fixtures eval/tool_broker/fixtures \
+		--report-dir eval/reports \
+		--results-dir eval/results \
+		--tolerance 1e-3
+
 ci-broker-smoke:
 	pytest -q -k broker_fixtures_hit_rate tests/ci/test_broker_fixtures_hit_rate.py
+
+validate-sharding:
+	python -m scripts.validate_sharding_determinism \
+		--dataset $(DATASET) \
+		--model $(MODEL) \
+		--runner $(RUNNER) \
+		--num-shards $(SHARDS) \
+		--fixtures eval/tool_broker/fixtures \
+		--atol 1e-6 \
+		--rtol 1e-6 \
+		--seed 42
+
+eval-local:
+	python -c "from training.callbacks.eval_harness_callback import run_eval_for_checkpoint; \
+		run_eval_for_checkpoint('ckpts/latest', num_shards=4)"
+
+eval-diff:
+	python -m eval.reports.diff_reports eval/reports/blessed.json eval/reports/latest.json
+
+eval-publish:
+	python -m scripts.publish_eval_report eval/reports/latest.json
 
 release:
 	python -m scripts.package --model coreml/model.mlpackage --out dist/

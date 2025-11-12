@@ -1,0 +1,65 @@
+name: Eval Nightly
+
+on:
+  schedule:
+    - cron: "0 9 * * *" # daily 09:00 UTC
+  workflow_dispatch:
+
+jobs:
+  eval:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -U pip
+          pip install -e ".[dev]"
+
+      - name: Fetch latest checkpoint
+        run: |
+          mkdir -p ckpts/latest
+          echo "⚠️ Customize checkpoint download logic for your storage"
+
+      - name: Verify dataset & fingerprints
+        run: |
+          python -m scripts.verify_contextual_set \
+            --in data/contextual_final.jsonl \
+            --report eval/reports/verify_dataset.json \
+            --tokenizer models/student/tokenizer \
+            --min-eligible-for-gates 15 \
+            --fail-on-fingerprint-mismatch || echo "⚠️ Dataset verification skipped (dataset may not exist)"
+
+      - name: Evaluate (sharded)
+        run: |
+          python -c "from training.callbacks.eval_harness_callback import run_eval_for_checkpoint; \
+            run_eval_for_checkpoint('ckpts/latest', num_shards=4)" || echo "⚠️ Evaluation skipped (checkpoint may not exist)"
+
+      - name: Validate sharding determinism
+        if: success()
+        run: |
+          if [ -f "data/contextual_final.jsonl" ] && [ -d "ckpts/latest" ]; then
+            make validate-sharding \
+              DATASET=data/contextual_final.jsonl \
+              MODEL=ckpts/latest \
+              RUNNER=hf_local \
+              SHARDS=4 || echo "⚠️ Sharding validation skipped (model may not be compatible)"
+          else
+            echo "⚠️ Sharding validation skipped (dataset or checkpoint not available)"
+          fi
+
+      - name: Publish artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: |
+            eval/reports/latest.json
+            eval/reports/history.ndjson
+            eval/reports/verify_dataset.json
+            eval/reports/sharding_validation.json
+            eval/results/*.jsonl

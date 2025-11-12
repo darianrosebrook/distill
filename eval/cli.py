@@ -57,10 +57,64 @@ def sha256_file_excluding_header(path: str) -> str:
     return h.hexdigest()
 
 
+def stable_shard(sample_id: str, num_shards: int) -> int:
+    """
+    Derive shard assignment from stable sample_id hash.
+
+    Uses SHA256 hash of sample_id to ensure shard membership remains
+    identical across dataset reorders, unlike modulo-based partitioning.
+
+    Args:
+        sample_id: Stable sample identifier
+        num_shards: Number of shards
+
+    Returns:
+        Shard index (0 to num_shards-1)
+    """
+    h = hashlib.sha256(sample_id.encode('utf-8')).digest()
+    # Use first 8 bytes as little-endian to reduce modulo bias
+    val = int.from_bytes(h[:8], 'little')
+    return val % num_shards
+
+
 def select_shard(items: List[Dict[str, Any]], shard_index: int, num_shards: int) -> List[Dict[str, Any]]:
+    """
+    Select items for a specific shard using stable hash partitioning.
+
+    Uses stable hash of sample_id (or synthesized ID from row) to ensure
+    shard membership remains consistent across dataset reorders.
+
+    Args:
+        items: List of dataset items
+        shard_index: Target shard index (0 to num_shards-1)
+        num_shards: Total number of shards
+
+    Returns:
+        List of items assigned to this shard
+    """
     if num_shards <= 1:
         return items
-    return [it for i, it in enumerate(items) if i % num_shards == shard_index]
+
+    result = []
+    for item in items:
+        # Extract sample_id from metadata, or synthesize from row
+        sample_id = None
+        if isinstance(item, dict):
+            meta = item.get("metadata", {})
+            sample_id = meta.get("sample_id")
+
+            # If no sample_id, synthesize stable ID from row
+            if not sample_id:
+                row_json = json.dumps(item, sort_keys=True, ensure_ascii=False)
+                sample_id = hashlib.sha256(
+                    row_json.encode('utf-8')).hexdigest()
+
+        if sample_id:
+            assigned_shard = stable_shard(sample_id, num_shards)
+            if assigned_shard == shard_index:
+                result.append(item)
+
+    return result
 
 
 def main() -> None:

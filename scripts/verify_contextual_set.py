@@ -959,7 +959,10 @@ def check_stratification_backbone(items: List[Dict[str, Any]], total: int) -> Tu
         missing = []
 
         # Check: one of each scenario × single_call
+        # Note: multi_step scenarios don't have single_call (MIN_COVERAGE says 0)
         for scenario in SCENARIOS:
+            if scenario == "multi_step":
+                continue  # Skip multi_step - it doesn't have single_call samples
             if coverage.get((scenario, "single_call"), 0) == 0:
                 missing.append(
                     {"scenario": scenario, "complexity": "single_call", "required": 1, "actual": 0})
