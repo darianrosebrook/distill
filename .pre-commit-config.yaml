@@ -1,0 +1,31 @@
+repos:
+  - repo: local
+    hooks:
+      - id: json-schema-validation
+        name: JSON Schema Validation
+        entry: bash -c 'for file in "$@"; do python -c "import json, sys, jsonschema; f=open(\"$file\"); data=[json.loads(l) for l in f if l.strip()]; schema=json.load(open(\"schemas/dataset_item.schema.json\")); [jsonschema.validate(item, schema) for item in data if not item.get(\"__header__\")]"; done'
+        language: system
+        files: '\.jsonl$'
+        pass_filenames: true
+      
+      - id: forbid-tabs
+        name: Forbid Tabs
+        entry: bash -c 'grep -n $"\t" "$@" && exit 1 || exit 0'
+        language: system
+        files: '\.(jsonl|json|py)$'
+        pass_filenames: true
+      
+      - id: forbid-crlf
+        name: Forbid CRLF
+        entry: bash -c 'grep -n $"\r" "$@" && exit 1 || exit 0'
+        language: system
+        files: '\.(jsonl|json|py)$'
+        pass_filenames: true
+      
+      - id: ensure-nfc
+        name: Ensure NFC Normalization
+        entry: bash -c 'python -c "import sys, unicodedata; f=open(sys.argv[1], \"rb\"); content=f.read().decode(\"utf-8\"); f.close(); nfc=unicodedata.normalize(\"NFC\", content); assert content == nfc, \"File not in NFC normalization\""'
+        language: system
+        files: '\.(jsonl|json)$'
+        pass_filenames: true
+

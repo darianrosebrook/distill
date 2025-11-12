@@ -56,18 +56,21 @@ MULTILINGUAL_TASKS = {
         "web_search": "Busca consejos de optimización de CoreML e integra el hallazgo principal en un resumen conciso.",
         "code_exec": "Ejecuta el fragmento e informa stdout/stderr y cualquier estado de salida distinto de cero.",
         "multi_step": "Lee el archivo, luego verifica sus parámetros contra las mejores prácticas que encuentres mediante búsqueda web.",
+        "locale_probe": "Busca información sobre el rendimiento del modelo del 31/12/2024 y reporta los resultados con números formateados (ej: 1.234,56).",
     },
     "de": {
         "file_ops": "Lese die angegebene Datei und extrahiere alle Learning-Rate-Einträge mit ihren Zeilennummern.",
         "web_search": "Suche nach CoreML-Optimierungstipps und integriere die wichtigste Erkenntnis in eine prägnante Zusammenfassung.",
         "code_exec": "Führe den Code-Snippet aus und melde stdout/stderr und jeden Exit-Status ungleich Null.",
         "multi_step": "Lese die Datei und überprüfe dann ihre Parameter gegen Best Practices, die du über Websuche findest.",
+        "locale_probe": "Suche nach Informationen zur Modellleistung vom 31.12.2024 und berichte die Ergebnisse mit formatierten Zahlen (z.B. 1.234,56).",
     },
     "fr": {
         "file_ops": "Lisez le fichier spécifié et extrayez toutes les entrées de learning rate avec leurs numéros de ligne.",
         "web_search": "Recherchez des conseils d'optimisation CoreML et intégrez la découverte principale dans un résumé concis.",
         "code_exec": "Exécutez le fragment et signalez stdout/stderr et tout statut de sortie non nul.",
         "multi_step": "Lisez le fichier, puis vérifiez ses paramètres par rapport aux meilleures pratiques trouvées via la recherche web.",
+        "locale_probe": "Recherchez des informations sur les performances du modèle du 31/12/2024 et rapportez les résultats avec des nombres formatés (ex: 1 234,56).",
     },
 }
 
@@ -87,7 +90,7 @@ def compact_caws(tier: int = 2) -> Dict[str, Any]:
     }
 
 
-def build_stratified_cells(total: int) -> List[Dict[str, str]]:
+def build_stratified_cells(total: int, disable_long_context: bool = False, disable_adversarial: bool = False, negative_control_prob: float = 0.0) -> List[Dict[str, str]]:
     """
     Build cells with strict stratification enforcement.
     
@@ -103,12 +106,13 @@ def build_stratified_cells(total: int) -> List[Dict[str, str]]:
     # Calculate slots needed for diversity features upfront
     # Control: max(1, 10% of total), Adversarial: min(3, total), 
     # Multilingual: max(1, 7.5% of total), Long-context: 2-3 samples for N≥20
-    want_long_context = (0 if total < 20 else min(3, max(2, total // 10)))  # 2-3 for N≥20
+    want_long_context = (0 if disable_long_context or total < 20 else min(3, max(2, total // 10)))  # 2-3 for N≥20
+    want_adversarial = 0 if disable_adversarial else min(3, total)
     slots_for_diversity = (
         max(1, int(total * 0.1)) +  # Control
-        min(3, total) +              # Adversarial
+        want_adversarial +           # Adversarial (can be disabled)
         max(1, int(total * 0.075)) + # Multilingual
-        want_long_context            # Long-context
+        want_long_context            # Long-context (can be disabled)
     )
     max_for_minimums = max(0, total - slots_for_diversity - len(STRUCTURES) * len(SCENARIOS) // 2)  # Reserve some for structure coverage
     
@@ -151,8 +155,8 @@ def build_stratified_cells(total: int) -> List[Dict[str, str]]:
 
     # Second pass: ensure at least one per (scenario × structure), but leave room for diversity
     # Reserve slots for control/adversarial/multilingual/long-context based on what's needed
-    # Control: max(1, 10% of total), Adversarial: min(3, total), Multilingual: max(1, 7.5% of total), Long-context: want_long_context
-    slots_needed = max(1, int(total * 0.1)) + min(3, total) + max(1, int(total * 0.075)) + want_long_context
+    # Control: max(1, 10% of total), Adversarial: want_adversarial, Multilingual: max(1, 7.5% of total), Long-context: want_long_context
+    slots_needed = max(1, int(total * 0.1)) + want_adversarial + max(1, int(total * 0.075)) + want_long_context
     available_for_structure = max(0, total - slots_needed)
     
     for scenario in SCENARIOS:
@@ -189,49 +193,63 @@ def build_stratified_cells(total: int) -> List[Dict[str, str]]:
             }
         )
 
-    # Fourth pass: add adversarial cases (at least one per type, but bounded)
-    adversarial_types = ["range_violation", "malformed_json", "ambiguity"]
-    num_adversarial = min(len(adversarial_types), total - len(cells))
-    for i in range(num_adversarial):
-        adv_type = adversarial_types[i]
-        scenario = random.choice(["web_search", "file_ops", "code_exec"])
-        cells.append(
-            {
-                "scenario": scenario,
-                "complexity": "single_call",
-                "structure": random.choice(STRUCTURES),
-                "adversarial": {"type": adv_type, "expected": "ask_clarify"},
-            }
-        )
+    # Fourth pass: add adversarial cases (at least one per type, but bounded) - can be disabled
+    if not disable_adversarial:
+        adversarial_types = ["range_violation", "malformed_json", "ambiguity"]
+        num_adversarial = min(len(adversarial_types), total - len(cells))
+        for i in range(num_adversarial):
+            adv_type = adversarial_types[i]
+            scenario = random.choice(["web_search", "file_ops", "code_exec"])
+            cells.append(
+                {
+                    "scenario": scenario,
+                    "complexity": "single_call",
+                    "structure": random.choice(STRUCTURES),
+                    "adversarial": {"type": adv_type, "expected": "ask_clarify"},
+                }
+            )
 
-    # Fifth pass: add long-context samples (reserved upfront, 2-3 samples for N≥20)
-    # Add them before multilingual to ensure they're included
-    num_long_context = min(want_long_context, total - len(cells))
-    for _ in range(num_long_context):
-        scenario = random.choice(SCENARIOS)
-        cells.append(
-            {
-                "scenario": scenario,
-                "complexity": random.choice(COMPLEXITY),
-                "structure": random.choice(STRUCTURES),
-                "long_context": True,
-            }
-        )
+    # Fifth pass: add long-context samples (reserved upfront, 2-3 samples for N≥20) - can be disabled
+    if not disable_long_context:
+        num_long_context = min(want_long_context, total - len(cells))
+        for _ in range(num_long_context):
+            scenario = random.choice(SCENARIOS)
+            cells.append(
+                {
+                    "scenario": scenario,
+                    "complexity": random.choice(COMPLEXITY),
+                    "structure": random.choice(STRUCTURES),
+                    "long_context": True,
+                }
+            )
 
     # Sixth pass: add multi-lingual samples (5-10% of total)
     num_multilingual = max(1, int(total * 0.075))  # 7.5% of total
     languages = list(MULTILINGUAL_TASKS.keys())
+    locale_probe_count = min(2, num_multilingual)  # Ensure at least 2 locale probe cases
     for i in range(min(num_multilingual, total - len(cells))):  # Don't exceed available slots
         lang = languages[i % len(languages)]
-        scenario = random.choice(SCENARIOS)
-        cells.append(
-            {
-                "scenario": scenario,
-                "complexity": random.choice(COMPLEXITY),
-                "structure": random.choice(STRUCTURES),
-                "language": lang,
-            }
-        )
+        # First 2 multilingual samples should be locale probes (with numerals/dates)
+        if i < locale_probe_count:
+            cells.append(
+                {
+                    "scenario": "web_search",  # Use web_search for locale probe
+                    "complexity": "single_call",
+                    "structure": random.choice(STRUCTURES),
+                    "language": lang,
+                    "locale_probe": True,  # Mark as locale probe
+                }
+            )
+        else:
+            scenario = random.choice(SCENARIOS)
+            cells.append(
+                {
+                    "scenario": scenario,
+                    "complexity": random.choice(COMPLEXITY),
+                    "structure": random.choice(STRUCTURES),
+                    "language": lang,
+                }
+            )
 
     # Fill remaining slots randomly
     while len(cells) < total:
@@ -242,6 +260,14 @@ def build_stratified_cells(total: int) -> List[Dict[str, str]]:
                 "structure": random.choice(STRUCTURES),
             }
         )
+
+    # Mark some cells as negative controls (empty/decoy tool results, but teacher still writes integration)
+    if negative_control_prob > 0.0:
+        for cell in cells:
+            # Only mark non-control, non-adversarial cells as potential negative controls
+            if cell.get("expected_behaviour") not in {"no_tool", "decline"} and "adversarial" not in cell:
+                if random.random() < negative_control_prob:
+                    cell["negative_control"] = True
 
     return cells[:total]
 
@@ -310,8 +336,94 @@ Performance metrics:
     return random.choice(distractions)
 
 
+def compute_tokenizer_fingerprint(tokenizer_path: Optional[str]) -> Optional[Dict[str, str]]:
+    """
+    Compute tokenizer fingerprint from tokenizer path.
+    
+    Args:
+        tokenizer_path: Path to tokenizer (HuggingFace model path or local path)
+        
+    Returns:
+        Dict with {"id": "<path>", "sha256": "<hash>", "normalizer": "NFC+LF"} or None if path invalid
+    """
+    if not tokenizer_path:
+        return None
+    
+    try:
+        # Try to find tokenizer.json in the path
+        tokenizer_json_path = None
+        if os.path.isdir(tokenizer_path):
+            # Local directory
+            tokenizer_json_path = os.path.join(tokenizer_path, "tokenizer.json")
+            if not os.path.exists(tokenizer_json_path):
+                # Try to use the path itself as identifier
+                return {
+                    "id": tokenizer_path,
+                    "sha256": None,  # Cannot compute without tokenizer.json
+                    "normalizer": "NFC+LF",
+                }
+        else:
+            # Assume it's a HuggingFace model ID or path
+            # Try to resolve it (this would require transformers library)
+            return {
+                "id": tokenizer_path,
+                "sha256": None,  # Would need to download/load to compute
+                "normalizer": "NFC+LF",
+            }
+        
+        # If we found tokenizer.json, compute SHA256
+        if tokenizer_json_path and os.path.exists(tokenizer_json_path):
+            with open(tokenizer_json_path, "rb") as f:
+                content = f.read()
+                sha256_hash = hashlib.sha256(content).hexdigest()
+            return {
+                "id": tokenizer_path,
+                "sha256": sha256_hash,
+                "normalizer": "NFC+LF",
+            }
+        
+        return {
+            "id": tokenizer_path,
+            "sha256": None,
+            "normalizer": "NFC+LF",
+        }
+    except Exception:
+        # If anything fails, return basic info
+        return {
+            "id": str(tokenizer_path),
+            "sha256": None,
+            "normalizer": "NFC+LF",
+        }
+
+
+def compute_registry_fingerprint(reg: ToolSchemaRegistry) -> str:
+    """
+    Compute tool registry SHA256 fingerprint.
+    
+    Args:
+        reg: ToolSchemaRegistry instance
+        
+    Returns:
+        SHA256 hex digest of canonical JSON representation
+    """
+    # Get all tool schemas, sort by tool name
+    tool_names = sorted(reg.list_tools())
+    schemas_dict = {}
+    for tool_name in tool_names:
+        schema = reg.get(tool_name)
+        if schema:
+            schemas_dict[tool_name] = schema
+    
+    # Create canonical JSON (sorted keys, no whitespace)
+    canonical_json = json.dumps(schemas_dict, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    
+    # Compute SHA256
+    sha256_hash = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+    return sha256_hash
+
+
 def synthesize_prompt(
-    cell: Dict[str, str], reg: ToolSchemaRegistry, tokenizer=None
+    cell: Dict[str, str], reg: ToolSchemaRegistry, tokenizer=None, integration_span_cap: int = 3
 ) -> Tuple[str, List[Dict[str, Any]], Dict[str, Any]]:
     """Synthesize a prompt with metadata from a cell specification."""
     s = cell["scenario"]
@@ -321,6 +433,8 @@ def synthesize_prompt(
     adversarial = cell.get("adversarial")
     language = cell.get("language")
     long_context = cell.get("long_context", False)
+    negative_control = cell.get("negative_control", False)
+    locale_probe = cell.get("locale_probe", False)
 
     # Generate CAWS header
     caws = compact_caws(tier=random.choice([1, 2, 3]))
@@ -404,7 +518,11 @@ def synthesize_prompt(
 
     # Generate task description
     if language and language in MULTILINGUAL_TASKS:
-        task = MULTILINGUAL_TASKS[language][s]
+        # Use locale_probe template if marked, otherwise use scenario template
+        if locale_probe and "locale_probe" in MULTILINGUAL_TASKS[language]:
+            task = MULTILINGUAL_TASKS[language]["locale_probe"]
+        else:
+            task = MULTILINGUAL_TASKS[language].get(s, MULTILINGUAL_TASKS[language].get("web_search", ""))
     else:
         task = {
             "web_search": "Search for CoreML optimization tips and integrate the top finding into a concise summary.",
@@ -423,7 +541,11 @@ def synthesize_prompt(
         base_user_parts.append(f"{header}\n")
         base_user_parts.append(f"Task: {task}\nNote: The requested file does not exist. Please ask for clarification or decline politely.\n")
     elif s == "file_ops":
-        target_path = calls[0]["arguments"]["path"] if calls else "unknown"
+        target_path = (
+            calls[0]["arguments"].get("path", "unknown")
+            if calls and calls[0].get("arguments")
+            else "unknown"
+        )
         base_user_parts.append(f"{header}\n")
         base_user_parts.append(f"You have access to file fixtures. Task: {task}\nTarget: {target_path}\n")
     elif s == "web_search":
@@ -519,6 +641,15 @@ def synthesize_prompt(
             summary = str(tool_result.get("summary", "")).strip()
             if summary:
                 teacher += f"Integration: {summary}."
+                # Optionally add one extra grounded fact
+                for k in ("lines", "count", "top_k", "results"):
+                    if k in tool_result and tool_result[k]:
+                        value = tool_result[k]
+                        if isinstance(value, (int, float)):
+                            teacher += f" {k.replace('_', ' ').title()}: {value}."
+                        elif isinstance(value, list) and len(value) > 0:
+                            teacher += f" Found {len(value)} {k}."
+                        break
             else:
                 teacher += "Integration: Based on the corrected search, here are the results..."
         start_tool = teacher.index(tool_json)
@@ -541,6 +672,15 @@ def synthesize_prompt(
             summary = str(tool_result.get("summary", "")).strip()
             if summary:
                 teacher += f"Integration: {summary}."
+                # Optionally add one extra grounded fact
+                for k in ("lines", "count", "top_k", "content"):
+                    if k in tool_result and tool_result[k]:
+                        value = tool_result[k]
+                        if isinstance(value, (int, float)):
+                            teacher += f" {k.replace('_', ' ').title()}: {value}."
+                        elif isinstance(value, str) and len(value) > 0:
+                            teacher += f" Content length: {len(value)} characters."
+                        break
             else:
                 teacher += "Integration: After reading the file, I found..."
         # Find the corrected JSON
@@ -569,12 +709,53 @@ def synthesize_prompt(
             for call in calls:
                 tool_json = json.dumps(call, separators=(",", ":"), ensure_ascii=False)
                 tool_jsons.append(tool_json)
-                # Create tool result with fields for grounding
-                tool_result = {
-                    "ok": True,
-                    "summary": "ANE prefers fp16 kernels when ops are supported",
-                    "lines": 128
-                }
+                # Create tool result with fields for grounding (or empty/decoy for negative control)
+                if negative_control:
+                    # Negative control: emit empty/decoy results (no grounding)
+                    tool_result = {
+                        "ok": False,
+                        "error": "No results found",
+                    }
+                elif locale_probe and language:
+                    # Locale probe: include locale-formatted numbers/dates
+                    if language == "es":
+                        # Spanish: 1.234,56 format, date: 31/12/2024
+                        tool_result = {
+                            "ok": True,
+                            "summary": "El modelo alcanzó un rendimiento del 95,5% el 31/12/2024",
+                            "count": 1234,  # Will be formatted as 1.234 in Spanish
+                            "percentage": 0.955,  # Will be formatted as 95,5%
+                        }
+                    elif language == "de":
+                        # German: 1.234,56 format, date: 31.12.2024
+                        tool_result = {
+                            "ok": True,
+                            "summary": "Das Modell erreichte am 31.12.2024 eine Leistung von 95,5%",
+                            "count": 1234,  # Will be formatted as 1.234 in German
+                            "percentage": 0.955,  # Will be formatted as 95,5%
+                        }
+                    elif language == "fr":
+                        # French: 1 234,56 format, date: 31/12/2024
+                        tool_result = {
+                            "ok": True,
+                            "summary": "Le modèle a atteint une performance de 95,5% le 31/12/2024",
+                            "count": 1234,  # Will be formatted as 1 234 in French
+                            "percentage": 0.955,  # Will be formatted as 95,5%
+                        }
+                    else:
+                        tool_result = {
+                            "ok": True,
+                            "summary": "Model performance reached 95.5% on 12/31/2024",
+                            "count": 1234,
+                            "percentage": 0.955,
+                        }
+                else:
+                    # Normal: create tool result with fields for grounding
+                    tool_result = {
+                        "ok": True,
+                        "summary": "ANE prefers fp16 kernels when ops are supported",
+                        "lines": 128
+                    }
                 tool_results.append(tool_result)
             
             # Build teacher response with all calls
@@ -584,12 +765,25 @@ def synthesize_prompt(
                 teacher_parts.append(f"TOOL_RESULT: {json.dumps(tool_result, separators=(',', ':'), ensure_ascii=False)}\n")
             
             if emit_integration:
-                # Always include the summary from tool_result to ensure grounding
-                summary = str(tool_results[0].get("summary", "")).strip() if tool_results else ""
-                if summary:
-                    teacher_parts.append(f"Integration: {summary}.")
+                # For negative control, emit generic integration text (not grounded)
+                if negative_control:
+                    teacher_parts.append("Integration: Based on the tool call, I found some information that may be relevant.")
                 else:
-                    teacher_parts.append("Integration: Based on the result, the top insight is: ANE prefers fp16 kernels when ops are supported.")
+                    # Always include the summary from tool_result to ensure grounding
+                    summary = str(tool_results[0].get("summary", "")).strip() if tool_results else ""
+                    if summary:
+                        teacher_parts.append(f"Integration: {summary}.")
+                        # Optionally add one extra grounded fact for richness
+                        for k in ("lines", "count", "top_k", "results"):
+                            if k in tool_results[0] and tool_results[0][k]:
+                                value = tool_results[0][k]
+                                if isinstance(value, (int, float)):
+                                    teacher_parts.append(f" {k.replace('_', ' ').title()}: {value}.")
+                                elif isinstance(value, list) and len(value) > 0:
+                                    teacher_parts.append(f" Found {len(value)} {k}.")
+                                break
+                    else:
+                        teacher_parts.append("Integration: Based on the result, the top insight is: ANE prefers fp16 kernels when ops are supported.")
             
             teacher = "".join(teacher_parts)
             # For single call, use first tool_json for backward compatibility
@@ -609,11 +803,29 @@ def synthesize_prompt(
     user = normalize_text(user)
 
     # Extract integration spans using robust regex (after normalization)
+    # Only extract if integration should be emitted (not controls/declines/ambiguity)
     integration_spans_bytes = []
-    if teacher and calls and emit_integration:
+    integration_spans_exceeded_cap = False
+    if teacher and calls and emit_integration and expected_behaviour not in {"no_tool", "decline"}:
         # Use regex to find all Integration: sentences
+        all_spans = []
         for m in re.finditer(r'Integration:\s*([^\n]+?)(?:[\.!?…]\s|$)', teacher, flags=re.UNICODE):
-            integration_spans_bytes.append([m.start(1), m.end(1)])
+            all_spans.append([m.start(1), m.end(1)])
+        
+        # Apply integration span cap (default: 3, configurable via CLI)
+        span_cap = integration_span_cap
+        if len(all_spans) > span_cap:
+            integration_spans_bytes = all_spans[:span_cap]  # Truncate to first N spans
+            integration_spans_exceeded_cap = True
+        else:
+            integration_spans_bytes = all_spans
+    
+    # Ensure controls never have integration spans or markers
+    if expected_behaviour in {"no_tool", "decline"}:
+        integration_spans_bytes = []
+        integration_spans_exceeded_cap = False
+        # Clean up any accidental Integration: markers
+        teacher = teacher.replace("\nIntegration:", "").replace("Integration:", "")
 
     # Sanitize and scan safety (after normalization)
     teacher = redact_pii(teacher)
@@ -637,7 +849,12 @@ def synthesize_prompt(
             "teacher": "NFC_LF",
             "user": "NFC_LF"
         },
+        "spans_target": "teacher",  # All spans target teacher_text
     }
+    
+    # Flag items exceeding integration span cap
+    if integration_spans_exceeded_cap:
+        meta["integration_spans_exceeded_cap"] = True
 
     # Add language tag (default to "en" if not multilingual)
     meta["lang"] = language if language else "en"
@@ -695,11 +912,21 @@ def synthesize_prompt(
                 tool_result_fields[key] = str(value)
         meta["tool_result_fields"] = tool_result_fields
 
-    if integration_spans_bytes:
+    # Only add integration spans if they exist and we should emit integration
+    if integration_spans_bytes and emit_integration:
         meta["integration_spans_bytes"] = integration_spans_bytes
+    else:
+        # Explicitly ensure no integration spans for controls
+        meta["integration_spans_bytes"] = []
 
     if adversarial:
         meta["adversarial"] = adversarial
+
+    if negative_control:
+        meta["negative_control"] = True
+    
+    if locale_probe:
+        meta["locale_probe"] = True
 
     if long_context:
         meta["long_context"] = True
@@ -707,11 +934,12 @@ def synthesize_prompt(
     return user, [{"role": "assistant", "content": teacher}], meta
 
 
-def generate_sample_id(seed: Optional[int] = None, index: int = 0) -> str:
-    """Generate deterministic sample ID."""
+def generate_sample_id(seed: Optional[int] = None, index: int = 0, shard_index: int = 0) -> str:
+    """Generate deterministic sample ID with sharding support."""
     if seed is not None:
-        rng = random.Random(seed + index)
-        return f"sample_{rng.randint(100000, 999999)}"
+        # Deterministic: seed-shard_index-seq
+        return f"{seed}-{shard_index}-{index}"
+    # Non-deterministic fallback
     return f"sample_{random.randint(100000, 999999)}"
 
 
@@ -737,6 +965,40 @@ def main():
         action="store_true",
         help="Enforce strict stratification (default: True)",
     )
+    ap.add_argument(
+        "--integration-span-cap",
+        type=int,
+        default=3,
+        help="Maximum number of integration spans per item (default: 3)",
+    )
+    ap.add_argument(
+        "--num-shards",
+        type=int,
+        default=1,
+        help="Total number of shards for parallel generation (default: 1)",
+    )
+    ap.add_argument(
+        "--shard-index",
+        type=int,
+        default=0,
+        help="Index of this shard (0-based, default: 0)",
+    )
+    ap.add_argument(
+        "--disable-long-context",
+        action="store_true",
+        help="Disable long-context sample generation (ablation switch)",
+    )
+    ap.add_argument(
+        "--disable-adversarial",
+        action="store_true",
+        help="Disable adversarial sample generation (ablation switch)",
+    )
+    ap.add_argument(
+        "--negative-control-prob",
+        type=float,
+        default=0.0,
+        help="Probability of generating negative control samples (empty/decoy tool results, default: 0.0)",
+    )
     args = ap.parse_args()
 
     # Set seed for determinism
@@ -753,7 +1015,7 @@ def main():
             print(f"[generate_contextual_prompts] WARN: Failed to load tokenizer {args.tokenizer}, using byte-based thresholds")
 
     reg = ToolSchemaRegistry()
-    cells = build_stratified_cells(args.total)
+    cells = build_stratified_cells(args.total, disable_long_context=args.disable_long_context, disable_adversarial=args.disable_adversarial, negative_control_prob=args.negative_control_prob)
     os.makedirs(os.path.dirname(args.out) if os.path.dirname(args.out) else ".", exist_ok=True)
 
     # Track generation plan with adversarial taxonomy
@@ -779,13 +1041,15 @@ def main():
     # Generate samples with provenance
     items = []
     for i, cell in enumerate(cells):
-        prompt, history, meta = synthesize_prompt(cell, reg, tokenizer=tokenizer)
+        prompt, history, meta = synthesize_prompt(cell, reg, tokenizer=tokenizer, integration_span_cap=args.integration_span_cap)
         
-        # Add provenance
-        sample_id = generate_sample_id(args.seed, i)
+        # Add provenance with deterministic sharding
+        sample_id = generate_sample_id(args.seed, i, args.shard_index)
         meta["sample_id"] = sample_id
         meta["provenance"] = {
             "seed": args.seed,
+            "shard_index": args.shard_index,
+            "num_shards": args.num_shards,
             "scenario": cell.get("scenario"),
             "tags": [k for k in ["control", "adversarial", "multilingual", "long_context"] if cell.get(k)],
         }
@@ -797,8 +1061,28 @@ def main():
         }
         items.append(item)
 
-    # Write to file and compute SHA256
+    # Compute fingerprints for dataset header
+    tokenizer_fp = compute_tokenizer_fingerprint(args.tokenizer) if args.tokenizer else None
+    registry_sha256 = compute_registry_fingerprint(reg)
+    
+    # Create dataset header (first line)
+    dataset_header = {
+        "__header__": True,
+        "dataset_version": DATASET_VERSION,
+        "tokenizer_fingerprint": tokenizer_fp,
+        "tool_registry_sha256": registry_sha256,
+        "integration_span_cap": args.integration_span_cap,
+        "seed": args.seed,
+        "num_shards": args.num_shards,
+        "shard_index": args.shard_index,
+        "total_samples": len(items),
+    }
+
+    # Write to file with header first, then items
     with open(args.out, "w", encoding="utf-8") as f:
+        # Write header as first line
+        f.write(json.dumps(dataset_header, ensure_ascii=False, separators=(",", ":")) + "\n")
+        # Write items
         for item in items:
             f.write(json.dumps(item, ensure_ascii=False, separators=(",", ":")) + "\n")
     
