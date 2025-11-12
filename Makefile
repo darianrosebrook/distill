@@ -178,3 +178,13 @@ smoke_torch: check-versions toy-torch
 	python -m conversion.convert_coreml --backend pytorch --in models/toy_torch.pt --out coreml/artifacts/toy_torch/model.mlpackage
 	python -m coreml.ane_checks --mlpackage coreml/artifacts/toy_torch/model.mlpackage
 	@echo "✅ PyTorch smoke test PASSED (real mlpackage created)"
+
+# Training smoke test: Create tiny model/dataset and verify training pipeline
+.PHONY: toy-training smoke_training
+
+toy-training:
+	python -m training.make_toy_training --out-dir training/toy_test --samples 10 --steps 5 --dmodel 64 --nlayers 2 --vocab 32000
+
+smoke_training: check-versions toy-training
+	bash scripts/test_toy_training.sh
+	@echo "✅ Training smoke test PASSED (training pipeline verified)"
