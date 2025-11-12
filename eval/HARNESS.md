@@ -74,6 +74,8 @@ Same for `read_file.jsonl`:
 {"name":"read_file","key":{"path":"README.md"},"result":{"ok":true,"content":"# Project\n..."}}
 ```
 
+**Note**: The ToolBroker normalizes arguments before lookup (see "Fixture Normalization" section below), so fixtures match despite whitespace/case variations.
+
 ### 3) Run Evaluation
 
 OpenAI-compatible endpoint:
@@ -86,11 +88,14 @@ python -m eval.cli \
   --out eval/results.s0.openai.jsonl \
   --report eval/report.s0.openai.json \
   --fixtures eval/tool_broker/fixtures \
+  --prompt-wrapper eval/prompt_wrappers/minimal_system_user.j2 \
   --seed 42 \
   --temperature 0.0 \
   --min-eligible-for-gates 15 \
   --fail-on-fingerprint-mismatch
 ```
+
+**Optional**: Use `--prompt-wrapper` to customize system/user message formatting (see "Prompt Wrappers" section below).
 
 Local Transformers:
 
@@ -172,6 +177,74 @@ The **ToolBroker** injects `result` for each call from fixtures, then the scorer
 
 ---
 
+## Fixture Normalization
+
+The ToolBroker normalizes tool arguments before lookup to handle variations across runners:
+
+* **Query Fields** (`q`, `query`): Lowercased and whitespace collapsed to single space
+* **Default Values**: `top_k=3` automatically added for `web.search*` tools if missing
+* **None Keys**: Removed to avoid mismatches
+
+Example normalization:
+
+```python
+# These all match the same fixture entry:
+broker.call("web.search", {"q": "  ROPE  Precision  "})
+broker.call("web.search", {"q": "rope precision"})
+broker.call("web.search", {"q": "ROPE PRECISION", "top_k": None})
+broker.call("web.search", {"q": "rope precision"})  # top_k defaults to 3
+```
+
+This normalization ensures fixtures match despite runner-specific formatting differences (whitespace, case, optional parameters).
+
+---
+
+## Prompt Wrappers
+
+Customize system/user message formatting via template files. Useful for:
+* Testing different prompt formats
+* Adapting to model-specific requirements
+* Reproducing exact prompt structures
+
+**Template Formats**:
+
+**Jinja2 Format** (`*.j2`): Returns JSON with `system` and `user` fields:
+
+```json
+{
+  "system": "{{ system }}",
+  "user": "{{ user }}"
+}
+```
+
+**String Template Format** (`*.tmpl`): Flat text with variable substitution:
+
+```
+[SYS] $system
+[USER] $user
+```
+
+**Available Variables**:
+* `system`: Default system message (can be overridden)
+* `user`: Dataset prompt text
+* `tools`: List of tool schemas (informational)
+
+**Usage**:
+
+```bash
+python -m eval.cli \
+  --runner openai_http \
+  --model gpt-4 \
+  --prompt-wrapper eval/prompt_wrappers/minimal_system_user.j2 \
+  ...
+```
+
+**Fingerprint Tracking**: Wrapper SHA256 is included in `runner_fingerprint` for reproducibility. Changing the wrapper template changes the fingerprint, ensuring results are traceable to exact prompt formatting.
+
+**Fallback**: If Jinja2 is unavailable, `string.Template` is used automatically for `.tmpl` files.
+
+---
+
 ## Scoring Parity
 
 `eval/scoring/scorer.py` imports your existing verification routines (same regex span extraction, lax/strict grounding, parity, coverage, control checks, locale probe, negative controls). Metrics and gates are **identical** to `verify_contextual_set.py`, but applied to model outputs.
@@ -180,16 +253,17 @@ The **ToolBroker** injects `result` for each call from fixtures, then the scorer
 
 ## CI Hooks
 
-* Smoke (N=60): assert `controls_with_integration == 0`, coverage ≥ 0.95 (eligible).
-* Parity: compare OpenAI vs local runner macro F1 Δ ≤ 0.03.
-* Locale probe shard: strict–lax Δ ≤ 0.05 for es/de/fr.
-* Teacher-heavy slice: warn on span cap exceedances; fail on F1 drop below threshold.
+* **Broker Fixture Hit Rate** (`make ci-broker-smoke`): Validates ≥95% fixture hit rate across normalization variants. Fast execution (~1-2 min, no models). Runs on push/PR via GitHub Actions (`.github/workflows/broker-smoke.yml`).
+* **Smoke (N=60)**: assert `controls_with_integration == 0`, coverage ≥ 0.95 (eligible).
+* **Parity**: compare OpenAI vs local runner macro F1 Δ ≤ 0.03.
+* **Locale probe shard**: strict–lax Δ ≤ 0.05 for es/de/fr.
+* **Teacher-heavy slice**: warn on span cap exceedances; fail on F1 drop below threshold.
 
 ---
 
 ## Troubleshooting
 
-* **fixture_miss**: Broker couldn't find a key—add a matching JSONL entry (normalize keys exactly as the runner emits).
+* **fixture_miss**: Broker couldn't find a key—add a matching JSONL entry. The broker normalizes arguments (lowercase query fields, collapse whitespace, default `top_k` for `web.search*`), so ensure your fixture keys match the normalized form. See "Fixture Normalization" section above.
 
 * **control contamination**: Controls produced integration spans or tool calls—inspect those items and runner prompt wrapper.
 

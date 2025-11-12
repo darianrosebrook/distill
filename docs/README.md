@@ -1,76 +1,48 @@
 # Documentation Index
 
-This directory contains all project documentation organized into three categories:
+This directory contains documentation for the kimi-student project.
 
-## 📁 Directory Structure
+## Core Documentation
 
-- **[`internal/`](./internal/)** - Internal architecture, implementation details, methodologies, and research
-- **[`external/`](./external/)** - Public-facing documentation, setup guides, and external resources
-- **[`archive/`](./archive/)** - Historical status reports, completed milestones, and old verification reports
+### Getting Started
+- **[DISTILLATION_GUIDE.md](DISTILLATION_GUIDE.md)** - Complete guide to knowledge distillation workflow
+- **[CAWS_AGENT_GUIDE.md](CAWS_AGENT_GUIDE.md)** - CAWS agent workflow guide for AI-assisted development
 
-## 📚 Main Documentation
+### Contextual Dataset Generation
+- **[CONTEXTUAL_DATASET_GENERATION.md](CONTEXTUAL_DATASET_GENERATION.md)** - Contextual dataset generation workflow
+- **[DATASET_CARD_CONTEXTUAL.md](DATASET_CARD_CONTEXTUAL.md)** - Dataset schema, policies, and usage guidelines
+- **[SCALE_TESTS.md](SCALE_TESTS.md)** - Scale testing guide (N=1k, N=10k)
 
-### Active Guides (Root)
+### Evaluation
+- **[eval/HARNESS.md](../eval/HARNESS.md)** - Evaluation harness documentation
+- **[ACCEPTANCE_GATES.md](ACCEPTANCE_GATES.md)** - Quality gates and acceptance criteria
 
-- **[DISTILLATION_GUIDE.md](./DISTILLATION_GUIDE.md)** - Main distillation guide and rationale
-- **[ACCEPTANCE_GATES.md](./ACCEPTANCE_GATES.md)** - Acceptance gates and quality thresholds
-- **[FEAT-001.example.yaml](./FEAT-001.example.yaml)** - Example feature specification template
+### Architecture & Theory
+- **[ARBITER_THEORY.md](ARBITER_THEORY.md)** - Arbiter stack requirements and architecture
+- **[arbiter/README.md](../arbiter/README.md)** - Arbiter stack implementation details
 
-### Quick Links
+## External Resources
 
-**Setup & Getting Started:**
+See [external/](external/) for:
+- Kimi K2 API setup and configuration
+- Model selection guides
+- Task runner documentation
 
-- [Kimi K2 Setup Guide](./external/KIMI_K2_SETUP.md)
-- [Setup Checklist](./external/SETUP_CHECKLIST.md)
-- [Model Selection Guide](./external/MODEL_SELECTION.md)
+## Internal Documentation
 
-**Internal Implementation:**
+See [internal/](internal/) for:
+- Implementation plans and status
+- Training dependencies and readiness checklists
+- API hardening guides
+- Research summaries
 
-- [Training Readiness Checklist](./internal/TRAINING_READINESS_CHECKLIST.md)
-- [CAWS Context Usage Report](./internal/CAWS_CONTEXT_USAGE_REPORT.md)
-- [Distillation Best Practices](./internal/DISTILLATION_BEST_PRACTICES_2025.md)
+## Archive
 
-**Architecture & Research:**
+- **[archive/status-reports/](archive/status-reports/)** - Historical status reports and verification summaries
+- **[archive/planning/](archive/planning/)** - Planning documents and analysis
 
-- [CAWS Arbiter Deep Dive](./internal/CAWS_ARBITER_DEEP_DIVE.md)
-- [Claim Extraction Guard Rails](./internal/CLAIM_EXTRACTION_SKEPTICISM_GUARD_RAILS.md)
-- [Distillation for Arbiter Stack](./internal/DISTILLATION_FOR_ARBITER_STACK.md)
+## Quick Links
 
-## 📖 Documentation Categories
-
-### Internal (`internal/`)
-
-Implementation details, architecture decisions, and internal research for developers and ML engineers:
-
-- CAWS integration and architecture
-- Training and dataset implementation
-- Integration and implementation details
-- Conversion and production processes
-- API hardening and verification
-- Research and best practices
-
-See [internal/README.md](./internal/README.md) for complete listing.
-
-### External (`external/`)
-
-Public-facing documentation, setup guides, and external resources:
-
-- Setup and configuration guides
-- External resources and references
-- User guides and documentation
-
-See [external/README.md](./external/README.md) for complete listing.
-
-### Archive (`archive/`)
-
-Historical status reports, completed milestones, and old verification reports:
-
-- Historical integration status
-- Completed test results
-- Historical plans and roadmaps
-
-See [archive/](./archive/) for historical documentation.
-
-## Author
-
-@darianrosebrook
+- **Main README**: [../README.md](../README.md)
+- **Changelog**: [../CHANGELOG.md](../CHANGELOG.md)
+- **Commit Conventions**: [../COMMIT_CONVENTIONS.md](../COMMIT_CONVENTIONS.md)
