@@ -197,9 +197,7 @@ try:
     
     print(f"   ✅ Training step works")
     print(f"      Loss: {loss_dict['total'].item():.4f}")
-    print(f"      KL: {loss_dict['kl'].item():.4f}")
-    print(f"      CE teacher: {loss_dict['ce_teacher'].item():.4f}")
-    print(f"      CE GT: {loss_dict['ce_ground_truth'].item():.4f}")
+    print(f"      Loss components: {list(loss_dict.keys())}")
     
     # Test backward pass
     loss_dict["total"].backward()
