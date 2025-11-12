@@ -162,11 +162,20 @@ def evaluate_tool_use(model: nn.Module, tokenizer, test_prompts: List[Dict[str, 
         device: Device to run on
         
     Returns:
-        Dictionary with metrics
+        Dictionary with metrics including JSON validity, repair rate, tool success
     """
     json_valid_count = 0
     tool_correct_count = 0
+    needs_repair_count = 0
+    tool_success_count = 0
     total = len(test_prompts)
+    
+    # Import JSON repair utilities
+    try:
+        from training.json_repair import check_json_repair_needed, repair_json
+        JSON_REPAIR_AVAILABLE = True
+    except ImportError:
+        JSON_REPAIR_AVAILABLE = False
     
     results = []
     
@@ -224,6 +233,7 @@ def evaluate_tool_use(model: nn.Module, tokenizer, test_prompts: List[Dict[str, 
         
         # Validate JSON using constrained decoder
         is_valid_json = False
+        needs_repair = False
         tool_call = None
         try:
             if state.complete:
@@ -236,26 +246,49 @@ def evaluate_tool_use(model: nn.Module, tokenizer, test_prompts: List[Dict[str, 
                 is_valid_json = validate_json(generated_text)
                 if is_valid_json:
                     json_valid_count += 1
+                elif JSON_REPAIR_AVAILABLE:
+                    # Check if repair is needed
+                    _, needs_repair = check_json_repair_needed(generated_text, use_jsonrepair=True)
+                    if needs_repair:
+                        needs_repair_count += 1
+                        # Try repair
+                        success, repaired_obj, _ = repair_json(generated_text, use_jsonrepair=True)
+                        if success and repaired_obj:
+                            tool_call = repaired_obj
+                            is_valid_json = True
         except ValueError:
             # Invalid JSON according to decoder
             tool_call = extract_tool_call(generated_text)
             is_valid_json = False
+            if JSON_REPAIR_AVAILABLE:
+                _, needs_repair = check_json_repair_needed(generated_text, use_jsonrepair=True)
+                if needs_repair:
+                    needs_repair_count += 1
         
         # Check tool selection
         tool_correct = False
+        tool_success = False
         if tool_call and expected_tool:
             predicted_tool = tool_call.get('name', '')
             tool_correct = (predicted_tool == expected_tool)
             if tool_correct:
                 tool_correct_count += 1
+                
+                # Check if tool call would succeed (has required arguments)
+                # This is a simple check - in practice, you'd actually execute the tool
+                if 'arguments' in tool_call and isinstance(tool_call['arguments'], dict):
+                    tool_success = True
+                    tool_success_count += 1
         
         results.append({
             'prompt': prompt,
             'generated': generated_text,
             'valid_json': is_valid_json,
+            'needs_repair': needs_repair,
             'tool_call': tool_call,
             'expected_tool': expected_tool,
             'tool_correct': tool_correct,
+            'tool_success': tool_success,
         })
         
         if (i + 1) % 10 == 0:
@@ -263,12 +296,18 @@ def evaluate_tool_use(model: nn.Module, tokenizer, test_prompts: List[Dict[str, 
     
     json_validity_rate = json_valid_count / total if total > 0 else 0.0
     tool_selection_rate = tool_correct_count / total if total > 0 else 0.0
+    repair_rate = needs_repair_count / total if total > 0 else 0.0
+    tool_success_rate = tool_success_count / total if total > 0 else 0.0
     
     return {
         'json_validity_rate': json_validity_rate,
         'tool_selection_rate': tool_selection_rate,
+        'repair_rate': repair_rate,
+        'tool_success_rate': tool_success_rate,
         'json_valid_count': json_valid_count,
         'tool_correct_count': tool_correct_count,
+        'needs_repair_count': needs_repair_count,
+        'tool_success_count': tool_success_count,
         'total': total,
         'results': results,
     }
@@ -325,8 +364,12 @@ def main():
         'metrics': {
             'json_validity_rate': results['json_validity_rate'],
             'tool_selection_rate': results['tool_selection_rate'],
+            'repair_rate': results['repair_rate'],
+            'tool_success_rate': results['tool_success_rate'],
             'json_valid_count': results['json_valid_count'],
             'tool_correct_count': results['tool_correct_count'],
+            'needs_repair_count': results['needs_repair_count'],
+            'tool_success_count': results['tool_success_count'],
             'total': results['total'],
         },
         'results': results['results'],
@@ -338,6 +381,8 @@ def main():
     print(f"[tool_use_eval] ✅ Evaluation complete:")
     print(f"  JSON validity: {results['json_validity_rate']:.2%}")
     print(f"  Tool selection: {results['tool_selection_rate']:.2%}")
+    print(f"  Repair rate: {results['repair_rate']:.2%}")
+    print(f"  Tool success: {results['tool_success_rate']:.2%}")
     print(f"  Report saved to: {output_path}")
 
 
