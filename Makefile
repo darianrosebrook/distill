@@ -1,4 +1,4 @@
-.PHONY: kd inter proc qat onnx coreml probes eval release format judge worker drafter caws-eval
+.PHONY: kd inter proc qat onnx coreml probes eval release format judge worker drafter caws-eval contextual-gen contextual-extract contextual-verify contextual-pipeline gen-scale-1k gen-scale-10k verify-scale-1k verify-scale-10k verify-dual-tokenizers verify-next-registry gen-teacher-heavy verify-teacher-heavy
 
 # Worker model (primary generator, ~9B)
 worker:
@@ -92,6 +92,108 @@ eval:
 	python -m evaluation.tool_use_eval && \
 	python -m evaluation.long_ctx_eval && \
 	python -m evaluation.caws_eval --working-spec .caws/working-spec.yaml
+
+# Contextual Dataset Generation & Verification
+contextual-gen:
+	python -m scripts.generate_contextual_prompts \
+		--out data/contextual_prompts.jsonl \
+		--total 60 \
+		--seed 42 \
+		--integration-span-cap 3 \
+		--tokenizer models/student/tokenizer
+
+contextual-extract:
+	python -m scripts.extract_process_targets \
+		--in data/contextual_prompts.jsonl \
+		--out data/contextual_extracted.jsonl \
+		--tokenizer-path models/student/tokenizer
+
+contextual-verify:
+	python -m scripts.verify_contextual_set \
+		--in data/contextual_extracted.jsonl \
+		--report data/contextual_verification_report.json \
+		--tokenizer models/student/tokenizer \
+		--perf-budget-sec-per-100 2.0
+
+contextual-pipeline: contextual-gen contextual-extract contextual-verify
+
+# Scale Tests (N=1k, N=10k)
+gen-scale-1k:
+	python -m scripts.generate_contextual_prompts \
+		--out data/contextual_prompts_1k.jsonl \
+		--total 1000 \
+		--seed 42 \
+		--num-shards 1 \
+		--shard-index 0 \
+		--integration-span-cap 3 \
+		--tokenizer models/student/tokenizer
+
+gen-scale-10k:
+	python -m scripts.generate_contextual_prompts \
+		--out data/contextual_prompts_10k.jsonl \
+		--total 10000 \
+		--seed 42 \
+		--num-shards 10 \
+		--shard-index 0 \
+		--integration-span-cap 3 \
+		--tokenizer models/student/tokenizer
+
+verify-scale-1k:
+	python -m scripts.extract_process_targets \
+		--in data/contextual_prompts_1k.jsonl \
+		--out data/contextual_extracted_1k.jsonl \
+		--tokenizer-path models/student/tokenizer && \
+	python -m scripts.verify_contextual_set \
+		--in data/contextual_extracted_1k.jsonl \
+		--report data/reports/verify_scale_1k.json \
+		--tokenizer models/student/tokenizer \
+		--perf-budget-sec-per-100 2.0
+
+verify-scale-10k:
+	python -m scripts.extract_process_targets \
+		--in data/contextual_prompts_10k.jsonl \
+		--out data/contextual_extracted_10k.jsonl \
+		--tokenizer-path models/student/tokenizer && \
+	python -m scripts.verify_contextual_set \
+		--in data/contextual_extracted_10k.jsonl \
+		--report data/reports/verify_scale_10k.json \
+		--tokenizer models/student/tokenizer \
+		--perf-budget-sec-per-100 2.0
+
+# Multi-tokenizer Verification
+verify-dual-tokenizers:
+	python -m scripts.verify_contextual_set \
+		--in data/contextual_extracted.jsonl \
+		--tokenizer models/student/tokenizer \
+		--secondary-tokenizer models/student/tokenizer \
+		--report data/reports/verify_dual_tok.json
+
+# Forward-compat Registry Check
+verify-next-registry:
+	python -m scripts.verify_contextual_set \
+		--in data/contextual_extracted.jsonl \
+		--tokenizer models/student/tokenizer \
+		--next-registry tools/schema_registry.py \
+		--report data/reports/verify_next_registry.json
+
+# Teacher-heavy Slice (Integration Span Cap Reality Check)
+gen-teacher-heavy:
+	python -m scripts.generate_contextual_prompts \
+		--out data/teacher_heavy.jsonl \
+		--total 500 \
+		--seed 7 \
+		--integration-span-cap 3 \
+		--tokenizer models/student/tokenizer
+
+verify-teacher-heavy:
+	python -m scripts.extract_process_targets \
+		--in data/teacher_heavy.jsonl \
+		--out data/teacher_heavy_extracted.jsonl \
+		--tokenizer-path models/student/tokenizer && \
+	python -m scripts.verify_contextual_set \
+		--in data/teacher_heavy_extracted.jsonl \
+		--tokenizer models/student/tokenizer \
+		--report data/reports/teacher_heavy.json
 
 release:
 	python -m scripts.package --model coreml/model.mlpackage --out dist/
