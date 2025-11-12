@@ -156,6 +156,9 @@ make eval-runner-local \
 - **Generation Guide**: `docs/CONTEXTUAL_DATASET_GENERATION.md` - Full workflow
 - **Evaluation Harness**: `eval/HARNESS.md` - Evaluation harness documentation
 - **Scale Tests**: `docs/SCALE_TESTS.md` - Scale testing guide
+- **CAWS Guide**: `docs/CAWS_AGENT_GUIDE.md` - CAWS agent workflow guide
+- **Arbiter Theory**: `docs/ARBITER_THEORY.md` - Arbiter stack architecture
+- **Full Docs Index**: `docs/README.md` - Complete documentation index
 
 ## Directory Structure
 
