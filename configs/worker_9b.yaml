@@ -34,6 +34,10 @@ distillation:
   kl_weight: 0.5
   ce_teacher_weight: 0.3
   ce_ground_truth_weight: 0.2
+  # Process-step supervision weights (replaces reasoning_content loss)
+  w_tool: 0.15      # Tool name selection loss weight
+  w_args: 0.15      # JSON argument loss weight
+  w_integr: 0.10    # Integration span loss weight
 kd:
   teacher_endpoint: "http://teacher.local"
   kd_temperature: 2.0

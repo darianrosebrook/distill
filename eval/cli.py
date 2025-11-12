@@ -74,6 +74,8 @@ def main() -> None:
     ap.add_argument("--report", required=True, help="Summary report JSON")
     ap.add_argument("--fixtures", required=True,
                     help="Fixtures directory for ToolBroker")
+    ap.add_argument("--prompt-wrapper", default=None,
+                    help="Path to prompt wrapper template (Jinja2 or string.Template)")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--temperature", type=float, default=0.0)
     ap.add_argument("--max-tokens", type=int, default=1024)
@@ -100,8 +102,15 @@ def main() -> None:
 
     # Init runner & broker
     RunnerCls = RUNNERS[args.runner]
-    runner = RunnerCls(model=args.model, seed=args.seed,
-                       temperature=args.temperature, max_tokens=args.max_tokens)
+    runner_kwargs = {
+        "model": args.model,
+        "seed": args.seed,
+        "temperature": args.temperature,
+        "max_tokens": args.max_tokens,
+    }
+    if args.prompt_wrapper:
+        runner_kwargs["prompt_wrapper"] = args.prompt_wrapper
+    runner = RunnerCls(**runner_kwargs)
     broker = ToolBroker(args.fixtures)
 
     # Shard

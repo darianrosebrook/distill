@@ -44,6 +44,10 @@ kd:
   kd_temperature: 2.0
   kl_weight: 0.5
   ce_on_teacher: true
+  # Process-step supervision weights (replaces reasoning_content loss)
+  w_tool: 0.15      # Tool name selection loss weight
+  w_args: 0.15      # JSON argument loss weight
+  w_integr: 0.10    # Integration span loss weight
 
 process_supervision:
   constrained_decoding: true

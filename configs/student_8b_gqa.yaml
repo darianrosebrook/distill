@@ -28,10 +28,17 @@ kd:
   teacher_endpoint: "http://teacher.local"
   kd_temperature: 2.0
   kl_weight: 0.5
+  # Process-step supervision weights (replaces reasoning_content loss)
+  w_tool: 0.15      # Tool name selection loss weight
+  w_args: 0.15      # JSON argument loss weight
+  w_integr: 0.10    # Integration span loss weight
 
 process_supervision:
   constrained_decoding: true
   schema_file: configs/tool_schema.json
 
-io: { tokenizer_path: models/student/tokenizer, train_shards: [data/kd_mix.jsonl], val_shards: [data/val.jsonl] }
+io:
+  tokenizer_path: models/student/tokenizer
+  train_shards: [data/kd_mix.jsonl]
+  val_shards: [data/val.jsonl]
 

@@ -303,3 +303,4 @@ if __name__ == "__main__":
     score_with_gt = compute_composite_quality_score(
         test_output, ground_truth=ground_truth)
     print(f"Quality score (with GT): {score_with_gt:.2f}")
+

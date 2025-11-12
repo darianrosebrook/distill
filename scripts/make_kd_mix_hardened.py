@@ -39,6 +39,7 @@ from training.extractors import (
     identify_integration_spans,
     extract_tool_call,
 )
+from tools.schema_registry import get_registry
 
 
 # Cost constants (from Kimi API pricing)
@@ -654,10 +655,12 @@ def main():
                     process_targets = {}
                     if tokenizer and not args.no_process_supervision:
                         try:
+                            # Load tool names from registry
+                            tool_names = get_registry().list_tools() if not args.no_process_supervision else None
                             process_targets = extract_process_step_targets(
                                 teacher_text=result["teacher_text"],
                                 tokenizer=tokenizer,
-                                tool_names=None,  # TODO: Load from tool registry if available
+                                tool_names=tool_names,
                             )
                             # Add to result
                             result.update(process_targets)

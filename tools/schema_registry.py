@@ -71,33 +71,29 @@ class ToolSchemaRegistry:
             "web.search": {
                 "tool_name": "web.search",
                 "type": "object",
-                "required": ["name", "arguments"],
+                "required": ["q"],
                 "properties": {
-                    "name": {
-                        "type": "string",
-                        "enum": ["web.search"]
-                    },
-                    "arguments": {
-                        "type": "object",
-                        "required": ["q"],
-                        "properties": {
-                            "q": {
-                                "type": "string",
-                                "description": "Search query"
-                            },
-                            "recency": {
-                                "type": "number",
-                                "description": "Recency filter in days (optional)",
-                                "default": 0
-                            },
-                            "max_results": {
-                                "type": "number",
-                                "description": "Maximum number of results (optional)",
-                                "default": 10
-                            }
-                        }
-                    }
+                    "q": {"type": "string"},
+                    "recency": {"type": "integer", "minimum": 0, "maximum": 365},
+                    "top_k": {"type": "integer", "minimum": 1, "maximum": 10},
+                    "site": {"type": "string", "enum": ["example.com", "example.org", "example.net"]}
                 }
+            },
+            "web.open": {
+                "tool_name": "web.open",
+                "type": "object",
+                "required": ["url"],
+                "properties": {"url": {"type": "string"}}
+            },
+            "read_file": {
+                "tool_name": "read_file",
+                "type": "object",
+                "required": ["path"],
+                "properties": {
+                    "path": {"type": "string"},
+                    "encoding": {"type": "string", "enum": ["utf-8", "latin-1"]}
+                },
+                "oneOf": [{"required": ["path"]}, {"required": ["file_id"]}]
             },
             "repo.read": {
                 "tool_name": "repo.read",
@@ -162,32 +158,11 @@ class ToolSchemaRegistry:
             "code.execute": {
                 "tool_name": "code.execute",
                 "type": "object",
-                "required": ["name", "arguments"],
+                "required": ["language", "code"],
                 "properties": {
-                    "name": {
-                        "type": "string",
-                        "enum": ["code.execute"]
-                    },
-                    "arguments": {
-                        "type": "object",
-                        "required": ["code", "language"],
-                        "properties": {
-                            "code": {
-                                "type": "string",
-                                "description": "Code to execute"
-                            },
-                            "language": {
-                                "type": "string",
-                                "enum": ["python", "javascript", "bash", "sql"],
-                                "description": "Programming language"
-                            },
-                            "timeout": {
-                                "type": "number",
-                                "description": "Execution timeout in seconds",
-                                "default": 30
-                            }
-                        }
-                    }
+                    "language": {"type": "string", "enum": ["python", "bash", "javascript"]},
+                    "code": {"type": "string"},
+                    "timeout_ms": {"type": "integer", "minimum": 100, "maximum": 10000}
                 }
             }
         }
@@ -205,6 +180,27 @@ class ToolSchemaRegistry:
             Tool schema dict, or None if not found
         """
         return self._schemas.get(tool_name)
+    
+    def get(self, tool_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Alias for get_schema() for compatibility with external code.
+        
+        Args:
+            tool_name: Name of the tool (e.g., "web.search")
+            
+        Returns:
+            Tool schema dict, or None if not found
+        """
+        return self.get_schema(tool_name)
+    
+    def all(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Get all registered schemas.
+        
+        Returns:
+            Dictionary mapping tool names to schemas
+        """
+        return dict(self._schemas)
     
     def register_schema(self, tool_name: str, schema: Dict[str, Any]):
         """
@@ -317,4 +313,42 @@ def get_registry() -> ToolSchemaRegistry:
     if _registry is None:
         _registry = ToolSchemaRegistry()
     return _registry
+
+
+def validate_args(schema: dict, args: dict) -> tuple[bool, list[str]]:
+    """
+    Validate arguments against a schema.
+    
+    Args:
+        schema: Schema dict with "required" and "properties"
+        args: Arguments dict to validate
+        
+    Returns:
+        (is_valid, list_of_errors) tuple
+    """
+    errs = []
+    if not isinstance(args, dict):
+        return False, ["args_not_dict"]
+    for k in schema.get("required", []):
+        if k not in args:
+            errs.append(f"missing:{k}")
+    props = schema.get("properties", {})
+    for k, v in args.items():
+        spec = props.get(k, {})
+        t = spec.get("type")
+        if t == "string" and not isinstance(v, str):
+            errs.append(f"type:{k}")
+        if t == "integer" and not isinstance(v, int):
+            errs.append(f"type:{k}")
+        if t == "number" and not isinstance(v, (int, float)):
+            errs.append(f"type:{k}")
+        if "enum" in spec and v not in spec["enum"]:
+            errs.append(f"enum:{k}")
+        lo, hi = spec.get("minimum"), spec.get("maximum")
+        if isinstance(v, (int, float)):
+            if lo is not None and v < lo:
+                errs.append(f"min:{k}")
+            if hi is not None and v > hi:
+                errs.append(f"max:{k}")
+    return (len(errs) == 0), errs
 

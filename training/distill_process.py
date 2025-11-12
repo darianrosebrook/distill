@@ -164,17 +164,77 @@ def train_step_process(
         generated_texts = generate_text_from_logits(student_logits, tokenizer)
         
         # Extract target tool names from batch metadata (if available)
-        target_tool_names = None  # TODO: Extract from batch metadata
+        target_tool_names = None
+        if "tool_name_ids" in batch and "tool_name_mask" in batch:
+            tool_name_ids = batch["tool_name_ids"]
+            tool_name_mask = batch["tool_name_mask"]
+            if tool_name_ids.numel() > 0:
+                # Decode tool name IDs back to text for loss computation
+                # Handle batched tool names - decode each sample's tool name
+                batch_size = tool_name_ids.size(0) if tool_name_ids.dim() > 1 else 1
+                decoded_tool_names = []
+                
+                for i in range(batch_size):
+                    if tool_name_ids.dim() > 1:
+                        sample_tool_ids = tool_name_ids[i]
+                        sample_mask = tool_name_mask[i]
+                    else:
+                        sample_tool_ids = tool_name_ids
+                        sample_mask = tool_name_mask
+                    
+                    # Extract valid tokens using mask
+                    if sample_mask.dtype == torch.bool:
+                        valid_tokens = sample_tool_ids[sample_mask]
+                    else:
+                        # Handle integer mask (1s and 0s)
+                        valid_tokens = sample_tool_ids[sample_mask.bool()]
+                    
+                    if valid_tokens.numel() > 0:
+                        target_tool_name = tokenizer.decode(valid_tokens.tolist(), skip_special_tokens=True)
+                        # Clean up tool name (remove quotes if present)
+                        target_tool_name = target_tool_name.strip('"\'')
+                        decoded_tool_names.append(target_tool_name)
+                    else:
+                        decoded_tool_names.append(None)
+                
+                # Only use non-None tool names
+                if any(name is not None for name in decoded_tool_names):
+                    target_tool_names = [name for name in decoded_tool_names if name is not None]
+                    if len(target_tool_names) < batch_size:
+                        # Pad with None if needed
+                        target_tool_names.extend([None] * (batch_size - len(target_tool_names)))
+        
         tool_names = proc_cfg.get("tool_names", [])
+        
+        # Get token IDs from batch if available
+        tool_name_ids = batch.get("tool_name_ids")
+        tool_name_mask = batch.get("tool_name_mask")
+        gold_json_text_ids = batch.get("gold_json_text_ids")
+        mask_valid_json_tokens = batch.get("mask_valid_json_tokens")
+        
+        # Move to device if present
+        if tool_name_ids is not None:
+            tool_name_ids = tool_name_ids.to(device)
+        if tool_name_mask is not None:
+            tool_name_mask = tool_name_mask.to(device)
+        if gold_json_text_ids is not None:
+            gold_json_text_ids = gold_json_text_ids.to(device)
+        if mask_valid_json_tokens is not None:
+            mask_valid_json_tokens = mask_valid_json_tokens.to(device)
         
         proc_loss_dict = process_supervision_loss(
             logits=student_logits,
-            generated_texts=generated_texts,
+            generated_texts=generated_texts,  # Keep for backward compatibility
             target_tool_names=target_tool_names,
             tool_names=tool_names,
             tokenizer=tokenizer,
             json_validity_weight=proc_cfg.get("loss_json_validity_weight", 0.3),
             tool_select_weight=proc_cfg.get("loss_tool_select_weight", 0.7),
+            # Pass token ID-based arguments
+            tool_name_ids=tool_name_ids,
+            tool_name_mask=tool_name_mask,
+            gold_json_text_ids=gold_json_text_ids,
+            mask_valid_json_tokens=mask_valid_json_tokens,
         )
         
         # Combine losses

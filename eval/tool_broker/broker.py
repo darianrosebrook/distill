@@ -2,9 +2,10 @@
 from __future__ import annotations
 import json
 import os
+import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, Tuple
 
 
 class ToolBroker:
@@ -20,6 +21,46 @@ class ToolBroker:
         self.fixtures_dir = Path(fixtures_dir)
         self.index: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)
         self._load_fixtures()
+    
+    # ------------------------
+    # Normalization utilities
+    # ------------------------
+    @staticmethod
+    def _collapse_ws(s: str) -> str:
+        """Collapse whitespace to single space."""
+        return re.sub(r"\s+", " ", s.strip())
+    
+    @classmethod
+    def _normalize_args(cls, name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Normalize argument dicts so fixture matches are robust across runners:
+          - Lowercase + collapse whitespace for common query fields (q, query).
+          - Provide sensible defaults (e.g., top_k = 3) if missing.
+          - Remove None-valued keys.
+          - Sort keys via stable JSON (handled when we dump).
+        """
+        args = dict(args or {})
+        
+        # Remove None-valued keys to avoid noisy mismatches
+        args = {k: v for k, v in args.items() if v is not None}
+        
+        # Query-like normalization
+        for qk in ("q", "query"):
+            if qk in args and isinstance(args[qk], str):
+                args[qk] = cls._collapse_ws(args[qk].lower())
+        
+        # Provide a tolerant default for "top_k" if omitted
+        if name in ("web.search", "web.search_async"):
+            args.setdefault("top_k", 3)
+        
+        return args
+    
+    @classmethod
+    def _norm_key(cls, name: str, args: Dict[str, Any]) -> Tuple[str, str]:
+        """Normalize tool name and arguments to canonical form."""
+        norm_args = cls._normalize_args(name, args)
+        key_json = json.dumps(norm_args, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+        return name, key_json
     
     def _load_fixtures(self):
         """Load all fixture files."""
@@ -45,37 +86,10 @@ class ToolBroker:
                     result = entry.get("result", {})
                     
                     # Normalize key for lookup
-                    key_str = self._normalize_key(key)
-                    self.index[name][key_str] = result
+                    key_name, key_norm = self._norm_key(name, key)
+                    self.index[key_name][key_norm] = result
                 except json.JSONDecodeError:
                     continue
-    
-    def _normalize_key(self, key: Dict[str, Any]) -> str:
-        """
-        Normalize tool arguments to a canonical string for lookup.
-        
-        Args:
-            key: Tool arguments dict
-            
-        Returns:
-            Canonical string representation
-        """
-        # Sort keys and normalize values
-        normalized = {}
-        for k, v in sorted(key.items()):
-            if isinstance(v, str):
-                normalized[k] = v.lower().strip()
-            elif isinstance(v, (int, float)):
-                normalized[k] = v
-            elif isinstance(v, list):
-                normalized[k] = tuple(sorted(v) if all(isinstance(x, (str, int, float)) for x in v) else v)
-            elif isinstance(v, dict):
-                normalized[k] = self._normalize_key(v)
-            else:
-                normalized[k] = v
-        
-        # Create canonical JSON (sorted keys, no whitespace)
-        return json.dumps(normalized, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     
     def call(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -97,20 +111,35 @@ class ToolBroker:
             tool_fixtures = self.index.get(normalized_name, {})
         
         # Normalize arguments for lookup
-        key_str = self._normalize_key(arguments)
+        _, key_norm = self._norm_key(name, arguments or {})
         
         # Lookup result
-        result = tool_fixtures.get(key_str)
+        hit = tool_fixtures.get(key_norm)
+        if hit is not None:
+            return hit
         
-        if result is None:
-            # Return error result
-            return {
-                "ok": False,
-                "error": "fixture_miss",
-                "name": name,
-                "arguments": arguments,
-                "key_normalized": key_str,
-            }
+        # Return error result
+        return {
+            "ok": False,
+            "error": "fixture_miss",
+            "name": name,
+            "arguments": arguments,
+            "key_normalized": key_norm,
+        }
+    
+    def lookup(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any] | None:
+        """
+        Lookup tool result (alias for call, returns None on miss instead of error dict).
         
+        Args:
+            name: Tool name
+            arguments: Tool arguments dict
+            
+        Returns:
+            Tool result dict or None if not found
+        """
+        result = self.call(name, arguments)
+        if result.get("ok") is False and result.get("error") == "fixture_miss":
+            return None
         return result
 

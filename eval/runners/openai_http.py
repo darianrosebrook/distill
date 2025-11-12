@@ -1,13 +1,21 @@
 """OpenAI-compatible HTTP runner."""
 from __future__ import annotations
+import hashlib
 import json
 import os
 import re
+from string import Template
 from typing import Any, Dict, List, Optional
 
 import requests
 
 from eval.runners.base import Runner
+
+try:
+    # Optional. If missing, we fall back to string.Template
+    import jinja2  # type: ignore
+except Exception:  # pragma: no cover
+    jinja2 = None
 
 
 class OpenAIHTTPRunner(Runner):
@@ -21,6 +29,7 @@ class OpenAIHTTPRunner(Runner):
         max_tokens: int = 1024,
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
+        prompt_wrapper: Optional[str] = None,
     ):
         """
         Initialize OpenAI HTTP runner.
@@ -29,10 +38,65 @@ class OpenAIHTTPRunner(Runner):
             model: Model name (e.g., "gpt-4", "gpt-3.5-turbo")
             base_url: API base URL (defaults to OPENAI_BASE_URL env or OpenAI default)
             api_key: API key (defaults to OPENAI_API_KEY env)
+            prompt_wrapper: Optional path to prompt wrapper template (Jinja2 or string.Template)
         """
         super().__init__(model, seed, temperature, max_tokens)
         self.base_url = base_url or os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
         self.api_key = api_key or os.getenv("OPENAI_API_KEY", "")
+        self._wrapper_path = prompt_wrapper
+        self._wrapper_tpl = None
+        self._wrapper_sha256 = None
+        if prompt_wrapper:
+            with open(prompt_wrapper, "r", encoding="utf-8") as f:
+                content = f.read()
+            self._wrapper_sha256 = hashlib.sha256(content.encode("utf-8")).hexdigest()
+            if jinja2:
+                self._wrapper_tpl = jinja2.Environment(
+                    autoescape=False, undefined=jinja2.StrictUndefined
+                ).from_string(content)
+            else:
+                self._wrapper_tpl = Template(content)
+    
+    def fingerprint(self) -> Dict[str, Any]:
+        """Return runner fingerprint for reproducibility."""
+        fp = super().fingerprint()
+        if self._wrapper_sha256:
+            fp["prompt_wrapper_sha256"] = self._wrapper_sha256
+        return fp
+    
+    def _render_messages(self, prompt: str, tools: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+        """
+        If a wrapper is provided, render using the template. We pass:
+          - system: recommended system text
+          - user:   the dataset "prompt"
+          - tools:  list of tool schemas/names (informational)
+        The template may produce either:
+          - a JSON with {"system": "...", "user": "..."} (Jinja path), or
+          - a flat string (Template path) that we put as user with a default system.
+        """
+        system_default = (
+            "You are a careful assistant. Use tools only when necessary. "
+            "When a sample is a control/decline case, do not call tools."
+        )
+        if not self._wrapper_tpl:
+            return [
+                {"role": "system", "content": system_default},
+                {"role": "user", "content": prompt},
+            ]
+        # Jinja: allow structured output
+        if jinja2 and isinstance(self._wrapper_tpl, jinja2.environment.Template):
+            rendered = self._wrapper_tpl.render(system=system_default, user=prompt, tools=tools)
+            try:
+                as_json = json.loads(rendered)
+                sys_txt = as_json.get("system") or system_default
+                usr_txt = as_json.get("user") or prompt
+                return [{"role": "system", "content": sys_txt}, {"role": "user", "content": usr_txt}]
+            except Exception:
+                # treat as plain text
+                return [{"role": "system", "content": system_default}, {"role": "user", "content": rendered}]
+        # string.Template fallback: provide $system and $user
+        rendered = self._wrapper_tpl.safe_substitute(system=system_default, user=prompt)
+        return [{"role": "system", "content": system_default}, {"role": "user", "content": rendered}]
     
     def generate(
         self,
@@ -51,8 +115,8 @@ class OpenAIHTTPRunner(Runner):
             "Authorization": f"Bearer {self.api_key}",
         }
         
-        # Build messages
-        messages = [{"role": "user", "content": prompt}]
+        # Build messages using wrapper if available
+        messages = self._render_messages(prompt, tools)
         
         # Build tools/functions format
         functions = []

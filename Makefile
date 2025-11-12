@@ -235,6 +235,9 @@ eval-smoke:
 		--min-eligible-for-gates 15 \
 		--fail-on-fingerprint-mismatch
 
+ci-broker-smoke:
+	pytest -q -k broker_fixtures_hit_rate tests/ci/test_broker_fixtures_hit_rate.py
+
 release:
 	python -m scripts.package --model coreml/model.mlpackage --out dist/
 
