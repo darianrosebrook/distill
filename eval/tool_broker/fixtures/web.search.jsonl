@@ -1,0 +1,4 @@
+{"name":"web.search","key":{"q":"what is rope precision","top_k":3},"result":{"ok":true,"hits":[{"title":"RoPE Precision","snippet":"Rotary Position Embedding (RoPE) precision affects model performance.","url":"https://example.com/rope-precision"}]}}
+{"name":"web.search","key":{"q":"embedding gemma pooling fp16","top_k":5},"result":{"ok":true,"hits":[{"title":"Gemma Embeddings","snippet":"Gemma model uses mean pooling for embeddings with FP16 support.","url":"https://example.com/gemma-embeddings"}]}}
+{"name":"web.search","key":{"q":"python json parsing","top_k":3},"result":{"ok":true,"hits":[{"title":"JSON in Python","snippet":"Use json.loads() to parse JSON strings in Python.","url":"https://example.com/python-json"}]}}
+

@@ -1,4 +1,4 @@
-.PHONY: kd inter proc qat onnx coreml probes eval release format judge worker drafter caws-eval contextual-gen contextual-extract contextual-verify contextual-pipeline gen-scale-1k gen-scale-10k verify-scale-1k verify-scale-10k verify-dual-tokenizers verify-next-registry gen-teacher-heavy verify-teacher-heavy
+.PHONY: kd inter proc qat onnx coreml probes eval release format judge worker drafter caws-eval contextual-gen contextual-extract contextual-verify contextual-pipeline gen-scale-1k gen-scale-10k verify-scale-1k verify-scale-10k verify-dual-tokenizers verify-next-registry gen-teacher-heavy verify-teacher-heavy eval-runner-openai eval-runner-local eval-smoke
 
 # Worker model (primary generator, ~9B)
 worker:
@@ -194,6 +194,46 @@ verify-teacher-heavy:
 		--in data/teacher_heavy_extracted.jsonl \
 		--tokenizer models/student/tokenizer \
 		--report data/reports/teacher_heavy.json
+
+# Evaluation Harness
+eval-runner-openai:
+	python -m eval.cli \
+		--runner openai_http \
+		--model $(MODEL) \
+		--in $(IN) \
+		--out $(OUT) \
+		--report $(REPORT) \
+		--fixtures eval/tool_broker/fixtures \
+		--seed 42 \
+		--temperature 0.0 \
+		--min-eligible-for-gates 15 \
+		--fail-on-fingerprint-mismatch
+
+eval-runner-local:
+	python -m eval.cli \
+		--runner hf_local \
+		--model $(MODEL) \
+		--in $(IN) \
+		--out $(OUT) \
+		--report $(REPORT) \
+		--fixtures eval/tool_broker/fixtures \
+		--seed 42 \
+		--temperature 0.0 \
+		--min-eligible-for-gates 15 \
+		--fail-on-fingerprint-mismatch
+
+eval-smoke:
+	python -m eval.cli \
+		--runner openai_http \
+		--model gpt-4 \
+		--in data/contextual_extracted.jsonl \
+		--out eval/results.smoke.jsonl \
+		--report eval/report.smoke.json \
+		--fixtures eval/tool_broker/fixtures \
+		--seed 42 \
+		--temperature 0.0 \
+		--min-eligible-for-gates 15 \
+		--fail-on-fingerprint-mismatch
 
 release:
 	python -m scripts.package --model coreml/model.mlpackage --out dist/

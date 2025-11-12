@@ -1,0 +1,4 @@
+{"name":"read_file","key":{"path":"README.md"},"result":{"ok":true,"content":"# Project\n\nThis is a sample README file.\n\n## Features\n\n- Feature 1\n- Feature 2\n"}}
+{"name":"read_file","key":{"path":"config.yaml"},"result":{"ok":true,"content":"learning_rate: 0.001\nbatch_size: 32\nepochs: 10\n"}}
+{"name":"read_file","key":{"path":"requirements.txt"},"result":{"ok":true,"content":"torch>=2.0.0\ntransformers>=4.30.0\n"}}
+
