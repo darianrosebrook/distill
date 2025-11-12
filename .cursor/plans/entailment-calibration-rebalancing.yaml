@@ -1,0 +1,47 @@
+# Entailment Calibration Dataset Rebalancing Plan
+# Target: Information-theoretic optimal balance for high-calibration, bias-resistant verifier
+
+target_distribution:
+  total_examples: 400
+  support: 25-30%  # 100-120 examples
+  contradict: 25-30%  # 100-120 examples
+  insufficient_hard: 25%  # 100 examples (verifiable but missing key info)
+  insufficient_vague: 15-20%  # 60-80 examples (non-verifiable/subjective)
+
+current_state:
+  total: 354
+  support: 70 (19.8%)
+  contradict: 73 (20.6%)
+  insufficient_hard: 74 (20.9%)
+  insufficient_vague: 137 (38.7%)
+
+actions_required:
+  remove_vague_examples: 57-77  # Reduce from 137 to 60-80
+  add_support: 30-50
+  add_contradict: 27-47
+  add_hard_insufficient: 26
+
+new_example_categories:
+  hard_insufficient:
+    - time_mismatch: "Evidence from different time period than claim"
+    - domain_shift: "Evidence from different domain/context than claim"
+    - missing_numerics: "Evidence mentions improvement but lacks specific numbers"
+    - partial_coverage: "Evidence covers part of claim but not all elements"
+    - version_mismatch: "Evidence from different version than claim"
+    
+  contrastive_pairs:
+    - vague_triplet: "For each vague example, add support+contradict with same claim"
+    - quantitative_gradient: "Vary precision: 'reduced' → 'reduced by 10ms' → 'reduced from 500ms to 490ms'"
+    
+  linguistic_diversity:
+    - epistemic_verbs: "suggests, implies, indicates" (max 10-12% each)
+    - source_cues: "user report, press release, speculation" (max 10-12% each)
+    - temporal_hedging: "so far, so far appears to be" (max 10-12% each)
+    - confidence_markers: "highly likely, possibly, roughly" (max 10-12% each)
+
+quality_metrics_to_track:
+  - expected_calibration_error: "Target < 0.1 on held-out factual examples"
+  - false_insufficient_rate: "Target < 15% on near-verifiable claims"
+  - semantic_separation_index: "Target > 0.3 cosine distance between support↔insufficient vs contradict↔insufficient"
+  - lexical_entropy: "Target > 3.0 bits for insufficient cluster (heterogeneity, not redundancy)"
+
