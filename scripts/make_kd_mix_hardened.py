@@ -33,6 +33,12 @@ from models.teacher.teacher_client import TeacherClient, APITier
 from scripts.prompt_sources import get_prompt_mix, load_prompts_from_file
 from training.quality_scoring import compute_composite_quality_score
 from training.caws_context import extract_caws_context, format_caws_context_for_prompt, extract_caws_context_dict
+from training.extractors import (
+    extract_tool_name_span,
+    extract_json_argument_spans,
+    identify_integration_spans,
+    extract_tool_call,
+)
 
 
 # Cost constants (from Kimi API pricing)
@@ -239,6 +245,68 @@ def estimate_cost(total_samples: int, avg_input: int = 200, avg_output: int = 16
     }
 
 
+def extract_process_step_targets(
+    teacher_text: str,
+    tokenizer,
+    tool_names: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Extract process-step supervision targets from teacher output.
+    
+    Returns:
+        Dictionary with:
+        - tool_name_ids: Token IDs for tool name span (if found)
+        - tool_name_mask: Mask for tool name tokens
+        - gold_json_text_ids: Token IDs for JSON argument spans
+        - mask_valid_json_tokens: Mask for valid JSON tokens
+        - tool_result_fields: Token IDs for integration spans
+        - integration_mask: Mask for integration spans
+    """
+    if tokenizer is None:
+        return {}
+    
+    targets = {}
+    
+    # Extract tool name span
+    tool_name_span = extract_tool_name_span(teacher_text, tool_names)
+    if tool_name_span:
+        start_char, end_char = tool_name_span
+        tool_name_text = teacher_text[start_char:end_char]
+        tool_name_ids = tokenizer.encode(tool_name_text, add_special_tokens=False)
+        targets["tool_name_ids"] = tool_name_ids
+        targets["tool_name_mask"] = [1] * len(tool_name_ids)
+    
+    # Extract JSON argument spans
+    json_spans = extract_json_argument_spans(teacher_text)
+    if json_spans:
+        all_json_ids = []
+        all_json_mask = []
+        for start_char, end_char in json_spans:
+            json_text = teacher_text[start_char:end_char]
+            json_ids = tokenizer.encode(json_text, add_special_tokens=False)
+            all_json_ids.extend(json_ids)
+            all_json_mask.extend([1] * len(json_ids))
+        if all_json_ids:
+            targets["gold_json_text_ids"] = all_json_ids
+            targets["mask_valid_json_tokens"] = all_json_mask
+    
+    # Extract integration spans
+    integration_spans = identify_integration_spans(teacher_text)
+    if integration_spans:
+        all_integration_ids = []
+        all_integration_mask = []
+        for start_char, end_char in integration_spans:
+            integration_text = teacher_text[start_char:end_char]
+            integration_ids = tokenizer.encode(integration_text, add_special_tokens=False)
+            all_integration_ids.extend(integration_ids)
+            all_integration_mask.extend([1] * len(integration_ids))
+        if all_integration_ids:
+            targets["tool_result_fields"] = all_integration_ids
+            targets["integration_mask"] = all_integration_mask
+    
+    return targets
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="Hardened KD dataset generator with resume and budget tracking",
@@ -294,6 +362,10 @@ def main():
                     help='Model role for prompt templates (mixed=use get_prompt_mix, worker/judge/drafter=use templates)')
     ap.add_argument('--use-compact-caws', action='store_true', default=True,
                     help='Use compact CAWS format in templates (default: True)')
+    ap.add_argument('--no-process-supervision', action='store_true',
+                    help='Disable process-step supervision extraction')
+    ap.add_argument('--tokenizer-path', type=str, default=None,
+                    help='Path to tokenizer (default: models/student/tokenizer)')
     args = ap.parse_args()
 
     # Estimate costs before starting
@@ -416,6 +488,18 @@ def main():
             print(
                 f"[make_kd_mix_hardened] WARN: Failed to extract CAWS context: {e}")
             print(f"[make_kd_mix_hardened] Continuing without CAWS augmentation")
+
+    # Load tokenizer for process-step supervision extraction
+    tokenizer = None
+    if not args.no_process_supervision:
+        try:
+            from training.dataset import load_tokenizer
+            tokenizer_path = args.tokenizer_path or "models/student/tokenizer"
+            tokenizer = load_tokenizer(tokenizer_path)
+            print(f"[make_kd_mix_hardened] Loaded tokenizer from {tokenizer_path}")
+        except Exception as e:
+            print(f"[make_kd_mix_hardened] WARN: Failed to load tokenizer: {e}")
+            print("[make_kd_mix_hardened] Process-step supervision will be disabled")
 
     # Load prompts (after CAWS context extraction so we can pass it to templates)
     if args.prompts_file:
@@ -565,6 +649,20 @@ def main():
 
                     # Note: We do NOT save teacher_reasoning_content to avoid ToS violation risk.
                     # Use process-step supervision targets instead (extracted via training/extractors.py).
+
+                    # Extract process-step supervision targets
+                    process_targets = {}
+                    if tokenizer and not args.no_process_supervision:
+                        try:
+                            process_targets = extract_process_step_targets(
+                                teacher_text=result["teacher_text"],
+                                tokenizer=tokenizer,
+                                tool_names=None,  # TODO: Load from tool registry if available
+                            )
+                            # Add to result
+                            result.update(process_targets)
+                        except Exception as e:
+                            print(f"[make_kd_mix_hardened] WARN: Failed to extract process-step targets: {e}")
 
                     # Compute quality score for self-evaluation head training
                     # NOTE: This is optional and can be disabled via --no-quality-scores
