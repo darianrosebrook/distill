@@ -123,9 +123,8 @@ try:
         print(f"   ⚠️  Dataset is empty - need to generate training data")
     elif len(dataset) < 100:
         print(f"   ⚠️  Dataset is small ({len(dataset)} samples) - recommend 10k+ for training")
-    else
+    else:
         print(f"   ✅ Dataset size looks good")
-    fi
 except Exception as e:
     print(f"   ⚠️  Dataset loading failed (may be expected if dataset is empty): {e}")
 PYTHON_EOF
