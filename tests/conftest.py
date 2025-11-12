@@ -100,32 +100,24 @@ def mock_tokenizer():
             self.vocab_size = 1000
             self.pad_token_id = 0
             self.eos_token_id = 1
-        
-        def __call__(self, text, return_tensors=None, padding=None, truncation=None, max_length=None, **kwargs):
-            # Simple mock: tokenize by splitting on spaces
-            tokens = text.split()
-            token_ids = [hash(t) % self.vocab_size for t in tokens]
-            
-            if max_length:
-                token_ids = token_ids[:max_length]
-            
-            if padding == "max_length" and max_length:
-                while len(token_ids) < max_length:
-                    token_ids.append(self.pad_token_id)
-            
-            result = {"input_ids": torch.tensor([token_ids])}
-            
-            if return_tensors == "pt":
-                return result
-            return result
+            self.pad_token = None
         
         def encode(self, text, add_special_tokens=False, **kwargs):
+            """Encode text to token IDs."""
+            # Simple mock: tokenize by splitting on spaces
             tokens = text.split()
-            return [hash(t) % self.vocab_size for t in tokens]
+            token_ids = [abs(hash(t)) % self.vocab_size for t in tokens]
+            
+            if add_special_tokens:
+                token_ids = [self.eos_token_id] + token_ids + [self.eos_token_id]
+            
+            return token_ids
         
-        def decode(self, token_ids, skip_special_tokens=False, **kwargs):
-            # Simple mock decode
-            return " ".join([f"token_{i}" for i in token_ids])
+        def __len__(self):
+            """Return vocabulary size."""
+            return self.vocab_size
     
-    return MockTokenizer()
+    tokenizer = MockTokenizer()
+    tokenizer.pad_token = tokenizer.eos_token_id  # Set pad_token attribute
+    return tokenizer
 
