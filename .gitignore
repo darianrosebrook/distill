@@ -192,6 +192,9 @@ DerivedData/
 # CAWS Tools Infrastructure
 apps/tools/caws/
 
+# CAWS Provenance Chain (auto-generated, causes merge conflicts)
+.caws/provenance/chain.json
+
 # IDE-specific configurations
 .windsurf/
 .github/copilot/
