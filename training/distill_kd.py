@@ -619,6 +619,80 @@ def train_step(
                     loss_dict["total"] = loss_dict["total"] + \
                         eval_weight * eval_loss
 
+        # ====================================================================
+        # PRIORITY 5: CAWS Structure Scoring
+        # ====================================================================
+        # Compute CAWS structure scores and add structure loss
+        use_caws_structure = kd_cfg.get("use_caws_structure", False)
+        caws_structure_weight = kd_cfg.get("caws_structure_weight", 0.05)
+        
+        if use_caws_structure and caws_structure_weight > 0:
+            # Only check on batches with text outputs (when teacher_text available)
+            teacher_text = batch.get("teacher_text")
+            if teacher_text is not None:
+                # Generate text from student logits for structure comparison
+                if tokenizer is None:
+                    # Try to get tokenizer
+                    if hasattr(model, 'tokenizer'):
+                        tokenizer = model.tokenizer
+                    elif hasattr(model, 'module') and hasattr(model.module, 'tokenizer'):
+                        tokenizer = model.module.tokenizer
+                    elif 'tokenizer_path' in cfg:
+                        from training.dataset import load_tokenizer
+                        tokenizer = load_tokenizer(cfg['tokenizer_path'])
+                
+                if tokenizer is not None:
+                    try:
+                        from training.caws_structure import caws_structure_score
+                        from training.losses import caws_structure_loss
+                        
+                        # Generate text from student logits (greedy decoding)
+                        pred_token_ids = student_logits.argmax(dim=-1)  # [B, T]
+                        student_texts = []
+                        
+                        for i in range(pred_token_ids.size(0)):
+                            tokens = pred_token_ids[i].cpu().tolist()
+                            try:
+                                text = tokenizer.decode(tokens, skip_special_tokens=True)
+                                student_texts.append(text)
+                            except:
+                                student_texts.append("")
+                        
+                        # Compute structure scores
+                        teacher_text_normalized = teacher_text
+                        if isinstance(teacher_text, list):
+                            teacher_text_normalized = teacher_text[0] if teacher_text else ""
+                        elif not isinstance(teacher_text, str):
+                            teacher_text_normalized = str(teacher_text)
+                        
+                        teacher_structure_score = caws_structure_score(teacher_text_normalized)
+                        
+                        # Compute structure loss for each student output
+                        structure_losses = []
+                        for student_text in student_texts:
+                            student_structure_score = caws_structure_score(student_text)
+                            struct_loss = caws_structure_loss(
+                                teacher_score=teacher_structure_score,
+                                student_score=student_structure_score
+                            )
+                            structure_losses.append(struct_loss)
+                        
+                        if structure_losses:
+                            # Average structure loss over batch
+                            batch_structure_loss = torch.stack(structure_losses).mean()
+                            loss_dict["caws_structure"] = batch_structure_loss
+                            loss_dict["total"] = loss_dict["total"] + caws_structure_weight * batch_structure_loss
+                            
+                            # Log structure scores periodically
+                            if current_step % 100 == 0:
+                                avg_student_score = sum(caws_structure_score(st) for st in student_texts) / len(student_texts) if student_texts else 0.0
+                                print(f"[distill_kd] CAWS structure: teacher={teacher_structure_score:.3f}, "
+                                      f"student_avg={avg_student_score:.3f}, loss={batch_structure_loss.item():.3f}")
+                    except Exception as e:
+                        # Don't fail training if structure check fails
+                        if current_step % 100 == 0:
+                            print(f"[distill_kd] WARN: CAWS structure check failed: {e}")
+
         # CAWS compliance loss (optional, config-driven)
         if kd_cfg.get("use_caws_compliance", False):
             # Get teacher text from batch if available

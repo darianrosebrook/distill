@@ -113,7 +113,7 @@ class TestProcessStepLosses:
         seq_len = 10
         vocab_size = 1000
         
-        student_logits = torch.randn(batch_size, seq_len, vocab_size)
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, requires_grad=True)
         tool_name_ids = torch.randint(0, vocab_size, (batch_size, 5))  # 5 tokens for tool name
         tool_name_mask = torch.ones(batch_size, 5, dtype=torch.bool)
         
@@ -129,7 +129,7 @@ class TestProcessStepLosses:
         seq_len = 10
         vocab_size = 1000
         
-        student_logits = torch.randn(batch_size, seq_len, vocab_size)
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, requires_grad=True)
         gold_json_text_ids = torch.randint(0, vocab_size, (batch_size, 8))
         mask_valid_json_tokens = torch.ones(batch_size, 8, dtype=torch.bool)
         
@@ -147,7 +147,7 @@ class TestProcessStepLosses:
         seq_len = 10
         vocab_size = 1000
         
-        student_logits = torch.randn(batch_size, seq_len, vocab_size)
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, requires_grad=True)
         tool_result_fields = torch.randint(0, vocab_size, (batch_size, 6))
         integration_mask = torch.ones(batch_size, 6, dtype=torch.bool)
         
@@ -165,7 +165,7 @@ class TestProcessStepLosses:
         seq_len = 10
         vocab_size = 1000
         
-        student_logits = torch.randn(batch_size, seq_len, vocab_size)
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, requires_grad=True)
         teacher_logits = torch.randn(batch_size, seq_len, vocab_size)
         teacher_targets = torch.randint(0, vocab_size, (batch_size, seq_len))
         ground_truth_targets = torch.randint(0, vocab_size, (batch_size, seq_len))

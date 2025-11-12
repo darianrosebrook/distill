@@ -648,14 +648,34 @@ def entropy_weighting(
 def json_repair_loss(required_repair: bool) -> torch.Tensor:
     """
     Binary loss penalizing sequences that required JSON repair.
-
+    
     Args:
         required_repair: True if JSON repair was needed, False otherwise
-
+        
     Returns:
         Loss tensor: 1.0 if repair needed, 0.0 otherwise
     """
     return torch.tensor(1.0 if required_repair else 0.0, dtype=torch.float32, requires_grad=True)
+
+
+def caws_structure_loss(teacher_score: float, student_score: float) -> torch.Tensor:
+    """
+    Loss based on CAWS structure score difference.
+    
+    Only penalizes if student score is lower than teacher score.
+    Encourages student to match teacher's structure quality.
+    
+    Args:
+        teacher_score: CAWS structure score from teacher output (0.0-1.0)
+        student_score: CAWS structure score from student output (0.0-1.0)
+        
+    Returns:
+        Loss tensor: max(0.0, teacher_score - student_score)
+    """
+    diff = teacher_score - student_score
+    # Only penalize if student < teacher
+    loss_value = max(0.0, diff)
+    return torch.tensor(loss_value, dtype=torch.float32, requires_grad=True)
 
 
 def combined_kd_loss(

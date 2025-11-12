@@ -289,6 +289,11 @@ def main():
                     help='Disable quality score computation (saves computation time)')
     ap.add_argument('--extract-teacher-hidden-states', action='store_true',
                     help='Extract teacher hidden states (requires local teacher model)')
+    ap.add_argument('--model-role', choices=['worker', 'judge', 'drafter', 'mixed'],
+                    default='mixed',
+                    help='Model role for prompt templates (mixed=use get_prompt_mix, worker/judge/drafter=use templates)')
+    ap.add_argument('--use-compact-caws', action='store_true', default=True,
+                    help='Use compact CAWS format in templates (default: True)')
     args = ap.parse_args()
 
     # Estimate costs before starting
@@ -316,16 +321,6 @@ def main():
             checkpoint_manager.clear_checkpoint()
             print("[make_kd_mix_hardened] Cleared existing checkpoint")
 
-    # Load prompts
-    if args.prompts_file:
-        prompts = load_prompts_from_file(args.prompts_file)
-    else:
-        prompts = get_prompt_mix(
-            total=args.total,
-            general_ratio=args.general_ratio,
-            domain_ratio=args.domain_ratio,
-            tool_ratio=args.tool_ratio,
-        )
 
     # Resume from checkpoint if requested
     completed_indices = set()
@@ -422,6 +417,69 @@ def main():
                 f"[make_kd_mix_hardened] WARN: Failed to extract CAWS context: {e}")
             print(f"[make_kd_mix_hardened] Continuing without CAWS augmentation")
 
+    # Load prompts (after CAWS context extraction so we can pass it to templates)
+    if args.prompts_file:
+        prompts = load_prompts_from_file(args.prompts_file)
+    elif args.model_role == 'mixed':
+        # Use existing get_prompt_mix() for backward compatibility
+        prompts = get_prompt_mix(
+            total=args.total,
+            general_ratio=args.general_ratio,
+            domain_ratio=args.domain_ratio,
+            tool_ratio=args.tool_ratio,
+        )
+    else:
+        # Use prompt templates for structured prompts
+        from training.prompt_templates import (
+            WorkerPromptTemplate,
+            JudgePromptTemplate,
+            DrafterPromptTemplate,
+        )
+        
+        # Generate prompts using templates (with CAWS context if available)
+        prompts = []
+        if args.model_role == 'worker':
+            # Generate worker prompts using autonomous_coding_agent template
+            for i in range(args.total):
+                task_id = f"TASK-{i+1:04d}"
+                description = f"Task {i+1}: Implement feature or fix bug"
+                # Pass CAWS context directly to template
+                prompt = WorkerPromptTemplate.autonomous_coding_agent(
+                    task_id=task_id,
+                    description=description,
+                    caws_context=caws_context,  # Pass CAWS context directly
+                    use_compact_caws=args.use_compact_caws,
+                )
+                prompts.append(prompt)
+        elif args.model_role == 'judge':
+            # Generate judge prompts using caws_debate_scoring template
+            for i in range(args.total):
+                working_spec = {
+                    "id": f"FEAT-{i+1:04d}",
+                    "title": f"Feature {i+1}",
+                    "risk_tier": caws_context.risk_tier if caws_context else 2,
+                    "mode": caws_context.mode if caws_context else "feature",
+                }
+                worker_outputs = [
+                    {"worker_id": "worker1", "content": "Solution 1 content"},
+                    {"worker_id": "worker2", "content": "Solution 2 content"},
+                ]
+                prompt = JudgePromptTemplate.caws_debate_scoring(
+                    worker_outputs=worker_outputs,
+                    working_spec=working_spec,
+                )
+                prompts.append(prompt)
+        elif args.model_role == 'drafter':
+            # Generate drafter prompts using speculative_decoding template
+            for i in range(args.total):
+                base_prompt = f"Generate draft tokens for task {i+1}"
+                prompt = DrafterPromptTemplate.speculative_decoding(
+                    prompt=base_prompt,
+                )
+                prompts.append(prompt)
+        
+        print(f"[make_kd_mix_hardened] Generated {len(prompts)} prompts using {args.model_role} template")
+
     # Sample from teacher
     cached = 0
     errors = 0
@@ -467,8 +525,11 @@ def main():
                 continue
 
             # Augment prompt with CAWS context if available
+            # Note: For template-based prompts (worker/judge/drafter), CAWS context is already
+            # integrated into the template. For mixed prompts, we augment here.
             augmented_prompt = prompt
-            if caws_context and not args.no_caws_context:
+            if caws_context and not args.no_caws_context and args.model_role == 'mixed':
+                # Only augment mixed prompts (templates already have CAWS context)
                 caws_context_str = format_caws_context_for_prompt(caws_context)
                 if caws_context_str:
                     augmented_prompt = f"{prompt}\n\n{caws_context_str}"
