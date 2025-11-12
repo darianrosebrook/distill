@@ -31,9 +31,93 @@ from training.losses import (
     intermediate_layer_loss,
     self_evaluation_loss,
     create_projection_layers,
+    length_aware_kd_loss,
+    early_tool_call_loss,
 )
 from training.dataset import KDDataset, collate_kd_batch
 from training.tracing import TrainingTracer, create_tracer_from_config
+
+# QAT imports (optional, only if quant.enabled)
+try:
+    from training.quant_qat_int8 import quantize_model
+    QAT_AVAILABLE = True
+except ImportError:
+    QAT_AVAILABLE = False
+    quantize_model = None
+
+# Speed metrics imports
+try:
+    from training.speed_metrics import measure_proxy, aggregate_speed_metrics
+    SPEED_METRICS_AVAILABLE = True
+except ImportError:
+    SPEED_METRICS_AVAILABLE = False
+    measure_proxy = None
+    aggregate_speed_metrics = None
+
+
+def compute_required_fields_present(
+    batch: Dict[str, torch.Tensor],
+    tokenizer,
+    device: torch.device,
+) -> torch.Tensor:
+    """
+    Compute boolean mask indicating if student has all required fields present.
+
+    Checks if student output contains all required tool arguments/evidence fields
+    by comparing against teacher's validated arguments.
+
+    Args:
+        batch: Training batch dictionary
+        tokenizer: Tokenizer for decoding
+        device: Device to place tensors on
+
+    Returns:
+        [B] boolean tensor: True if all required fields present, False otherwise
+    """
+    B = batch.get("input_ids", torch.empty(0)).size(0)
+    if B == 0:
+        return torch.zeros(0, dtype=torch.bool, device=device)
+
+    # Default: assume fields present (no penalty) if we can't verify
+    # This is conservative - only penalize when we're confident fields are missing
+    required_present = torch.ones(B, dtype=torch.bool, device=device)
+
+    # Check if we have validated arguments from teacher
+    validated_args = batch.get("validated_arguments")
+    if validated_args is None:
+        # No validation data available - assume complete (no penalty)
+        return required_present
+
+    # If we have gold_json_text_ids, check if student logits match required fields
+    # For now, use a simple heuristic: if gold_json_text_ids exists and is non-empty,
+    # assume teacher has required fields. Student completeness check would require
+    # generating text and parsing, which is expensive.
+    #
+    # TODO: Implement full completeness check by:
+    # 1. Generating text from student logits
+    # 2. Extracting tool call JSON
+    # 3. Validating against schema required fields
+    # 4. Comparing with teacher's validated arguments
+
+    gold_json_ids = batch.get("gold_json_text_ids")
+    if gold_json_ids is not None:
+        # Simple heuristic: if teacher has JSON args, check if student mask covers them
+        mask_valid_json = batch.get("mask_valid_json_tokens")
+        if mask_valid_json is not None:
+            # Check if student attention mask covers JSON span
+            # This is a proxy - full check requires text generation
+            student_attn_mask = batch.get("attention_mask")
+            if student_attn_mask is not None:
+                # For now, assume complete if student has attention over JSON span
+                # More sophisticated: decode and validate actual fields
+                json_length = min(gold_json_ids.size(
+                    1), student_attn_mask.size(1))
+                student_covers_json = student_attn_mask[:, :json_length].sum(
+                    dim=1) > 0
+                # If student doesn't cover JSON span, mark as incomplete
+                required_present = student_covers_json
+
+    return required_present
 
 
 def load_config(config_path: str) -> Dict[str, Any]:
@@ -178,6 +262,218 @@ def get_sequence_length(step: int, seq_lengths: list, curriculum_schedule: Optio
             return seq_lengths[min(i, len(seq_lengths) - 1)]
 
     return seq_lengths[-1]
+
+
+def sample_enumerated_shape(
+    seq_lengths: list,
+    shape_probs: Optional[list] = None,
+    step: Optional[int] = None,
+    periodic_upweight_rare: bool = True,
+) -> int:
+    """
+    Sample sequence length from enumerated shapes using Dirichlet-like distribution.
+
+    Reference: inference-speed-optimization-during-distillation-c3d3cffc.plan.md Phase 2
+
+    Args:
+        seq_lengths: List of available sequence lengths (e.g., [512, 1024, 2048, 4096])
+        shape_probs: Optional probability distribution over shapes (default: production mix)
+        step: Current training step (for periodic upweighting)
+        periodic_upweight_rare: If True, periodically upweight rare shapes
+
+    Returns:
+        Sampled sequence length
+    """
+    if shape_probs is None:
+        # Default production mix: 0.5:0.3:0.15:0.05 for 4 shapes
+        # Adjust based on your production distribution
+        n = len(seq_lengths)
+        if n == 4:
+            shape_probs = [0.5, 0.3, 0.15, 0.05]
+        elif n == 3:
+            shape_probs = [0.6, 0.3, 0.1]
+        elif n == 2:
+            shape_probs = [0.7, 0.3]
+        else:
+            # Uniform fallback
+            shape_probs = [1.0 / n] * n
+
+    # Normalize probabilities
+    total = sum(shape_probs)
+    shape_probs = [p / total for p in shape_probs]
+
+    # Periodic upweighting for rare shapes (every 100 steps)
+    if periodic_upweight_rare and step is not None:
+        if step % 100 == 0:
+            # Temporarily increase probability of smallest shape
+            adjusted_probs = shape_probs.copy()
+            adjusted_probs[-1] *= 2.0  # Double probability of smallest shape
+            total_adj = sum(adjusted_probs)
+            adjusted_probs = [p / total_adj for p in adjusted_probs]
+            shape_probs = adjusted_probs
+
+    # Sample according to distribution
+    return random.choices(seq_lengths, weights=shape_probs, k=1)[0]
+
+
+def should_enable_qat(step: int, total_steps: int, qat_cfg: Dict[str, Any]) -> bool:
+    """
+    Check if QAT should be enabled at current step.
+
+    Reference: inference-speed-optimization-during-distillation-c3d3cffc.plan.md Phase 3
+
+    Args:
+        step: Current training step
+        total_steps: Total training steps
+        qat_cfg: QAT configuration dict
+
+    Returns:
+        True if QAT should be enabled
+    """
+    if not qat_cfg.get("enabled", False):
+        return False
+
+    start_fraction = qat_cfg.get("start_fraction", 0.8)  # Default: last 20%
+    start_step = int(total_steps * start_fraction)
+    return step >= start_step
+
+
+def apply_qat_to_model(
+    model: nn.Module,
+    qat_cfg: Dict[str, Any],
+    device: torch.device,
+) -> nn.Module:
+    """
+    Apply quantization-aware training to model.
+
+    Reference: inference-speed-optimization-during-distillation-c3d3cffc.plan.md Phase 3
+
+    Args:
+        model: Model to quantize
+        qat_cfg: QAT configuration dict
+        device: Device to use
+
+    Returns:
+        Quantized model
+    """
+    if not QAT_AVAILABLE:
+        raise RuntimeError("QAT not available. Install required dependencies.")
+
+    weight_bits = qat_cfg.get("weight_bits", 8)
+    act_bits = qat_cfg.get("act_bits", 8)
+    fake_quant_in_attention = qat_cfg.get("fake_quant_in_attention", True)
+    clamp_pre_softmax = qat_cfg.get("clamp_pre_softmax", True)
+
+    print(
+        f"[distill_kd] Applying QAT: weight_bits={weight_bits}, act_bits={act_bits}")
+    quantized_model = quantize_model(
+        model,
+        weight_bits=weight_bits,
+        act_bits=act_bits,
+        fake_quant_in_attention=fake_quant_in_attention,
+        clamp_pre_softmax=clamp_pre_softmax,
+    )
+    return quantized_model.to(device)
+
+
+def check_qat_stability(
+    model: nn.Module,
+    batch: Dict[str, torch.Tensor],
+    device: torch.device,
+) -> Dict[str, float]:
+    """
+    Check QAT stability: cosine similarity probes and NaN detection.
+
+    Reference: inference-speed-optimization-during-distillation-c3d3cffc.plan.md Phase 3
+
+    Args:
+        model: Model to check
+        batch: Batch for forward pass
+        device: Device to use
+
+    Returns:
+        Dictionary with stability metrics
+    """
+    model.eval()
+    with torch.no_grad():
+        try:
+            input_ids = batch["input_ids"].to(device)
+            attention_mask = batch.get("attention_mask")
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(device)
+
+            # Forward pass
+            logits = model(input_ids, attention_mask)
+
+            # Check for NaNs
+            has_nan = torch.isnan(logits).any().item()
+
+            # PLACEHOLDER: Compute cosine similarity on probe layers (if available)
+            # Actual implementation would:
+            # 1. Extract hidden states from model with return_hidden_states=True
+            # 2. Compare against baseline (pre-quantization) hidden states
+            # 3. Compute cosine similarity per layer and aggregate
+            # For now, return 1.0 (perfect similarity) as placeholder
+            cosine_sim = 1.0  # PLACEHOLDER: Real implementation requires baseline model comparison
+
+            return {
+                "qat_stability.has_nan": float(has_nan),
+                "qat_stability.cosine_sim": cosine_sim,
+            }
+        except Exception as e:
+            return {
+                "qat_stability.has_nan": 1.0,
+                "qat_stability.cosine_sim": 0.0,
+                "qat_stability.error": str(e),
+            }
+        finally:
+            model.train()
+
+
+def truncate_batch_to_shape(batch: Dict[str, torch.Tensor], target_length: int) -> Dict[str, torch.Tensor]:
+    """
+    Truncate batch tensors to target sequence length.
+
+    Reference: inference-speed-optimization-during-distillation-c3d3cffc.plan.md Phase 2
+
+    Args:
+        batch: Batch dictionary with tensors to truncate
+        target_length: Target sequence length
+
+    Returns:
+        Truncated batch dictionary
+    """
+    truncated = {}
+
+    # List of keys that should be truncated (sequence dimension is dim 1)
+    seq_keys = [
+        "input_ids", "attention_mask", "labels", "teacher_target_ids",
+        "tool_name_ids", "tool_name_mask", "gold_json_text_ids",
+        "mask_valid_json_tokens", "tool_result_fields", "integration_mask",
+        "teacher_attention_mask",
+    ]
+
+    # List of keys that should be truncated (sequence dimension is dim 1, vocab is dim 2)
+    seq_vocab_keys = ["teacher_logits"]
+
+    for key, value in batch.items():
+        if key in seq_keys:
+            # Truncate along sequence dimension (dim 1)
+            if value.size(1) > target_length:
+                truncated[key] = value[:, :target_length]
+            else:
+                truncated[key] = value
+        elif key in seq_vocab_keys:
+            # Truncate along sequence dimension (dim 1), keep vocab (dim 2)
+            if value.size(1) > target_length:
+                truncated[key] = value[:, :target_length, :]
+            else:
+                truncated[key] = value
+        else:
+            # Keep other keys as-is (metadata, etc.)
+            truncated[key] = value
+
+    return truncated
 
 
 def save_checkpoint(
@@ -440,6 +736,92 @@ def train_step(
         )
 
         # ====================================================================
+        # LATENCY-AWARE LOSSES: Length-aware KD + Early Tool Call
+        # ====================================================================
+        # Length-aware KD loss: penalize extra student length only when required fields missing
+        use_length_kd = kd_cfg.get("use_length_aware_kd", False)
+        length_kd_weight = kd_cfg.get("length_kd_weight", 0.05)
+
+        if use_length_kd and length_kd_weight > 0:
+            # Get attention masks for length computation
+            student_attn_mask = attention_mask
+            teacher_attn_mask = batch.get("teacher_attention_mask")
+
+            if teacher_attn_mask is not None:
+                teacher_attn_mask = teacher_attn_mask.to(device)
+
+                # Compute required_fields_present
+                required_fields = compute_required_fields_present(
+                    batch=batch,
+                    tokenizer=tokenizer,
+                    device=device,
+                )
+
+                # Compute length-aware KD loss
+                length_kd_loss, length_diags = length_aware_kd_loss(
+                    student_attn_mask=student_attn_mask,
+                    teacher_attn_mask=teacher_attn_mask,
+                    required_fields_present=required_fields,
+                    hinge=kd_cfg.get("length_kd_hinge", 0.15),
+                    slope=kd_cfg.get("length_kd_slope", 1.0),
+                    reduction="mean",
+                )
+
+                # Add to loss dict
+                loss_dict["length_kd"] = length_kd_loss
+                loss_dict["total"] = loss_dict["total"] + \
+                    length_kd_weight * length_kd_loss
+
+                # Add diagnostics to loss dict for logging
+                loss_dict.update(length_diags)
+
+        # Early tool call loss: encourage valid tool JSON within first N tokens
+        use_early_tool = kd_cfg.get("use_early_tool_call_loss", False)
+        early_tool_weight = kd_cfg.get("early_tool_weight", 0.05)
+
+        if use_early_tool and early_tool_weight > 0 and tokenizer is not None:
+            # Get tool_should_be_used from batch metadata
+            tool_should_be_used = batch.get("tool_should_be_used")
+
+            if tool_should_be_used is not None:
+                tool_should_be_used = tool_should_be_used.to(device)
+
+                # Get teacher prefix IDs if available (first N tokens of teacher's tool JSON)
+                teacher_prefix_ids = batch.get("teacher_prefix_ids")
+                if teacher_prefix_ids is not None:
+                    teacher_prefix_ids = teacher_prefix_ids.to(device)
+
+                # Compute ramp_t (linear 0→1 over warmup epochs)
+                warmup_epochs = kd_cfg.get("early_tool_warmup_epochs", 5)
+                total_epochs = cfg.get("train", {}).get("total_epochs", 100)
+                current_epoch = current_step // (
+                    cfg.get("train", {}).get("steps_per_epoch", 1000))
+                ramp_t = min(1.0, max(0.0, current_epoch /
+                             warmup_epochs)) if warmup_epochs > 0 else 1.0
+
+                # Compute early tool call loss
+                early_tool_loss, early_tool_diags = early_tool_call_loss(
+                    logits=student_logits,
+                    input_ids=input_ids,
+                    tool_should_be_used=tool_should_be_used,
+                    tokenizer=tokenizer,
+                    teacher_prefix_ids=teacher_prefix_ids,
+                    N=kd_cfg.get("early_tool_N", 25),
+                    json_prior_weight=kd_cfg.get(
+                        "early_tool_json_prior_weight", 0.02),
+                    ce_weight=kd_cfg.get("early_tool_ce_weight", 0.2),
+                    ramp_t=ramp_t,
+                )
+
+                # Add to loss dict
+                loss_dict["early_tool"] = early_tool_loss
+                loss_dict["total"] = loss_dict["total"] + \
+                    early_tool_weight * early_tool_loss
+
+                # Add diagnostics to loss dict for logging
+                loss_dict.update(early_tool_diags)
+
+        # ====================================================================
         # PRIORITY 3 INTEGRATION: Intermediate Layer Loss
         # ====================================================================
         if use_intermediate_layers and student_hidden_states is not None:
@@ -625,7 +1007,7 @@ def train_step(
         # Compute CAWS structure scores and add structure loss
         use_caws_structure = kd_cfg.get("use_caws_structure", False)
         caws_structure_weight = kd_cfg.get("caws_structure_weight", 0.05)
-        
+
         if use_caws_structure and caws_structure_weight > 0:
             # Only check on batches with text outputs (when teacher_text available)
             teacher_text = batch.get("teacher_text")
@@ -640,58 +1022,66 @@ def train_step(
                     elif 'tokenizer_path' in cfg:
                         from training.dataset import load_tokenizer
                         tokenizer = load_tokenizer(cfg['tokenizer_path'])
-                
+
                 if tokenizer is not None:
                     try:
                         from training.caws_structure import caws_structure_score
                         from training.losses import caws_structure_loss
-                        
+
                         # Generate text from student logits (greedy decoding)
-                        pred_token_ids = student_logits.argmax(dim=-1)  # [B, T]
+                        pred_token_ids = student_logits.argmax(
+                            dim=-1)  # [B, T]
                         student_texts = []
-                        
+
                         for i in range(pred_token_ids.size(0)):
                             tokens = pred_token_ids[i].cpu().tolist()
                             try:
-                                text = tokenizer.decode(tokens, skip_special_tokens=True)
+                                text = tokenizer.decode(
+                                    tokens, skip_special_tokens=True)
                                 student_texts.append(text)
                             except:
                                 student_texts.append("")
-                        
+
                         # Compute structure scores
                         teacher_text_normalized = teacher_text
                         if isinstance(teacher_text, list):
                             teacher_text_normalized = teacher_text[0] if teacher_text else ""
                         elif not isinstance(teacher_text, str):
                             teacher_text_normalized = str(teacher_text)
-                        
-                        teacher_structure_score = caws_structure_score(teacher_text_normalized)
-                        
+
+                        teacher_structure_score = caws_structure_score(
+                            teacher_text_normalized)
+
                         # Compute structure loss for each student output
                         structure_losses = []
                         for student_text in student_texts:
-                            student_structure_score = caws_structure_score(student_text)
+                            student_structure_score = caws_structure_score(
+                                student_text)
                             struct_loss = caws_structure_loss(
                                 teacher_score=teacher_structure_score,
                                 student_score=student_structure_score
                             )
                             structure_losses.append(struct_loss)
-                        
+
                         if structure_losses:
                             # Average structure loss over batch
-                            batch_structure_loss = torch.stack(structure_losses).mean()
+                            batch_structure_loss = torch.stack(
+                                structure_losses).mean()
                             loss_dict["caws_structure"] = batch_structure_loss
-                            loss_dict["total"] = loss_dict["total"] + caws_structure_weight * batch_structure_loss
-                            
+                            loss_dict["total"] = loss_dict["total"] + \
+                                caws_structure_weight * batch_structure_loss
+
                             # Log structure scores periodically
                             if current_step % 100 == 0:
-                                avg_student_score = sum(caws_structure_score(st) for st in student_texts) / len(student_texts) if student_texts else 0.0
+                                avg_student_score = sum(caws_structure_score(
+                                    st) for st in student_texts) / len(student_texts) if student_texts else 0.0
                                 print(f"[distill_kd] CAWS structure: teacher={teacher_structure_score:.3f}, "
                                       f"student_avg={avg_student_score:.3f}, loss={batch_structure_loss.item():.3f}")
                     except Exception as e:
                         # Don't fail training if structure check fails
                         if current_step % 100 == 0:
-                            print(f"[distill_kd] WARN: CAWS structure check failed: {e}")
+                            print(
+                                f"[distill_kd] WARN: CAWS structure check failed: {e}")
 
         # CAWS compliance loss (optional, config-driven)
         if kd_cfg.get("use_caws_compliance", False):
@@ -931,15 +1321,19 @@ def main():
 
     train_shards = io_cfg.get("train_shards", ["data/kd_mix.jsonl"])
 
-    # Use first sequence length for initial dataset
+    # Get sequence lengths for enumerated shape training
     seq_lengths = train_cfg.get("seq_lengths", [4096])
-    current_seq_len = get_sequence_length(
-        start_step, seq_lengths, cfg.get("curriculum", {}).get("schedule"))
+    use_enumerated_shapes = train_cfg.get("use_enumerated_shapes", False)
+    # Optional Dirichlet distribution
+    shape_probs = train_cfg.get("shape_probs", None)
+
+    # Use max sequence length for dataset (will truncate per batch if using enumerated shapes)
+    max_seq_len = max(seq_lengths) if seq_lengths else 4096
 
     dataset = KDDataset(
         jsonl_path=train_shards[0],
         tokenizer_path=tokenizer_path,
-        max_seq_length=current_seq_len,
+        max_seq_length=max_seq_len,
         teacher_logits_available=cfg.get("kd", {}).get(
             "teacher_logits_available", False),
     )
@@ -1000,6 +1394,14 @@ def main():
 
     step = start_step
     grad_accum_counter = 0
+    qat_enabled = False
+    qat_applied = False
+
+    # QAT configuration
+    qat_cfg = cfg.get("quant", {})
+    qat_lr_multiplier = qat_cfg.get(
+        "lr_multiplier", 0.1)  # Default: 10× lower LR
+    base_lr = cfg.get("optimizer", {}).get("lr", 2e-4)
 
     # Iterate over dataset multiple times if needed
     while step < total_steps:
@@ -1007,11 +1409,59 @@ def main():
             if step >= total_steps:
                 break
 
-            # Update sequence length based on curriculum
-            current_seq_len = get_sequence_length(
-                step, seq_lengths, cfg.get("curriculum", {}).get("schedule"))
-            # Note: For simplicity, we use the dataset's max_seq_length.
-            # In production, you'd want to dynamically filter/truncate batches.
+            # Check if QAT should be enabled
+            qat_should_enable = should_enable_qat(step, total_steps, qat_cfg)
+            if qat_should_enable and not qat_applied:
+                # Apply QAT to model
+                print(
+                    f"[distill_kd] Step {step}: Enabling QAT (last {int((1 - qat_cfg.get('start_fraction', 0.8)) * 100)}% of training)")
+                if isinstance(model, DDP):
+                    model.module = apply_qat_to_model(
+                        model.module, qat_cfg, device)
+                else:
+                    model = apply_qat_to_model(model, qat_cfg, device)
+
+                # Recreate optimizer with lower LR for QAT
+                qat_lr = base_lr * qat_lr_multiplier
+                print(
+                    f"[distill_kd] Adjusting LR for QAT: {base_lr} → {qat_lr}")
+                optimizer = create_optimizer(model.module if isinstance(model, DDP) else model, {
+                    **cfg.get("optimizer", {}),
+                    "lr": qat_lr,
+                })
+
+                qat_applied = True
+                qat_enabled = True
+
+            # Check QAT stability periodically (every 100 steps)
+            if qat_enabled and step % 100 == 0:
+                stability_metrics = check_qat_stability(
+                    model.module if isinstance(model, DDP) else model,
+                    batch,
+                    device,
+                )
+                if stability_metrics.get("qat_stability.has_nan", 0.0) > 0:
+                    print(
+                        f"[distill_kd] WARN: NaN detected in QAT model at step {step}")
+                if stability_metrics.get("qat_stability.cosine_sim", 1.0) < 0.999:
+                    print(
+                        f"[distill_kd] WARN: Low cosine similarity in QAT model at step {step}")
+
+            # Sample sequence length (enumerated shapes or curriculum)
+            if use_enumerated_shapes:
+                current_seq_len = sample_enumerated_shape(
+                    seq_lengths=seq_lengths,
+                    shape_probs=shape_probs,
+                    step=step,
+                    periodic_upweight_rare=train_cfg.get(
+                        "periodic_upweight_rare", True),
+                )
+                # Truncate batch to sampled shape
+                batch = truncate_batch_to_shape(batch, current_seq_len)
+            else:
+                # Fallback to curriculum learning
+                current_seq_len = get_sequence_length(
+                    step, seq_lengths, cfg.get("curriculum", {}).get("schedule"))
 
             # Training step
             loss_dict = train_step(
@@ -1028,6 +1478,67 @@ def main():
 
             grad_accum_counter = (grad_accum_counter + 1) % grad_accum
             step += 1
+
+            # Speed metrics during validation (every N steps)
+            # Default: every 1000 steps
+            val_every = train_cfg.get("val_every", 1000)
+            if SPEED_METRICS_AVAILABLE and step % val_every == 0 and is_main_process:
+                try:
+                    # Load tokenizer if available
+                    from training.dataset import load_tokenizer
+                    val_tokenizer = load_tokenizer(tokenizer_path)
+
+                    # Measure speed metrics on a few batches
+                    speed_metrics_list = []
+                    # Measure on up to 5 batches
+                    val_batch_count = min(5, len(dataloader))
+
+                    for val_batch_idx, val_batch in enumerate(dataloader):
+                        if val_batch_idx >= val_batch_count:
+                            break
+
+                        # Truncate to reasonable length for speed measurement
+                        if use_enumerated_shapes:
+                            val_batch = truncate_batch_to_shape(
+                                val_batch, min(seq_lengths))
+
+                        metrics = measure_proxy(
+                            model=model.module if isinstance(
+                                model, DDP) else model,
+                            batch=val_batch,
+                            tokenizer=val_tokenizer,
+                            device=device,
+                            max_new_tokens=64,
+                        )
+                        speed_metrics_list.append(metrics)
+
+                    # Aggregate metrics
+                    if speed_metrics_list:
+                        aggregated = aggregate_speed_metrics(
+                            speed_metrics_list)
+
+                        # Log with export=False tag (these are proxies)
+                        if tracer:
+                            tracer.log_metrics(
+                                step=step,
+                                metrics={
+                                    "speed/ttft_ms_p50": aggregated["ttft_ms"]["p50"],
+                                    "speed/ttft_ms_p95": aggregated["ttft_ms"]["p95"],
+                                    "speed/tps_p50": aggregated["tps"]["p50"],
+                                    "speed/tps_p95": aggregated["tps"]["p95"],
+                                    "speed/ttfa_tokens_p95": aggregated["ttfa_tokens"]["p95"],
+                                    # Tag: export=False (proxy metrics)
+                                    "speed/export": 0.0,
+                                },
+                                prefix="val/",
+                            )
+                        else:
+                            print(f"[distill_kd] Step {step} speed metrics (proxy): "
+                                  f"TTFT p50={aggregated['ttft_ms']['p50']:.1f}ms, "
+                                  f"TPS p50={aggregated['tps']['p50']:.1f} tok/s")
+                except Exception as e:
+                    print(
+                        f"[distill_kd] WARN: Failed to measure speed metrics: {e}")
 
             # Logging
             if step % log_every == 0 and is_main_process:

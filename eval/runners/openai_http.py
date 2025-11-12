@@ -30,6 +30,8 @@ class OpenAIHTTPRunner(Runner):
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
         prompt_wrapper: Optional[str] = None,
+        determinism_mode: bool = False,
+        top_p: Optional[float] = None,
     ):
         """
         Initialize OpenAI HTTP runner.
@@ -43,6 +45,8 @@ class OpenAIHTTPRunner(Runner):
         super().__init__(model, seed, temperature, max_tokens)
         self.base_url = base_url or os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
         self.api_key = api_key or os.getenv("OPENAI_API_KEY", "")
+        self.determinism_mode = determinism_mode
+        self.top_p = top_p
         self._wrapper_path = prompt_wrapper
         self._wrapper_tpl = None
         self._wrapper_sha256 = None
@@ -138,6 +142,12 @@ class OpenAIHTTPRunner(Runner):
             "seed": seed if seed is not None else self.seed,
         }
         
+        # Determinism mode: enforce top_p=1.0
+        if self.determinism_mode:
+            payload["top_p"] = 1.0
+        elif self.top_p is not None:
+            payload["top_p"] = self.top_p
+        
         if functions:
             payload["tools"] = [{"type": "function", "function": f} for f in functions]
             payload["tool_choice"] = "auto"
@@ -146,8 +156,21 @@ class OpenAIHTTPRunner(Runner):
             payload["stop"] = stop
         
         # Make request
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
-        response.raise_for_status()
+        # Determinism mode: disable retries, fail on any retry
+        determinism_mode = getattr(self, 'determinism_mode', False)
+        if determinism_mode:
+            # Use requests without retries (requests doesn't retry by default, but we track for determinism)
+            # In determinism mode, any network retry should be considered a failure
+            try:
+                response = requests.post(url, headers=headers, json=payload, timeout=60)
+                response.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                # In determinism mode, fail immediately on any error (no retries)
+                raise RuntimeError(f"Determinism mode: Request failed (no retries allowed): {e}")
+        else:
+            response = requests.post(url, headers=headers, json=payload, timeout=60)
+            response.raise_for_status()
+        
         data = response.json()
         
         # Extract model output and tool calls

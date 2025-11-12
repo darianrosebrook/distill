@@ -1,4 +1,4 @@
-.PHONY: kd inter proc qat onnx coreml probes eval release format judge worker drafter caws-eval contextual-gen contextual-extract contextual-verify contextual-pipeline gen-scale-1k gen-scale-10k verify-scale-1k verify-scale-10k verify-dual-tokenizers verify-next-registry gen-teacher-heavy verify-teacher-heavy eval-runner-openai eval-runner-local eval-smoke
+.PHONY: kd inter proc qat onnx coreml probes eval release format judge worker drafter caws-eval contextual-gen contextual-extract contextual-verify contextual-pipeline gen-scale-1k gen-scale-10k verify-scale-1k verify-scale-10k verify-dual-tokenizers verify-next-registry gen-teacher-heavy verify-teacher-heavy eval-runner-openai eval-runner-local eval-smoke speed-coreml train-student-speed train-student-qat
 
 # Worker model (primary generator, ~9B)
 worker:
@@ -234,6 +234,116 @@ eval-smoke:
 		--temperature 0.0 \
 		--min-eligible-for-gates 15 \
 		--fail-on-fingerprint-mismatch
+
+# Speed optimization targets (inference-speed-optimization-during-distillation)
+HARDWARE ?= $(shell python -c "import platform; print(platform.processor() or 'unknown')")
+EXPORT_PATH ?= pytorch_exportedprogram_coreml
+
+# Authoritative CoreML speed run (same slice each time)
+speed-coreml:
+	python -m evaluation.perf_mem_eval \
+		--model coreml/artifacts/worker/model.mlpackage \
+		--dataset data/contextual_final.jsonl \
+		--out eval/reports/speed_coreml.json \
+		--hardware "$(HARDWARE)" \
+		--export-path $(EXPORT_PATH) \
+		--max-samples 100
+
+# CoreML speed run with prompt caching (30-50% TTFT reduction)
+speed-coreml-cached:
+	python -m evaluation.perf_mem_eval \
+		--model coreml/artifacts/worker/model.mlpackage \
+		--dataset data/contextual_final.jsonl \
+		--out eval/reports/speed_coreml_cached.json \
+		--hardware "$(HARDWARE)" \
+		--export-path $(EXPORT_PATH) \
+		--max-samples 100 \
+		--enable-prompt-cache \
+		--cache-size-mb 100
+
+# CoreML speed run with speculative decoding (25-40% TTFT improvement)
+speed-coreml-speculative:
+	python -m evaluation.perf_mem_eval \
+		--model coreml/artifacts/worker/model.mlpackage \
+		--drafter-model coreml/artifacts/drafter/model.mlpackage \
+		--dataset data/contextual_final.jsonl \
+		--out eval/reports/speed_coreml_speculative.json \
+		--hardware "$(HARDWARE)" \
+		--export-path $(EXPORT_PATH) \
+		--max-samples 100 \
+		--enable-speculative \
+		--spec-k 2
+
+# CoreML speed run with ANE residency measurement
+speed-coreml-ane:
+	python -m evaluation.perf_mem_eval \
+		--model coreml/artifacts/worker/model.mlpackage \
+		--dataset data/contextual_final.jsonl \
+		--out eval/reports/speed_coreml_ane.json \
+		--hardware "$(HARDWARE)" \
+		--export-path $(EXPORT_PATH) \
+		--max-samples 100 \
+		--measure-ane-residency \
+		--ane-samples 100
+
+# CoreML speed run with optimized tokenizer (10-20% TTFT reduction for long prompts)
+speed-coreml-tokenizer-opt:
+	python -m evaluation.perf_mem_eval \
+		--model coreml/artifacts/worker/model.mlpackage \
+		--dataset data/contextual_final.jsonl \
+		--out eval/reports/speed_coreml_tokenizer_opt.json \
+		--hardware "$(HARDWARE)" \
+		--export-path $(EXPORT_PATH) \
+		--max-samples 100 \
+		--use-optimized-tokenizer
+
+# CoreML speed run with optimized KV cache (ANE-friendly layout, unified memory)
+speed-coreml-kv-cache-opt:
+	python -m evaluation.perf_mem_eval \
+		--model coreml/artifacts/worker/model.mlpackage \
+		--dataset data/contextual_final.jsonl \
+		--out eval/reports/speed_coreml_kv_cache_opt.json \
+		--hardware "$(HARDWARE)" \
+		--export-path $(EXPORT_PATH) \
+		--max-samples 100 \
+		--use-optimized-kv-cache \
+		--kv-cache-heads 32 \
+		--kv-cache-head-dim 128 \
+		--kv-cache-gqa-groups 4
+
+# CoreML speed run with batch policy (workload-aware batch size selection)
+speed-coreml-batch-policy:
+	python -m evaluation.perf_mem_eval \
+		--model coreml/artifacts/worker/model.mlpackage \
+		--dataset data/contextual_final.jsonl \
+		--out eval/reports/speed_coreml_batch_policy.json \
+		--hardware "$(HARDWARE)" \
+		--export-path $(EXPORT_PATH) \
+		--max-samples 100 \
+		--workload-type interactive
+
+# CoreML speed run with offline batch policy (batch 2-4 for throughput)
+speed-coreml-batch-policy-offline:
+	python -m evaluation.perf_mem_eval \
+		--model coreml/artifacts/worker/model.mlpackage \
+		--dataset data/contextual_final.jsonl \
+		--out eval/reports/speed_coreml_batch_policy_offline.json \
+		--hardware "$(HARDWARE)" \
+		--export-path $(EXPORT_PATH) \
+		--max-samples 100 \
+		--workload-type offline
+
+# Train with latency-aware losses (ramped) + enumerated shapes
+train-student-speed:
+	python -m training.distill_kd \
+		--config configs/student_9b_gqa.yaml \
+		--config configs/kd_recipe.yaml
+
+# Enable QAT for final 20% of steps
+train-student-qat:
+	python -m training.distill_kd \
+		--config configs/student_9b_gqa.yaml \
+		--config configs/kd_recipe.yaml
 
 eval-real-local:
 	python -m eval.cli \

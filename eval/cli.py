@@ -140,6 +140,13 @@ def main() -> None:
     ap.add_argument("--no-fail-on-fingerprint-mismatch",
                     dest="fail_on_fingerprint_mismatch", action="store_false")
     ap.set_defaults(fail_on_fingerprint_mismatch=True)
+    ap.add_argument("--determinism-mode", action="store_true",
+                    help="Determinism mode: temp=0, top_p=1, no retries, fail on any retry")
+    ap.add_argument("--baseline-report", type=str, default=None,
+                    help="Path to baseline report for speed gate comparison")
+    ap.add_argument("--workload-type", type=str, default="interactive",
+                    choices=["interactive", "offline"],
+                    help="Workload type: 'interactive' (batch=1) or 'offline' (batch 2-4)")
     args = ap.parse_args()
 
     # Load dataset
@@ -154,14 +161,47 @@ def main() -> None:
     tokenizer_fp = (header or {}).get("tokenizer_fingerprint")
     integration_span_cap = (header or {}).get("integration_span_cap", 3)
 
+    # Load hardware profile for batch policy
+    hardware_profile = None
+    batch_policy = None
+    try:
+        from eval.hw_profile import load_profiles, match_profile
+        from coreml.runtime.batch_policy import BatchPolicy
+        from pathlib import Path
+
+        profiles = load_profiles(Path("configs/hardware_profiles.yaml"))
+        profile = match_profile(profiles)
+        hardware_profile = {"key": profile.key, "config": profile.config}
+
+        batch_policy = BatchPolicy(hardware_profile=hardware_profile)
+        selected_batch = batch_policy.select_batch_size(
+            workload_type=args.workload_type)
+        print(
+            f"[eval/cli] Batch policy: workload_type={args.workload_type}, batch_size={selected_batch}")
+    except Exception as e:
+        print(f"[eval/cli] WARN: Failed to initialize batch policy: {e}")
+
     # Init runner & broker
     RunnerCls = RUNNERS[args.runner]
-    runner_kwargs = {
-        "model": args.model,
-        "seed": args.seed,
-        "temperature": args.temperature,
-        "max_tokens": args.max_tokens,
-    }
+
+    # Determinism mode: enforce temp=0, top_p=1, no retries
+    if args.determinism_mode:
+        runner_kwargs = {
+            "model": args.model,
+            "seed": args.seed,
+            "temperature": 0.0,  # Force temp=0
+            "max_tokens": args.max_tokens,
+            "top_p": 1.0,  # Force top_p=1
+            "determinism_mode": True,  # Signal to disable retries
+        }
+    else:
+        runner_kwargs = {
+            "model": args.model,
+            "seed": args.seed,
+            "temperature": args.temperature,
+            "max_tokens": args.max_tokens,
+        }
+
     if args.prompt_wrapper:
         runner_kwargs["prompt_wrapper"] = args.prompt_wrapper
     runner = RunnerCls(**runner_kwargs)
@@ -240,6 +280,25 @@ def main() -> None:
     # Write per-item results
     write_jsonl(args.out, results)
 
+    # Load speed metrics if available (from CoreML speed report)
+    speed_metrics = None
+    hardware = None
+    speed_report_path = os.path.join(
+        os.path.dirname(args.report), "speed_coreml.json")
+    if os.path.exists(speed_report_path):
+        try:
+            with open(speed_report_path, 'r') as f:
+                speed_report = json.load(f)
+                speed_metrics = speed_report.get("speed_metrics")
+                hardware = speed_report.get("hardware")
+                # Include ANE residency if available
+                if "ane_residency" in speed_report:
+                    if speed_metrics is None:
+                        speed_metrics = {}
+                    speed_metrics["ane_residency"] = speed_report["ane_residency"]
+        except Exception as e:
+            print(f"[eval/cli] WARN: Failed to load speed metrics: {e}")
+
     # Summarize (macro/micro F1 lax & strict, gates, deltas, histograms)
     report = summarize_results(
         results=results,
@@ -258,10 +317,14 @@ def main() -> None:
             "shard_index": args.shard_index,
             "min_eligible_for_gates": args.min_eligible_for_gates,
             "fail_on_fingerprint_mismatch": args.fail_on_fingerprint_mismatch,
+            "determinism_mode": args.determinism_mode,
         },
         wall_time_sec=time.time() - t0,
         gates_overrides={
             "min_eligible_for_gates": args.min_eligible_for_gates},
+        speed_metrics=speed_metrics,
+        hardware=hardware,
+        baseline_report_path=args.baseline_report,
     )
 
     os.makedirs(os.path.dirname(args.report) or ".", exist_ok=True)

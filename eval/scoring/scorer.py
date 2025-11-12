@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from typing import Any, Dict, List, Optional
+from pathlib import Path
 
 # Import verifier utilities
 from scripts.verify_contextual_set import (
@@ -227,4 +228,221 @@ def score_item(
     }
     
     return scores
+
+
+def evaluate_speed_gates(
+    current_metrics: Dict[str, Dict[str, float]],
+    baseline_metrics: Optional[Dict[str, Dict[str, float]]] = None,
+    hardware_match: bool = True,
+    regression_threshold: float = 0.05,  # 5% regression threshold
+    current_hw_profile_key: Optional[str] = None,
+    baseline_hw_profile_key: Optional[str] = None,
+    current_ane_residency: Optional[Dict[str, float]] = None,
+    baseline_ane_residency: Optional[Dict[str, float]] = None,
+    min_ane_pct: float = 0.80,
+    max_ane_regression_pct: float = 0.10,
+) -> Dict[str, Any]:
+    """
+    Evaluate speed gates: relative gates vs baseline on same hardware.
+    
+    Also checks ANE residency gates to ensure ANE is being used.
+    
+    Reference: inference-speed-optimization-during-distillation-c3d3cffc.plan.md Phase 5
+    
+    Args:
+        current_metrics: Current speed metrics dict with ttft_ms, tps, ttfa_tokens, ttfa_ms
+        baseline_metrics: Baseline metrics from last blessed report (same hardware)
+        hardware_match: Whether hardware matches baseline (if False, gates are skipped)
+        regression_threshold: Maximum allowed regression (default: 0.05 = 5%)
+        current_hw_profile_key: Current hardware profile key (e.g., "m1-max-64g")
+        baseline_hw_profile_key: Baseline hardware profile key
+        current_ane_residency: Current ANE residency measurements (optional)
+        baseline_ane_residency: Baseline ANE residency measurements (optional)
+        min_ane_pct: Minimum ANE percentage threshold (default: 0.80 = 80%)
+        max_ane_regression_pct: Maximum allowed ANE regression (default: 0.10 = 10%)
+        
+    Returns:
+        Dictionary with gate evaluation results:
+        - gates_passed: bool
+        - ttft_regression: dict with p50/p95 regression info
+        - tps_regression: dict with p50/p95 regression info
+        - ttfa_gate: dict with pass/fail info
+        - ane_gates: dict with ANE residency gate results
+        - errors: list of error messages
+        - warnings: list of warning messages
+    """
+    errors = []
+    gates_passed = True
+    
+    # Check hardware profile match (preferred over hardware_match flag)
+    if current_hw_profile_key and baseline_hw_profile_key:
+        if current_hw_profile_key != baseline_hw_profile_key:
+            try:
+                from eval.hw_profile import require_same_profile
+                require_same_profile(current_hw_profile_key, baseline_hw_profile_key)
+            except SystemExit:
+                return {
+                    "gates_passed": False,
+                    "ttft_regression": {"skipped": True, "reason": "hardware_profile_mismatch"},
+                    "tps_regression": {"skipped": True, "reason": "hardware_profile_mismatch"},
+                    "ttfa_gate": {"skipped": True, "reason": "hardware_profile_mismatch"},
+                    "errors": [f"Hardware profile mismatch: {current_hw_profile_key} vs {baseline_hw_profile_key}"],
+                }
+    
+    if not hardware_match:
+        return {
+            "gates_passed": True,  # Skip gates if hardware doesn't match
+            "ttft_regression": {"skipped": True, "reason": "hardware_mismatch"},
+            "tps_regression": {"skipped": True, "reason": "hardware_mismatch"},
+            "ttfa_gate": {"skipped": True, "reason": "hardware_mismatch"},
+            "errors": [],
+        }
+    
+    if baseline_metrics is None:
+        # No baseline: gates pass but warn
+        return {
+            "gates_passed": True,
+            "ttft_regression": {"skipped": True, "reason": "no_baseline"},
+            "tps_regression": {"skipped": True, "reason": "no_baseline"},
+            "ttfa_gate": {"skipped": True, "reason": "no_baseline"},
+            "errors": ["No baseline metrics provided; speed gates skipped"],
+        }
+    
+    # TTFT regression check (p50 and p95)
+    ttft_regression = {"p50": {"passed": True}, "p95": {"passed": True}}
+    for percentile in ["p50", "p95"]:
+        current_val = current_metrics.get("ttft_ms", {}).get(percentile, 0.0)
+        baseline_val = baseline_metrics.get("ttft_ms", {}).get(percentile, 0.0)
+        
+        if baseline_val > 0:
+            regression = (current_val - baseline_val) / baseline_val
+            ttft_regression[percentile] = {
+                "passed": regression <= regression_threshold,
+                "regression": regression,
+                "current": current_val,
+                "baseline": baseline_val,
+            }
+            if regression > regression_threshold:
+                gates_passed = False
+                errors.append(
+                    f"TTFT {percentile} regression: {regression*100:.1f}% "
+                    f"(current={current_val:.1f}ms, baseline={baseline_val:.1f}ms)"
+                )
+    
+    # TPS regression check (p50 and p95)
+    tps_regression = {"p50": {"passed": True}, "p95": {"passed": True}}
+    for percentile in ["p50", "p95"]:
+        current_val = current_metrics.get("tps", {}).get(percentile, 0.0)
+        baseline_val = baseline_metrics.get("tps", {}).get(percentile, 0.0)
+        
+        if baseline_val > 0:
+            regression = (baseline_val - current_val) / baseline_val  # TPS: lower is worse
+            tps_regression[percentile] = {
+                "passed": regression <= regression_threshold,
+                "regression": regression,
+                "current": current_val,
+                "baseline": baseline_val,
+            }
+            if regression > regression_threshold:
+                gates_passed = False
+                errors.append(
+                    f"TPS {percentile} regression: {regression*100:.1f}% "
+                    f"(current={current_val:.1f} tok/s, baseline={baseline_val:.1f} tok/s)"
+                )
+    
+    # TTFA gate: p95 tokens ≤ 25
+    ttfa_tokens_p95 = current_metrics.get("ttfa_tokens", {}).get("p95", float('inf'))
+    ttfa_gate = {
+        "passed": ttfa_tokens_p95 <= 25.0,
+        "ttfa_tokens_p95": ttfa_tokens_p95,
+        "threshold": 25.0,
+    }
+    if ttfa_tokens_p95 > 25.0:
+        gates_passed = False
+        errors.append(
+            f"TTFA gate failed: p95 tokens={ttfa_tokens_p95:.1f} > 25"
+        )
+    
+    # ANE residency gates (if provided)
+    ane_gates = {
+        "passed": True,
+        "errors": [],
+        "warnings": [],
+        "current_ane_pct": None,
+        "baseline_ane_pct": None,
+        "meets_threshold": None,
+        "regression_within_limit": None,
+    }
+    
+    if current_ane_residency:
+        current_ane_pct = current_ane_residency.get("ane_time_pct", 0.0)
+        ane_gates["current_ane_pct"] = current_ane_pct
+        
+        # Check threshold
+        if current_ane_pct < min_ane_pct:
+            ane_gates["passed"] = False
+            ane_gates["meets_threshold"] = False
+            ane_gates["errors"].append(
+                f"ANE residency {current_ane_pct:.1%} below threshold ({min_ane_pct:.1%})"
+            )
+            gates_passed = False
+        else:
+            ane_gates["meets_threshold"] = True
+        
+        # Compare with baseline if available
+        if baseline_ane_residency:
+            baseline_ane_pct = baseline_ane_residency.get("ane_time_pct", 0.0)
+            ane_gates["baseline_ane_pct"] = baseline_ane_pct
+            
+            if baseline_ane_pct > 0:
+                regression = baseline_ane_pct - current_ane_pct
+                regression_pct = regression / baseline_ane_pct if baseline_ane_pct > 0 else 0.0
+                
+                if regression_pct > max_ane_regression_pct:
+                    ane_gates["passed"] = False
+                    ane_gates["regression_within_limit"] = False
+                    ane_gates["errors"].append(
+                        f"ANE residency regression {regression_pct:.1%} exceeds limit ({max_ane_regression_pct:.1%})"
+                    )
+                    gates_passed = False
+                else:
+                    ane_gates["regression_within_limit"] = True
+        else:
+            ane_gates["warnings"].append("No baseline ANE residency for comparison")
+    
+    # Combine speed gates and ANE gates
+    all_errors = errors + ane_gates["errors"]
+    all_warnings = ane_gates["warnings"]
+    
+    return {
+        "gates_passed": gates_passed,
+        "ttft_regression": ttft_regression,
+        "tps_regression": tps_regression,
+        "ttfa_gate": ttfa_gate,
+        "ane_gates": ane_gates,
+        "errors": all_errors,
+        "warnings": all_warnings,
+    }
+
+
+def load_baseline_speed_metrics(baseline_report_path: Path) -> Optional[Dict[str, Dict[str, float]]]:
+    """
+    Load baseline speed metrics from a previous report.
+    
+    Args:
+        baseline_report_path: Path to baseline report JSON file
+        
+    Returns:
+        Baseline metrics dict or None if not found
+    """
+    if not baseline_report_path.exists():
+        return None
+    
+    try:
+        with open(baseline_report_path, 'r') as f:
+            report = json.load(f)
+            return report.get("speed_metrics")
+    except Exception as e:
+        print(f"[scorer] WARN: Failed to load baseline metrics: {e}")
+        return None
 

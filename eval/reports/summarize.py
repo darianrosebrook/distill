@@ -2,7 +2,7 @@
 from __future__ import annotations
 import math
 from collections import defaultdict
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 def _eligible(r: Dict[str, Any]) -> bool:
@@ -115,6 +115,9 @@ def summarize_results(
     config: Dict[str, Any],
     wall_time_sec: float,
     gates_overrides: Optional[Dict[str, Any]] = None,
+    speed_metrics: Optional[Dict[str, Any]] = None,
+    hardware: Optional[Dict[str, Any]] = None,
+    baseline_report_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Summarize evaluation results into report.
@@ -248,6 +251,71 @@ def summarize_results(
         "wall_time_sec": round(wall_time_sec, 2),
     }
     
+    # Evaluate speed gates if speed metrics provided
+    speed_gates_ok = True
+    speed_gates_result = None
+    if speed_metrics is not None:
+        from eval.scoring.scorer import evaluate_speed_gates, load_baseline_speed_metrics
+        from pathlib import Path
+        
+        baseline_metrics = None
+        hardware_match = True
+        current_hw_profile_key = None
+        baseline_hw_profile_key = None
+        
+        # Get current hardware profile key
+        try:
+            from eval.hw_profile import load_profiles, match_profile
+            profiles = load_profiles(Path("configs/hardware_profiles.yaml"))
+            current_profile = match_profile(profiles)
+            current_hw_profile_key = current_profile.key
+        except Exception:
+            pass
+        
+        baseline_ane_residency = None
+        if baseline_report_path:
+            # Load baseline report and extract speed_metrics
+            try:
+                from pathlib import Path
+                baseline_path = Path(baseline_report_path)
+                if baseline_path.exists():
+                    import json
+                    with open(baseline_path, 'r') as f:
+                        baseline_report = json.load(f)
+                    # Extract speed_metrics from header
+                    baseline_header = baseline_report.get("header", {})
+                    baseline_metrics = baseline_header.get("speed_metrics")
+                    baseline_hw = baseline_header.get("hardware", {})
+                    # Extract ANE residency if available
+                    baseline_ane_residency = baseline_header.get("ane_residency") or baseline_report.get("ane_residency")
+                    # Check hardware match (compare soc if available)
+                    if baseline_hw and hardware:
+                        if baseline_hw.get("soc") != hardware.get("soc"):
+                            hardware_match = False
+                    # Extract hardware profile key if available
+                    baseline_hw_profile_key = baseline_report.get("hardware_profile_key") or baseline_header.get("hardware_profile_key")
+            except Exception as e:
+                print(f"[summarize] WARN: Failed to load baseline report: {e}")
+        
+        # Extract current ANE residency from speed_metrics or separate parameter
+        # Note: ANE residency may be in speed_metrics dict or separate field
+        current_ane_residency = None
+        if isinstance(speed_metrics, dict):
+            # Check if ANE residency is nested in speed_metrics
+            current_ane_residency = speed_metrics.get("ane_residency")
+        
+        speed_gates_result = evaluate_speed_gates(
+            current_metrics=speed_metrics,
+            baseline_metrics=baseline_metrics,
+            hardware_match=hardware_match,
+            regression_threshold=0.05,
+            current_hw_profile_key=current_hw_profile_key,
+            baseline_hw_profile_key=baseline_hw_profile_key,
+            current_ane_residency=current_ane_residency,
+            baseline_ane_residency=baseline_ane_residency,
+        )
+        speed_gates_ok = speed_gates_result.get("gates_passed", True)
+    
     # Build report header
     report_header = {
         "report_version": report_version,
@@ -258,12 +326,30 @@ def summarize_results(
         "gates": gates,
     }
     
+    # Add speed metrics and hardware to header if provided
+    if speed_metrics is not None:
+        # Remove ANE residency from speed_metrics if present (it's stored separately)
+        speed_metrics_copy = {k: v for k, v in speed_metrics.items() if k != "ane_residency"}
+        report_header["speed_metrics"] = speed_metrics_copy
+    if hardware is not None:
+        report_header["hardware"] = hardware
+    # Add ANE residency if available (from speed_metrics or separate)
+    if isinstance(speed_metrics, dict) and "ane_residency" in speed_metrics:
+        report_header["ane_residency"] = speed_metrics["ane_residency"]
+    # Add hardware profile key for relative gating
+    if current_hw_profile_key:
+        report_header["hardware_profile_key"] = current_hw_profile_key
+    
     # Build full report
     report = {
         "header": report_header,
         "summary": summary,
-        "gates_ok": gates_ok,
+        "gates_ok": gates_ok and speed_gates_ok,  # Co-gate: both quality and speed must pass
     }
+    
+    # Add speed gates result if available
+    if speed_gates_result is not None:
+        report["speed_gates"] = speed_gates_result
     
     return report
 

@@ -10,10 +10,15 @@ Implements:
 - Loss weight scheduling
 - Intermediate layer matching
 - Self-evaluation loss
+- Length-aware KD loss (hinged, completeness-aware)
+- Early tool call loss (gated + ramped)
 """
+from __future__ import annotations
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from dataclasses import dataclass
 from typing import Optional, Dict, Any, List, Union, Tuple
 
 
@@ -236,6 +241,233 @@ def _has_structured_content(text: str) -> bool:
         "##" in preview or  # Markdown headers
         "###" in preview
     )
+
+
+@dataclass
+class LengthAwareKDDiagnostics:
+    """Diagnostics for length-aware KD loss."""
+    median_len_teacher: float
+    median_len_student: float
+    median_rel_excess: float
+    frac_penalized: float
+
+
+@dataclass
+class EarlyToolDiag:
+    """Diagnostics for early tool call loss."""
+    frac_should_use: float
+    frac_target_available: float
+    mean_json_prior_nll0: float
+
+
+def length_aware_kd_loss(
+    student_attn_mask: torch.Tensor,         # [B, T] {0,1}
+    teacher_attn_mask: torch.Tensor,         # [B, T] {0,1}
+    # [B] bool or {0,1}; True => student covered all required args/evidence
+    required_fields_present: torch.Tensor,
+    *,
+    # penalty starts when student > (1 + hinge)*teacher
+    hinge: float = 0.15,
+    slope: float = 1.0,
+    reduction: str = "mean",
+) -> Tuple[torch.Tensor, Dict[str, float]]:
+    """
+    Penalize *extra* student length only when required fields are NOT fully present.
+
+    Reference: inference-speed-optimization-during-distillation-c3d3cffc.plan.md Phase 1
+
+    - Relative excess = max(0, (Ls-Lt)/max(Lt,1))
+    - Hinge: only penalize the portion above `hinge`
+    - Mask out examples where `required_fields_present` is True (completeness exemption)
+
+    Args:
+        student_attn_mask: [B, T] attention mask for student sequences ({0,1})
+        teacher_attn_mask: [B, T] attention mask for teacher sequences ({0,1})
+        required_fields_present: [B] boolean tensor; True if student has all required fields
+        hinge: Relative excess threshold before penalty starts (default: 0.15)
+        slope: Multiplier for penalty (default: 1.0)
+        reduction: "mean", "sum", or "none"
+
+    Returns:
+        Tuple of (loss, diagnostics_dict)
+    """
+    assert student_attn_mask.ndim == 2 and teacher_attn_mask.ndim == 2
+    device = student_attn_mask.device
+    B = student_attn_mask.size(0)
+
+    Ls = student_attn_mask.sum(dim=1).to(torch.float32)  # [B]
+    Lt = torch.clamp(teacher_attn_mask.sum(
+        dim=1).to(torch.float32), min=1.0)  # [B]
+
+    rel_excess = torch.clamp((Ls - Lt) / Lt, min=0.0)  # [B], >=0
+    over = torch.clamp(rel_excess - hinge, min=0.0)    # hinge
+    penalize = (~required_fields_present.bool()).to(
+        over.dtype)  # 1 if missing fields
+
+    per_example = slope * over * penalize  # [B]
+
+    if reduction == "mean":
+        loss = per_example.mean()
+    elif reduction == "sum":
+        loss = per_example.sum()
+    else:
+        loss = per_example  # no reduction
+
+    with torch.no_grad():
+        diags = LengthAwareKDDiagnostics(
+            median_len_teacher=float(torch.median(Lt).item()),
+            median_len_student=float(torch.median(Ls).item()),
+            median_rel_excess=float(torch.median(rel_excess).item()),
+            frac_penalized=float((penalize > 0).float().mean().item()),
+        )
+    return loss, {
+        "len_kd.median_len_teacher": diags.median_len_teacher,
+        "len_kd.median_len_student": diags.median_len_student,
+        "len_kd.median_rel_excess": diags.median_rel_excess,
+        "len_kd.frac_penalized": diags.frac_penalized,
+    }
+
+
+def early_tool_call_loss(
+    # [B, T, V] student logits for current step window
+    logits: torch.Tensor,
+    # [B, T] ids aligned with logits for teacher targets (if available)
+    input_ids: torch.Tensor,
+    tool_should_be_used: torch.Tensor,         # [B] bool
+    *,
+    # HuggingFace-like tokenizer with .convert_ids_to_tokens
+    tokenizer,
+    # [B, N] or None; -100 ignored
+    teacher_prefix_ids: Optional[torch.Tensor] = None,
+    N: int = 25,
+    # small prior to bias into JSON envelope when no teacher prefix
+    json_prior_weight: float = 0.02,
+    ce_weight: float = 0.2,              # CE weight when teacher prefix is available
+    ramp_t: float = 1.0,                 # 0..1 ramp multiplier applied to both terms
+) -> Tuple[torch.Tensor, Dict[str, float]]:
+    """
+    Encourage a valid tool JSON within the first N tokens *only when* the teacher indicates a tool is warranted.
+
+    Reference: inference-speed-optimization-during-distillation-c3d3cffc.plan.md Phase 1
+
+    Modes:
+    - If `teacher_prefix_ids` provided: cross-entropy on first N tokens (ignore_index=-100).
+    - Otherwise: apply a light JSON-envelope prior at position 0 to bias toward '{'/'['/'"' starts.
+
+    Safety:
+    - Loss masked out when tool_should_be_used == False (prevents hallucinated tools).
+    - Keep magnitudes small; the main task loss dominates.
+
+    Args:
+        logits: [B, T, V] student logits for current step window
+        input_ids: [B, T] token IDs aligned with logits (for teacher targets if available)
+        tool_should_be_used: [B] boolean tensor; True when teacher indicates tool should be used
+        tokenizer: HuggingFace-like tokenizer with .convert_ids_to_tokens method
+        teacher_prefix_ids: Optional [B, N] teacher prefix token IDs (-100 ignored)
+        N: Number of tokens to consider for early tool call (default: 25)
+        json_prior_weight: Weight for JSON-envelope prior when no teacher prefix (default: 0.02)
+        ce_weight: Weight for cross-entropy when teacher prefix available (default: 0.2)
+        ramp_t: Ramp multiplier (0..1) applied to both terms (default: 1.0)
+
+    Returns:
+        Tuple of (loss, diagnostics_dict)
+    """
+    assert logits.ndim == 3 and input_ids.ndim == 2
+    B, T, V = logits.shape
+    N_eff = min(N, T)
+
+    should = tool_should_be_used.bool()  # [B]
+    any_should = should.any()
+
+    loss = logits.new_zeros(())
+    total_weight = 0.0
+
+    # 1) Teacher-guided CE on first N tokens (if available)
+    ce_term = logits.new_zeros(())
+    ce_applied = False
+    if teacher_prefix_ids is not None:
+        # Align shapes
+        assert teacher_prefix_ids.ndim == 2 and teacher_prefix_ids.size(
+            1) >= N_eff
+        targets = teacher_prefix_ids[:, :N_eff].to(logits.device)  # [B, N_eff]
+        # Mask examples where tool isn't needed
+        mask_b = should.unsqueeze(1).expand(-1, N_eff)  # [B, N_eff]
+        targets = torch.where(mask_b, targets, torch.full_like(
+            targets, -100))  # use ignore_index=-100
+
+        ce = F.cross_entropy(
+            logits[:, :N_eff, :].reshape(-1, V),
+            targets.reshape(-1),
+            ignore_index=-100,
+            reduction="none",
+        )
+        ce = ce.reshape(B, N_eff)
+        # Only apply to examples where tool should be used
+        ce_masked = ce * mask_b.float()
+        ce_term = ce_masked.sum() / (mask_b.sum().float() + 1e-8)
+        ce_applied = True
+
+    # 2) JSON-envelope prior (when no teacher prefix or as fallback)
+    json_prior_term = logits.new_zeros(())
+    json_prior_applied = False
+    if not ce_applied or json_prior_weight > 0:
+        # Get token IDs for JSON start tokens: '{', '[', '"'
+        json_start_tokens = []
+        for tok_str in ["{", "[", '"']:
+            try:
+                # Try convert_tokens_to_ids first (standard HuggingFace method)
+                if hasattr(tokenizer, 'convert_tokens_to_ids'):
+                    tok_id = tokenizer.convert_tokens_to_ids(tok_str)
+                else:
+                    # Fallback: use encode and take first token
+                    encoded = tokenizer.encode(
+                        tok_str, add_special_tokens=False)
+                    tok_id = encoded[0] if encoded else None
+
+                if tok_id is not None and tok_id < V:
+                    json_start_tokens.append(tok_id)
+            except (KeyError, AttributeError, IndexError):
+                pass
+
+        if json_start_tokens and any_should:
+            # Apply prior at position 0 for examples where tool should be used
+            pos0_logits = logits[:, 0, :]  # [B, V]
+            pos0_logprobs = F.log_softmax(pos0_logits, dim=-1)  # [B, V]
+
+            # Sum logprobs for JSON start tokens
+            json_logprob = pos0_logprobs[:, json_start_tokens].logsumexp(
+                dim=-1)  # [B]
+            # Negative logprob (higher = better, so negate for loss)
+            json_prior_term = -json_logprob * should.float()
+            json_prior_term = json_prior_term.sum() / (should.sum().float() + 1e-8)
+            json_prior_applied = True
+
+    # Combine terms with ramp
+    if ce_applied:
+        loss = loss + ramp_t * ce_weight * ce_term
+        total_weight += ce_weight
+    if json_prior_applied:
+        loss = loss + ramp_t * json_prior_weight * json_prior_term
+        total_weight += json_prior_weight
+
+    # Normalize by total weight if both terms applied
+    if total_weight > 0 and (ce_applied and json_prior_applied):
+        loss = loss / total_weight
+
+    # Diagnostics
+    with torch.no_grad():
+        diags = EarlyToolDiag(
+            frac_should_use=float(should.float().mean().item()),
+            frac_target_available=float(ce_applied),
+            mean_json_prior_nll0=float(
+                json_prior_term.item()) if json_prior_applied else 0.0,
+        )
+
+    return loss, {
+        "early_tool.frac_should_use": diags.frac_should_use,
+        "early_tool.frac_target_available": diags.frac_target_available,
+        "early_tool.mean_json_prior_nll0": diags.mean_json_prior_nll0,
+    }
 
 
 def create_projection_layers(
@@ -648,10 +880,10 @@ def entropy_weighting(
 def json_repair_loss(required_repair: bool) -> torch.Tensor:
     """
     Binary loss penalizing sequences that required JSON repair.
-    
+
     Args:
         required_repair: True if JSON repair was needed, False otherwise
-        
+
     Returns:
         Loss tensor: 1.0 if repair needed, 0.0 otherwise
     """
@@ -661,14 +893,14 @@ def json_repair_loss(required_repair: bool) -> torch.Tensor:
 def caws_structure_loss(teacher_score: float, student_score: float) -> torch.Tensor:
     """
     Loss based on CAWS structure score difference.
-    
+
     Only penalizes if student score is lower than teacher score.
     Encourages student to match teacher's structure quality.
-    
+
     Args:
         teacher_score: CAWS structure score from teacher output (0.0-1.0)
         student_score: CAWS structure score from student output (0.0-1.0)
-        
+
     Returns:
         Loss tensor: max(0.0, teacher_score - student_score)
     """
