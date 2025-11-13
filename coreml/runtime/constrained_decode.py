@@ -49,7 +49,7 @@ class TokenLexicon:
     """
     Precomputes token -> string and a prefix map so we can decide if a token
     can be appended without breaking the JSON byte-level prefix constraints.
-    
+
     Optimized with prefix map for O(1) token lookups by first character.
     """
 
@@ -63,7 +63,7 @@ class TokenLexicon:
                     [tid], clean_up_tokenization_spaces=False)
             except Exception:
                 self.id2str[tid] = ""
-        
+
         # Build prefix map: first character -> list of token IDs
         # This enables O(1) lookup instead of O(V) scan
         self.by_first: Dict[str, List[int]] = {}
@@ -77,14 +77,14 @@ class TokenLexicon:
 
     def token_text(self, tok_id: int) -> str:
         return self.id2str.get(tok_id, "")
-    
+
     def candidates_for_chars(self, chars: Iterable[str]) -> Set[int]:
         """
         Get set of token IDs that start with any of the given characters.
-        
+
         Args:
             chars: Iterable of allowed first characters
-            
+
         Returns:
             Set of token IDs that can start with these characters
         """
@@ -119,7 +119,13 @@ class JSONFSM:
     """
 
     def __init__(self):
-        pass
+        """
+        Initialize JSON FSM.
+
+        No initialization needed - all state is managed through DecoderState instances
+        and class-level constants (_ws, _punct, _quote).
+        """
+        # No initialization needed - state is managed per decoding session
 
     def start(self) -> DecoderState:
         return DecoderState(buffer="", stack=[], expect={"value"}, complete=False, error=None)
@@ -205,12 +211,12 @@ class SchemaValidator:
         self._required = set(schema.get("required", []))
         props = schema.get("properties", {})
         self._props = {k: v for k, v in props.items()}
-    
+
     def set_schema(self, schema: Dict[str, Any]):
         """
         Update the schema for validation.
         Useful for dynamic schema switching during decoding.
-        
+
         Args:
             schema: New JSON schema to use for validation
         """
@@ -257,7 +263,7 @@ class JSONConstrainedDecoder:
     """
     Combines (1) a permissive JSON FSM (structural), (2) token-level masking by
     allowed next characters, and (3) a post-hoc shallow schema validator.
-    
+
     Supports dynamic schema switching when a registry is provided:
     - Starts with base schema
     - Detects tool name in JSON buffer during generation
@@ -267,7 +273,7 @@ class JSONConstrainedDecoder:
     def __init__(self, schema: Dict[str, Any], tokenizer, registry=None):
         """
         Initialize constrained JSON decoder.
-        
+
         Args:
             schema: Base JSON schema for tool calls
             tokenizer: Tokenizer instance (must have vocab_size and decode method)
@@ -288,7 +294,7 @@ class JSONConstrainedDecoder:
         """
         Start a new decoding session.
         Resets schema to base schema and clears tool tracking.
-        
+
         Returns:
             Initial decoder state
         """
@@ -302,13 +308,13 @@ class JSONConstrainedDecoder:
     def allowed_token_mask(self, st: DecoderState, logits_shape) -> "np.ndarray[bool]":
         """
         Compute boolean mask of allowed tokens given current decoder state.
-        
+
         Uses optimized prefix map lookup for O(1) performance per character class.
-        
+
         Args:
             st: Current decoder state
             logits_shape: Shape of logits tensor (last dim is vocab size)
-            
+
         Returns:
             Boolean numpy array of shape (V,) where True indicates allowed tokens
         """
@@ -329,7 +335,7 @@ class JSONConstrainedDecoder:
                 valid_tids = [tid for tid in candidate_tids if 0 <= tid < V]
                 if valid_tids:
                     mask[valid_tids] = True
-        
+
         # Always permit end-of-sequence if your tokenizer uses one (optional):
         if hasattr(self.tokenizer, "eos_token_id") and self.tokenizer.eos_token_id is not None:
             eos_id = self.tokenizer.eos_token_id
@@ -340,50 +346,51 @@ class JSONConstrainedDecoder:
     def push(self, st: DecoderState, tok_id: int) -> DecoderState:
         """
         Push a token into the decoder and update state.
-        
+
         Also performs dynamic schema switching if registry is available and
         tool name is detected in the buffer.
-        
+
         Args:
             st: Current decoder state
             tok_id: Token ID to push
-            
+
         Returns:
             Updated decoder state
         """
         txt = self.lex.token_text(tok_id)
         txt = _strip_json_prefix(txt)
         st2 = self.fsm.push_text(st, txt)
-        
+
         # Try dynamic schema switching if registry available
         self._maybe_switch_schema(st2)
-        
+
         return st2
-    
+
     def _maybe_switch_schema(self, st: DecoderState):
         """
         Attempt to switch to tool-specific schema if tool name detected.
-        
+
         This enables tighter validation once we know which tool is being called.
         Only switches once per decoding session.
-        
+
         Args:
             st: Current decoder state with buffer to inspect
         """
         if not self.registry or self._last_applied_tool:
             return
-        
+
         # Look for tool name pattern in buffer
         match = _TOOL_NAME_RE.search(st.buffer)
         if not match:
             return
-        
+
         tool_name = match.group(1)
-        
+
         # Get tool-specific schema from registry
         # Registry should have a get() method that returns schema dict or None
-        tool_schema = self.registry.get(tool_name) if hasattr(self.registry, 'get') else None
-        
+        tool_schema = self.registry.get(tool_name) if hasattr(
+            self.registry, 'get') else None
+
         if tool_schema:
             self.validator.set_schema(tool_schema)
             self.schema = tool_schema
