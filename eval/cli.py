@@ -36,6 +36,7 @@ from eval.scoring.scorer import score_item  # wraps your verify_* logic
 from eval.reports.summarize import summarize_results  # macro/micro, deltas, gates
 from tools.schema_registry import ToolSchemaRegistry
 
+
 class MockRunner(Runner):
     """Mock runner for smoke testing without requiring a real model."""
 
@@ -240,7 +241,7 @@ def main() -> None:
     runtime_config = None
     eval_latent = os.getenv("EVAL_LATENT", "0") == "1"
     eval_code_mode = os.getenv("EVAL_CODE_MODE", "0") == "1"
-    
+
     if eval_latent or eval_code_mode or args.runner == "orchestrator":
         try:
             from runtime.config import RuntimeConfig
@@ -250,14 +251,14 @@ def main() -> None:
                 YAML_AVAILABLE = True
             except ImportError:
                 YAML_AVAILABLE = False
-            
+
             # Load config from files if they exist
             latent_config_path = Path("eval/configs/latent.yaml")
             code_mode_config_path = Path("eval/configs/code_mode.yaml")
-            
+
             # Start with defaults
             runtime_config = RuntimeConfig.from_env()
-            
+
             # Override with config files if they exist
             if eval_latent and latent_config_path.exists() and YAML_AVAILABLE:
                 with open(latent_config_path, 'r') as f:
@@ -265,10 +266,12 @@ def main() -> None:
                     gates = latent_config.get("gates", {})
                     efficiency = gates.get("efficiency", {})
                     runtime_config.latent_mode_enabled = True
-                    runtime_config.max_refinement_loops = efficiency.get("max_loop_increase", 5) or 5
+                    runtime_config.max_refinement_loops = efficiency.get(
+                        "max_loop_increase", 5) or 5
                     runtime_config.curriculum_probability = 1.0  # Full curriculum for evaluation
             elif eval_latent and latent_config_path.exists() and not YAML_AVAILABLE:
-                print("[eval/cli] WARN: YAML not available, skipping latent config loading")
+                print(
+                    "[eval/cli] WARN: YAML not available, skipping latent config loading")
 
             if eval_code_mode and code_mode_config_path.exists() and YAML_AVAILABLE:
                 with open(code_mode_config_path, 'r') as f:
@@ -276,10 +279,12 @@ def main() -> None:
                     gates = code_mode_config.get("gates", {})
                     runtime_config.latent_mode_enabled = False  # Code mode doesn't use latent
             elif eval_code_mode and code_mode_config_path.exists() and not YAML_AVAILABLE:
-                print("[eval/cli] WARN: YAML not available, skipping code mode config loading")
-                    # Code mode settings would go here if needed
-            
-            print(f"[eval/cli] Runtime config loaded: latent={runtime_config.latent_mode_enabled}, halt={runtime_config.halt_head_enabled}")
+                print(
+                    "[eval/cli] WARN: YAML not available, skipping code mode config loading")
+                # Code mode settings would go here if needed
+
+            print(
+                f"[eval/cli] Runtime config loaded: latent={runtime_config.latent_mode_enabled}, halt={runtime_config.halt_head_enabled}")
         except Exception as e:
             print(f"[eval/cli] WARN: Failed to load runtime config: {e}")
             runtime_config = None
@@ -307,12 +312,13 @@ def main() -> None:
 
     if args.prompt_wrapper:
         runner_kwargs["prompt_wrapper"] = args.prompt_wrapper
-    
+
     # Add runtime config for orchestrator runner
     if args.runner == "orchestrator" and runtime_config:
         runner_kwargs["runtime_config"] = runtime_config
-        runner_kwargs["use_refinement"] = eval_latent  # Use refinement for latent evaluation
-    
+        # Use refinement for latent evaluation
+        runner_kwargs["use_refinement"] = eval_latent
+
     runner = RunnerCls(**runner_kwargs)
     broker = ToolBroker(args.fixtures)
 

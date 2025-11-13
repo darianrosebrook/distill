@@ -261,28 +261,51 @@ Runs full gated evaluation on latest checkpoint (configure in `.github/workflows
 
 Small deterministic slice enforcing fixture coverage and CAWS gates before merge (see `.github/workflows/broker-smoke.yml`).
 
-### Toy End-to-End Pipeline
+### Toy Test Suite
 
-Lightweight E2E verification that tests the full flow: dataset generation → training → export → CoreML conversion → verification gates. Runs in ≤4 minutes on CPU.
+**Comprehensive lightweight testing without real models** - validates the complete distillation pipeline using deterministic, CPU-only test doubles. Enables fast iteration during development while ensuring production-ready integration.
+
+**Key Features:**
+
+- ⚡ **Fast execution**: Full pipeline in ≤4 minutes on CPU
+- 🎯 **Complete coverage**: All integration points tested
+- 🔒 **Deterministic**: Reproducible results across environments
+- 🚀 **Production ready**: Same interfaces and validation as real models
 
 ```bash
-# Single shape (fast, default)
-make toy-e2e
+# E2E pipeline tests
+make toy-e2e               # Single shape (fast, default)
+make toy-e2e-multi         # Multiple shapes (thorough)
 
-# Multiple enumerated shapes (slower, more thorough)
-make toy-e2e-multi
+# Feature-specific tests
+pytest tests/ -k toy       # All toy tests
+pytest tests/e2e/test_toy_pipeline.py -v
+pytest tests/e2e/test_toy_code_mode.py -v
+pytest tests/e2e/test_toy_combined_milestones.py -v
 ```
 
-**CoreML Enumerated Shapes (Toy Path):**
+**Test Categories:**
 
-In practice, CoreML compiles one shape per mlpackage quickly; multi-shape enumerations are possible but increase compile time and often degrade determinism in CI. The toy E2E test therefore compiles **one representative shape** by default (T128), with an optional "multi" target that compiles `T64/T128/T256` as **separate** packages and verifies that **at least one** shape runs end-to-end. Production models should still export enumerated shapes per your main conversion path; the toy path is intentionally minimal.
+- **Pipeline Tests**: Dataset → Training → Export → Conversion → Verification
+- **Feature Tests**: Code-mode, latent reasoning, combined milestones
+- **Efficiency Tests**: Context Efficiency Score (CES) measurement
+- **Integration Tests**: Claims framework with model outputs
 
-**Gates:**
+**CoreML Toy Path:**
+Toy tests compile one representative shape by default (T128), with optional multi-shape testing (T64/T128/T256). Production models should export enumerated shapes via the main conversion path.
 
-- ≥1 enumerated shape compiles and runs end-to-end
-- No NaN/zero outputs detected
-- Tool span micro-F1 ≥ 0.20 (via deterministic greedy decode)
-- Per-shape diagnostics included in report
+**Quality Gates:**
+
+- ✅ ≥1 enumerated shape compiles and runs end-to-end
+- ✅ No NaN/zero outputs detected
+- ✅ Tool span micro-F1 ≥ 0.20 (via deterministic greedy decode)
+- ✅ Per-shape diagnostics included in report
+- ✅ Feature-specific validation (code-mode eligibility, latent curriculum, etc.)
+
+**See Also:**
+
+- [`docs/TOY_TEST_STRATEGY.md`](docs/TOY_TEST_STRATEGY.md) - Comprehensive toy testing strategy
+- [`tests/TOY_TEST_COVERAGE_ANALYSIS.md`](tests/TOY_TEST_COVERAGE_ANALYSIS.md) - Detailed coverage analysis
 
 ### Makefile Shortcuts
 
@@ -290,20 +313,20 @@ In practice, CoreML compiles one shape per mlpackage quickly; multi-shape enumer
 make eval-runner-openai    # evaluate with OpenAI-compatible endpoint
 make eval-runner-local     # evaluate with local HuggingFace model
 make eval-smoke            # smoke test with GPT-4
-make toy-e2e               # toy E2E pipeline (single shape)
-make toy-e2e-multi         # toy E2E pipeline (multiple shapes)
 ```
 
 ---
 
 ## Reproducibility Artifacts
 
-| Directory                     | Contents                 | Fingerprinted By        |
-| ----------------------------- | ------------------------ | ----------------------- |
-| `models/student/checkpoints/` | Distillation checkpoints | SHA-256                 |
-| `artifacts/onnx/`             | ONNX graphs              | Model + tokenizer       |
-| `coreml/artifacts/`           | CoreML mlpackages        | Enumerated shapes       |
-| `eval/reports/`               | JSON reports             | Dataset · Tool registry |
+| Directory                                | Contents                       | Fingerprinted By        |
+| ---------------------------------------- | ------------------------------ | ----------------------- |
+| `models/student/checkpoints/`            | Distillation checkpoints       | SHA-256                 |
+| `artifacts/onnx/`                        | Student ONNX graphs (created)  | Model + tokenizer       |
+| `arbiter/judge_training/artifacts/onnx/` | Judge ONNX graphs              | Model + tokenizer       |
+| `coreml/artifacts/`                      | CoreML mlpackages              | Enumerated shapes       |
+| `eval/reports/`                          | JSON evaluation reports        | Dataset · Tool registry |
+| `data/`                                  | Generated datasets & artifacts | Content SHA-256         |
 
 Each report embeds `dataset_sha256`, `tool_registry_sha256`, and `prompt_wrapper_sha256`.
 
@@ -322,12 +345,26 @@ Each report embeds `dataset_sha256`, `tool_registry_sha256`, and `prompt_wrapper
 ## Directory Structure (Top Level)
 
 ```
-arbiter/         – CAWS governance stack (judge training · schemas)
-configs/         – Model configs (worker / judge / drafter)
-conversion/      – PyTorch → ONNX → CoreML exporters
-scripts/         – Dataset generation & verification
-eval/            – Evaluation harness · runners · reports
-tests/           – Unit · integration · property · CI smoke
+arbiter/         – CAWS governance stack (judge training · claims · schemas)
+build/           – Dataset building and packaging utilities
+capture/         – Data capture, normalization, and validation
+codemod/         – Code modification and transformation utilities
+configs/         – Model configs (worker / judge / drafter / training recipes)
+conversion/      – PyTorch → ONNX → CoreML exporters and validators
+coreml/          – CoreML-specific tools, runtime, and ANE optimizations
+data/            – Datasets, evaluation data, and generated artifacts
+docs/            – Documentation and guides
+eval/            – Evaluation harness · runners · reports · scoring
+evaluation/      – Specialized evaluation utilities (perf, memory, reasoning)
+infra/           – Infrastructure utilities and health checks
+models/          – Model definitions and pre-built artifacts
+onnx/            – ONNX-specific tools and surgery utilities
+runtime/         – Runtime orchestration and refinement controllers
+schemas/         – JSON schemas and validation definitions
+scripts/         – Dataset generation, verification, and utility scripts
+tests/           – Unit · integration · e2e · property · CI smoke tests
+tools/           – Tool definitions and schema validation
+training/        – Training utilities, losses, and distillation
 ```
 
 ---
@@ -380,11 +417,13 @@ It delivers **distilled CoreML models** verified through **CAWS-compliant evalua
 
 ## Documentation
 
+- **Toy Test Strategy**: [`docs/TOY_TEST_STRATEGY.md`](docs/TOY_TEST_STRATEGY.md) - Comprehensive toy testing approach
 - **Dataset Card**: [`docs/DATASET_CARD_CONTEXTUAL.md`](docs/DATASET_CARD_CONTEXTUAL.md) - Dataset schema and policies
 - **Generation Guide**: [`docs/CONTEXTUAL_DATASET_GENERATION.md`](docs/CONTEXTUAL_DATASET_GENERATION.md) - Full workflow
 - **Evaluation Harness**: [`eval/HARNESS.md`](eval/HARNESS.md) - Evaluation harness documentation
 - **Scale Tests**: [`docs/SCALE_TESTS.md`](docs/SCALE_TESTS.md) - Scale testing guide
 - **CAWS Guide**: [`docs/CAWS_AGENT_GUIDE.md`](docs/CAWS_AGENT_GUIDE.md) - CAWS agent workflow guide
-- **Arbiter Theory**: [`arbiter_theory.md`](arbiter_theory.md) - Arbiter stack architecture
+- **Arbiter Theory**: [`docs/ARBITER_THEORY.md`](docs/ARBITER_THEORY.md) - Arbiter stack architecture
 - **Distillation Guide**: [`docs/DISTILLATION_GUIDE.md`](docs/DISTILLATION_GUIDE.md) - Distillation guide and rationale
+- **Deployment**: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) - Model deployment and runtime configuration
 - **Full Docs Index**: [`docs/README.md`](docs/README.md) - Complete documentation index

@@ -100,4 +100,3 @@ jobs:
           path: |
             eval/*.json*
             eval/results/*.jsonl
-
