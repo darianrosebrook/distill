@@ -11,8 +11,20 @@ from typing import Any, Dict, Iterable, List
 
 # Runners & scoring
 from eval.runners.base import Runner
-from eval.runners.openai_http import OpenAIHTTPRunner
-from eval.runners.hf_local import HFLocalRunner
+
+# Import runners conditionally to avoid requiring all dependencies for smoke testing
+try:
+    from eval.runners.openai_http import OpenAIHTTPRunner
+    OPENAI_RUNNER_AVAILABLE = True
+except ImportError:
+    OPENAI_RUNNER_AVAILABLE = False
+
+try:
+    from eval.runners.hf_local import HFLocalRunner
+    HF_RUNNER_AVAILABLE = True
+except ImportError:
+    HF_RUNNER_AVAILABLE = False
+
 try:
     from eval.runners.orchestrator import OrchestratorRunner
     ORCHESTRATOR_RUNNER_AVAILABLE = True
@@ -42,10 +54,15 @@ class MockRunner(Runner):
 
 
 RUNNERS = {
-    "openai_http": OpenAIHTTPRunner,
-    "hf_local": HFLocalRunner,
-    "mock": MockRunner,  # For smoke testing
+    "mock": MockRunner,  # For smoke testing - always available
 }
+
+if OPENAI_RUNNER_AVAILABLE:
+    RUNNERS["openai_http"] = OpenAIHTTPRunner
+
+if HF_RUNNER_AVAILABLE:
+    RUNNERS["hf_local"] = HFLocalRunner
+
 if ORCHESTRATOR_RUNNER_AVAILABLE:
     RUNNERS["orchestrator"] = OrchestratorRunner
 
@@ -209,6 +226,9 @@ def main() -> None:
             workload_type=args.workload_type)
         print(
             f"[eval/cli] Batch policy: workload_type={args.workload_type}, batch_size={selected_batch}")
+    except ImportError:
+        # Skip batch policy if dependencies not available (for smoke testing)
+        pass
     except Exception as e:
         print(f"[eval/cli] WARN: Failed to initialize batch policy: {e}")
 
@@ -221,7 +241,11 @@ def main() -> None:
         try:
             from runtime.config import RuntimeConfig
             from pathlib import Path
-            import yaml
+            try:
+                import yaml
+                YAML_AVAILABLE = True
+            except ImportError:
+                YAML_AVAILABLE = False
             
             # Load config from files if they exist
             latent_config_path = Path("eval/configs/latent.yaml")
@@ -231,7 +255,7 @@ def main() -> None:
             runtime_config = RuntimeConfig.from_env()
             
             # Override with config files if they exist
-            if eval_latent and latent_config_path.exists():
+            if eval_latent and latent_config_path.exists() and YAML_AVAILABLE:
                 with open(latent_config_path, 'r') as f:
                     latent_config = yaml.safe_load(f)
                     gates = latent_config.get("gates", {})
@@ -239,12 +263,16 @@ def main() -> None:
                     runtime_config.latent_mode_enabled = True
                     runtime_config.max_refinement_loops = efficiency.get("max_loop_increase", 5) or 5
                     runtime_config.curriculum_probability = 1.0  # Full curriculum for evaluation
-            
-            if eval_code_mode and code_mode_config_path.exists():
+            elif eval_latent and latent_config_path.exists() and not YAML_AVAILABLE:
+                print("[eval/cli] WARN: YAML not available, skipping latent config loading")
+
+            if eval_code_mode and code_mode_config_path.exists() and YAML_AVAILABLE:
                 with open(code_mode_config_path, 'r') as f:
                     code_mode_config = yaml.safe_load(f)
                     gates = code_mode_config.get("gates", {})
                     runtime_config.latent_mode_enabled = False  # Code mode doesn't use latent
+            elif eval_code_mode and code_mode_config_path.exists() and not YAML_AVAILABLE:
+                print("[eval/cli] WARN: YAML not available, skipping code mode config loading")
                     # Code mode settings would go here if needed
             
             print(f"[eval/cli] Runtime config loaded: latent={runtime_config.latent_mode_enabled}, halt={runtime_config.halt_head_enabled}")
