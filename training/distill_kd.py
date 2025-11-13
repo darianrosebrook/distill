@@ -850,8 +850,8 @@ def save_checkpoint(
             "numpy": np.random.get_state(),
             "torch": torch.get_rng_state(),
             "torch_cuda": torch.cuda.get_rng_state() if torch.cuda.is_available() else None,
-        }
-    
+    }
+
     checkpoint = {
         "step": step,
         "model_state_dict": model_state,
@@ -1926,15 +1926,15 @@ def train_step(
         else:
             # Normal update without gradient norm logging
             if scaler is not None:
-                scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.get(
-                    "optimizer", {}).get("grad_clip", 1.0))
-                scaler.step(optimizer)
-                scaler.update()
-            else:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.get(
-                    "optimizer", {}).get("grad_clip", 1.0))
-                optimizer.step()
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.get(
+                "optimizer", {}).get("grad_clip", 1.0))
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.get(
+                "optimizer", {}).get("grad_clip", 1.0))
+            optimizer.step()
         optimizer.zero_grad()
 
     # Convert to float for logging
