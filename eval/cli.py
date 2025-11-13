@@ -177,6 +177,8 @@ def main() -> None:
     ap.add_argument("--out", required=True, help="Output results JSONL")
     ap.add_argument("--report", required=True, help="Summary report JSON")
     ap.add_argument("--fixtures", required=True, help="Fixtures directory for ToolBroker")
+    ap.add_argument("--comprehensive", action="store_true",
+                   help="Run comprehensive evaluation with performance benchmarks (toy models only)")
     ap.add_argument(
         "--prompt-wrapper",
         default=None,
@@ -226,6 +228,22 @@ def main() -> None:
         help="Workload type: 'interactive' (batch=1) or 'offline' (batch 2-4)",
     )
     args = ap.parse_args()
+
+    # Handle comprehensive evaluation for toy models
+    if getattr(args, 'comprehensive', False):
+        # Import comprehensive evaluation from toy test scripts
+        try:
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+            from scripts.test_8_ball_coreml import run_comprehensive_evaluation
+
+            print("🔬 Running comprehensive evaluation with benchmarks...")
+            result = run_comprehensive_evaluation(args.model, args.report)
+            print(f"✅ Comprehensive evaluation complete: {args.report}")
+            return
+        except ImportError as e:
+            print(f"❌ Comprehensive evaluation not available: {e}")
+            print("   This feature requires CoreML and toy model support")
+            sys.exit(1)
 
     # Load dataset
     raw_items = list(read_jsonl(args.inp))
