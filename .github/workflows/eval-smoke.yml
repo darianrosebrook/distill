@@ -84,7 +84,7 @@ assert s.get('privacy_ok_rate', 1.0) == 1.0, f'Privacy violations: {s.get(\"priv
 
 print('✅ Gates OK:', s)
 print('✅ Fingerprints present:', list(header.keys()))
-"
+          "
 
       - name: Upload artifacts
         if: always()

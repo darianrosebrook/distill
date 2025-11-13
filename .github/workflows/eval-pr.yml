@@ -67,5 +67,5 @@ if os.path.exists('eval/report.smoke.json'):
     print('✅ Fingerprints present:', list(header.keys()))
 else:
     print('⚠️ Report not generated (model may be missing); broker smoke test passed')
-"
+          "
 
