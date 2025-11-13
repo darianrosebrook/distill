@@ -207,3 +207,7 @@ docs/archive/
 docs_status
 external/
 internal/
+
+# Smoke test artifacts
+**/report.smoke.json
+**/results.smoke.jsonl
