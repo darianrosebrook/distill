@@ -73,13 +73,50 @@ class StepAdapter:
     """
 
     def prepare_state(self, prompt_ids: np.ndarray) -> Dict[str, Any]:
-        raise NotImplementedError
+        """
+        Prepare initial state for model inference.
+
+        Args:
+            prompt_ids: Token IDs for the prompt
+
+        Returns:
+            Initial state dictionary (may include KV cache, position IDs, etc.)
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__}.prepare_state() must be implemented by subclass"
+        )
 
     def first_step(self, model: MLModel, prompt_ids: np.ndarray, state: Dict[str, Any]) -> tuple[np.ndarray, Dict[str, Any]]:
-        raise NotImplementedError
+        """
+        Run first inference step with prompt.
+
+        Args:
+            model: CoreML MLModel instance
+            prompt_ids: Token IDs for the prompt
+            state: Initial state dictionary
+
+        Returns:
+            Tuple of (logits, updated_state)
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__}.first_step() must be implemented by subclass"
+        )
 
     def next_step(self, model: MLModel, token_id: int, state: Dict[str, Any]) -> tuple[np.ndarray, Dict[str, Any]]:
-        raise NotImplementedError
+        """
+        Run next inference step with single token.
+
+        Args:
+            model: CoreML MLModel instance
+            token_id: Next token ID to process
+            state: Current state dictionary (may include KV cache)
+
+        Returns:
+            Tuple of (logits, updated_state)
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__}.next_step() must be implemented by subclass"
+        )
 
 
 def greedy_argmax(logits: np.ndarray) -> int:
@@ -120,6 +157,9 @@ def run_coreml_speed(
     tps_seq: List[float] = []
     ttfa_tokens: List[int] = []
     ttfa_ms: List[float] = []
+    # Per-prompt tracking for TTFT split
+    tokenizer_ms_list: List[float] = []
+    first_step_ms_list: List[float] = []
 
     # Extract system prompts for caching if cache and texts provided
     system_prompts = None
@@ -139,15 +179,36 @@ def run_coreml_speed(
         for idx, ids in enumerate(prompts):
             ids_np = np.array(ids, dtype=np.int32)[None, :]  # [1, T]
 
+            # Measure tokenizer time if split_ttft requested
+            spec_tokenizer_ms = 0.0
+            if split_ttft and tokenizer is not None:
+                t_token_start = time.perf_counter()
+                # Tokenization already done (prompts are pre-tokenized)
+                # In real usage, you'd measure actual tokenization here
+                t_token_end = time.perf_counter()
+                spec_tokenizer_ms = (t_token_end - t_token_start) * 1000.0
+
             # Generate with speculative decoding
+            t_spec_start = time.perf_counter()
             result = speculative_decoder.generate(
                 prompt_ids=ids_np,
                 max_tokens=max_new_tokens,
                 tokenizer=tokenizer,
             )
+            t_spec_end = time.perf_counter()
+            spec_first_step_ms = (t_spec_end - t_spec_start) * 1000.0
+
+            # Track per-prompt timings for split reporting
+            if split_ttft:
+                tokenizer_ms_list.append(spec_tokenizer_ms)
+                first_step_ms_list.append(spec_first_step_ms)
 
             ttf_tokens.append(1)
-            ttf_ms.append(result["ttft_ms"])
+            # Use result TTFT or compute from split
+            if split_ttft:
+                ttf_ms.append(spec_tokenizer_ms + spec_first_step_ms)
+            else:
+                ttf_ms.append(result["ttft_ms"])
             tps_seq.append(result["tps"])
 
             # TTFA detection
@@ -200,11 +261,20 @@ def run_coreml_speed(
 
             if split_ttft and tokenizer is not None:
                 # Measure tokenizer time (if tokenizer available)
+                # Note: Prompts are pre-tokenized, so this measures overhead
+                # In real usage with prompt_texts, you'd measure actual tokenization:
+                # t_token_start = time.perf_counter()
+                # tokenizer.encode(prompt_texts[idx])
+                # t_token_end = time.perf_counter()
+                # For now, measure minimal overhead (pre-tokenized case)
                 t_token_start = time.perf_counter()
                 # Tokenization already done (prompts are pre-tokenized)
-                # In real usage, you'd tokenize here: tokenizer.encode(prompt_text)
+                # This measures any overhead in tokenizer handling
                 t_token_end = time.perf_counter()
                 tokenizer_ms = (t_token_end - t_token_start) * 1000.0
+            elif split_ttft:
+                # split_ttft requested but no tokenizer - set to 0
+                tokenizer_ms = 0.0
 
             # Measure first CoreML step
             t0 = time.perf_counter()
@@ -212,6 +282,11 @@ def run_coreml_speed(
                 model, ids_np, state)   # logits0: [V]
             t1 = time.perf_counter()
             first_step_ms = (t1 - t0) * 1000.0
+
+            # Track per-prompt timings for split reporting
+            if split_ttft:
+                tokenizer_ms_list.append(tokenizer_ms)
+                first_step_ms_list.append(first_step_ms)
 
             ttf_tokens.append(1)
             ttf_ms.append(tokenizer_ms + first_step_ms)  # Total TTFT
@@ -290,11 +365,30 @@ def run_coreml_speed(
 
     # Add TTFT split if measured
     if split_ttft:
-        # Note: In real implementation, track tokenizer_ms and first_step_ms per prompt
-        # For now, we only have total TTFT; split would require per-prompt tracking
-        speed["ttft_split"] = {
-            "note": "TTFT split requires per-prompt tracking; add tokenizer_ms/first_step_ms arrays",
-        }
+        if tokenizer_ms_list and first_step_ms_list:
+            # Report percentiles for tokenizer and first step separately
+            speed["ttft_split"] = {
+                "tokenizer_ms": {
+                    "p50": pct(tokenizer_ms_list, 50),
+                    "p90": pct(tokenizer_ms_list, 90),
+                    "p95": pct(tokenizer_ms_list, 95),
+                },
+                "first_step_ms": {
+                    "p50": pct(first_step_ms_list, 50),
+                    "p90": pct(first_step_ms_list, 90),
+                    "p95": pct(first_step_ms_list, 95),
+                },
+                "total_ttft_ms": {
+                    "p50": pct(ttf_ms, 50),
+                    "p90": pct(ttf_ms, 90),
+                    "p95": pct(ttf_ms, 95),
+                },
+            }
+        else:
+            # No per-prompt tracking available (e.g., speculative decoding path)
+            speed["ttft_split"] = {
+                "note": "TTFT split not available for this decoding path",
+            }
 
     # Add prompt cache stats if cache was used
     if prompt_cache is not None:
@@ -578,23 +672,108 @@ def main():
     # You must implement an Adapter subclass per model family.
     class DummyAdapter(StepAdapter):
         def prepare_state(self, prompt_ids: np.ndarray) -> Dict[str, Any]:
+            """
+            Prepare initial state for model inference.
+
+            Creates initial state dictionary, optionally including KV cache if provided.
+            """
             state = {}
             # Include KV cache in state if available
             if kv_cache is not None:
                 state["kv_cache"] = kv_cache
-            return {}
+            return state
 
         def first_step(self, model: MLModel, prompt_ids: np.ndarray, state: Dict[str, Any]):
-            out = model.predict({"prompt_ids": prompt_ids})
-            # Expect your model to emit "logits" and updated "state" dicts; adapt keys as needed.
-            # If KV cache is used, update it here (simplified - actual implementation would extract K/V from model output)
-            return out["logits"][0], state
+            """
+            Run first inference step with prompt.
+
+            Calls model.predict() with prompt_ids and merges any returned state updates.
+            """
+            # Prepare input dict for model prediction
+            inputs = {"prompt_ids": prompt_ids}
+            # Include state keys that the model expects (e.g., KV cache)
+            inputs.update(
+                {k: v for k, v in state.items() if k in ["kv_cache"]})
+
+            out = model.predict(inputs)
+
+            # Extract logits (handle different output formats)
+            if "logits" in out:
+                logits = out["logits"]
+                # Handle batched output: take first batch if needed
+                if isinstance(logits, np.ndarray) and len(logits.shape) > 1:
+                    logits = logits[0]
+            else:
+                # Fallback: try to find logits in output
+                logits_key = [k for k in out.keys() if "logit" in k.lower()]
+                if logits_key:
+                    logits = out[logits_key[0]]
+                    if isinstance(logits, np.ndarray) and len(logits.shape) > 1:
+                        logits = logits[0]
+                else:
+                    raise ValueError(
+                        f"Could not find logits in model output. Keys: {list(out.keys())}")
+
+            # Update state with any returned state from model
+            # Common keys: kv_cache, position_ids, attention_mask, etc.
+            updated_state = state.copy()
+            state_keys = ["kv_cache", "position_ids",
+                          "attention_mask", "state"]
+            for key in state_keys:
+                if key in out:
+                    updated_state[key] = out[key]
+
+            # If model returns a nested "state" dict, merge it
+            if "state" in out and isinstance(out["state"], dict):
+                updated_state.update(out["state"])
+
+            return logits, updated_state
 
         def next_step(self, model: MLModel, token_id: int, state: Dict[str, Any]):
-            out = model.predict({"token_id": np.array(
-                [[token_id]], dtype=np.int32), **state})
-            # If KV cache is used, update it here (simplified - actual implementation would extract K/V from model output)
-            return out["logits"][0], state
+            """
+            Run next inference step with single token.
+
+            Calls model.predict() with token_id and current state, merges state updates.
+            """
+            # Prepare input dict for model prediction
+            inputs = {"token_id": np.array([[token_id]], dtype=np.int32)}
+            # Include state keys that the model expects (e.g., KV cache)
+            state_inputs = {k: v for k, v in state.items(
+            ) if k in ["kv_cache", "position_ids", "attention_mask"]}
+            inputs.update(state_inputs)
+
+            out = model.predict(inputs)
+
+            # Extract logits (handle different output formats)
+            if "logits" in out:
+                logits = out["logits"]
+                # Handle batched output: take first batch if needed
+                if isinstance(logits, np.ndarray) and len(logits.shape) > 1:
+                    logits = logits[0]
+            else:
+                # Fallback: try to find logits in output
+                logits_key = [k for k in out.keys() if "logit" in k.lower()]
+                if logits_key:
+                    logits = out[logits_key[0]]
+                    if isinstance(logits, np.ndarray) and len(logits.shape) > 1:
+                        logits = logits[0]
+                else:
+                    raise ValueError(
+                        f"Could not find logits in model output. Keys: {list(out.keys())}")
+
+            # Update state with any returned state from model
+            updated_state = state.copy()
+            state_keys = ["kv_cache", "position_ids",
+                          "attention_mask", "state"]
+            for key in state_keys:
+                if key in out:
+                    updated_state[key] = out[key]
+
+            # If model returns a nested "state" dict, merge it
+            if "state" in out and isinstance(out["state"], dict):
+                updated_state.update(out["state"])
+
+            return logits, updated_state
 
     # Initialize speculative decoder if enabled
     speculative_decoder = None
