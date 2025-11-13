@@ -30,7 +30,7 @@ if "training.dataset" in sys.modules:
 
 
 # Ensure HF_TOKENIZER_AVAILABLE is True in the module
-import training.dataset as dataset_module
+import training.dataset as dataset_module  # noqa: E402
 
 dataset_module.HF_TOKENIZER_AVAILABLE = True
 dataset_module.AutoTokenizer = mock_auto_tokenizer_class

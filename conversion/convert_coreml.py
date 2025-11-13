@@ -20,11 +20,11 @@ from pathlib import Path
 os.environ.setdefault("MLTOOLS_VERBOSE", "0")
 warnings.filterwarnings("ignore", category=UserWarning, module="coremltools")
 
-from infra.version_gate import check_coreml_versions
+from infra.version_gate import check_coreml_versions  # noqa: E402
 
 # Import ANE optimization checks
 try:
-    from tests.test_ane_optimizations import (
+    from tests.test_ane_optimizations import (  # noqa: E402
         detect_int64_tensors_on_attention_paths,
         check_ane_op_compatibility,
         verify_enumerated_shapes_static_allocation,

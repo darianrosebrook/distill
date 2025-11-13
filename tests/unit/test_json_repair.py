@@ -8,6 +8,8 @@ Tests:
 4. Repair metrics
 """
 
+import importlib.util
+
 import pytest
 from training.json_repair import (
     validate_json,
@@ -165,12 +167,7 @@ class TestBatchJSONRepair:
 
 
 # Import JSONREPAIR_AVAILABLE for conditional tests
-try:
-    import jsonrepair
-
-    JSONREPAIR_AVAILABLE = True
-except ImportError:
-    JSONREPAIR_AVAILABLE = False
+JSONREPAIR_AVAILABLE = importlib.util.find_spec("jsonrepair") is not None
 
 
 if __name__ == "__main__":

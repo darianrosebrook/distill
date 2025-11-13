@@ -169,9 +169,6 @@ def test_checkpoint_reproducibility(tmp_path: Path):
     with open(config_path2, "w") as f:
         json.dump(config, f)
 
-    output_dir1 = tmp_path / "output1"
-    output_dir2 = tmp_path / "output2"
-
     # Run training twice (simplified - would need to mock teacher API)
     # For now, just verify that configs are identical
     with open(config_path1, "r") as f:

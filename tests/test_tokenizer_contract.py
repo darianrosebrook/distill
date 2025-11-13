@@ -36,7 +36,6 @@ def test_special_token_ids_match_constants():
     # Get token IDs from tokenizer
     bos_id = tokenizer.bos_token_id
     eos_id = tokenizer.eos_token_id
-    unk_id = tokenizer.unk_token_id
 
     # Get bot/eot IDs by encoding
     bot_tokens = tokenizer.encode(BOT_TOKEN, add_special_tokens=False)
@@ -212,7 +211,6 @@ def test_loss_masking_never_hides_supervised_tokens():
     supervised_token_ids = {bot_id, eot_id}
 
     # Create labels (shifted by 1 for next-token prediction)
-    input_ids = torch.tensor(encoded[:-1], dtype=torch.long)
     labels = torch.tensor(encoded[1:], dtype=torch.long)
 
     # Verify supervised tokens are not masked with ignore_index (-100)

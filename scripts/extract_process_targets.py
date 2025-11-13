@@ -15,13 +15,13 @@ from typing import Dict, Any, Optional, List, Tuple
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from training.extractors import (
+from training.extractors import (  # noqa: E402
     extract_tool_name_span,
     extract_json_argument_spans,
     identify_integration_spans,
 )
-from tools.schema_registry import ToolSchemaRegistry, validate_args
-from scripts.util_token_spans import (
+from tools.schema_registry import ToolSchemaRegistry, validate_args  # noqa: E402
+from scripts.util_token_spans import (  # noqa: E402
     bytes_to_token_span,
     normalize_text_for_alignment,
 )

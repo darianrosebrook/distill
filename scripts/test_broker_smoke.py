@@ -17,6 +17,10 @@ def main():
         from eval.scoring.scorer import _evaluate_caws_compliance
         from eval.tool_broker.broker import ToolBroker
 
+        # Verify imports are available (basic smoke test)
+        assert callable(_evaluate_caws_compliance)
+        assert ToolBroker is not None
+
         print("✅ Successfully imported CAWS scorer and tool broker")
         print("✅ Broker smoke test passed")
         return 0

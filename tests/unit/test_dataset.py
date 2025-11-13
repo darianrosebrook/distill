@@ -23,10 +23,10 @@ if "training.dataset" in sys.modules:
     importlib.reload(sys.modules["training.dataset"])
 
 # Now import dataset (it will use our mock)
-from training.dataset import KDDataset, collate_kd_batch
+from training.dataset import KDDataset, collate_kd_batch  # noqa: E402
 
 # Ensure HF_TOKENIZER_AVAILABLE is True in the module
-import training.dataset as dataset_module
+import training.dataset as dataset_module  # noqa: E402
 
 dataset_module.HF_TOKENIZER_AVAILABLE = True
 dataset_module.AutoTokenizer = mock_auto_tokenizer_class

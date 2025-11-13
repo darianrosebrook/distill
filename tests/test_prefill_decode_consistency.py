@@ -238,12 +238,8 @@ def test_kv_cache_index_advancement():
     input_ids = torch.randint(0, cfg.vocab_size, (1, 10), dtype=torch.int32)
 
     with torch.no_grad():
-        # Prefill
-        prefill_outputs = model(input_ids)
-        if isinstance(prefill_outputs, tuple):
-            prefill_logits = prefill_outputs[0]
-        else:
-            prefill_logits = prefill_outputs
+        # Prefill (initialize model state)
+        model(input_ids)
 
         # Decode steps
         kv_caches = None
@@ -321,9 +317,6 @@ def test_prefill_decode_consistency_coreml(tmp_path):
     # This test requires a CoreML model to be available
     # For now, we'll test the function structure
 
-    # Create dummy input
-    input_ids = np.random.randint(0, 512, (1, 10), dtype=np.int32)
-
     # This would require an actual CoreML model path
     # For testing, we'll skip if model not available
     pytest.skip("Requires exported CoreML model - run export pipeline first")
@@ -348,8 +341,8 @@ def test_multi_batch_kv_cache_handling():
     input_ids = torch.randint(0, cfg.vocab_size, (batch_size, seq_len), dtype=torch.int32)
 
     with torch.no_grad():
-        # Prefill
-        prefill_outputs = model(input_ids)
+        # Prefill (just to initialize KV cache)
+        model(input_ids)
 
         # Decode with batch
         kv_caches = None

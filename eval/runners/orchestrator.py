@@ -7,7 +7,6 @@ from eval.runners.base import Runner
 
 try:
     from runtime.orchestration.inference import (
-        InferenceOrchestrator,
         InferenceConfig,
         create_inference_orchestrator_from_checkpoint,
     )

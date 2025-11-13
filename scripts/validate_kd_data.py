@@ -52,11 +52,6 @@ def validate_tool_call(tool_call: Dict[str, Any], registry: ToolSchemaRegistry) 
 
     # Validate JSON arguments
     try:
-        if isinstance(tool_call["arguments"], str):
-            args_dict = json.loads(tool_call["arguments"])
-        else:
-            args_dict = tool_call["arguments"]
-
         # Validate against schema
         is_valid, validation_errors = registry.validate_tool_call(tool_name, tool_call)
         if not is_valid:

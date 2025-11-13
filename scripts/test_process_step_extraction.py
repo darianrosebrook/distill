@@ -15,7 +15,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 # Import extractors directly
-from training.extractors import (
+from training.extractors import (  # noqa: E402
     extract_tool_name_span,
     extract_json_argument_spans,
     identify_integration_spans,
