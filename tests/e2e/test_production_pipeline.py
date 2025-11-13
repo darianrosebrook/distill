@@ -5,7 +5,7 @@ Template for testing the complete production model pipeline:
 dataset → training → export → conversion → verification
 
 This is a template test that requires a production checkpoint to run.
-For automated testing with toy models, use test_magic_8_ball_pipeline.py instead.
+For automated testing with toy models, use test_8_ball_pipeline.py instead.
 
 Usage:
     # With production checkpoint

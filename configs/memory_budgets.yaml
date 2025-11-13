@@ -49,6 +49,27 @@ memory_budgets:
       kv_cache_eviction_policy: "lru"
       max_memory_mb: 50000
 
+  # 8B Student Model
+  student_8b:
+    model_weights_mb: 8000  # INT8 weights (~8GB)
+    kv_cache_per_token_mb: 0.13  # FP16 KV cache per token
+    max_context_length: 4096
+
+    m1_max_64gb:
+      max_concurrent_sessions: 2
+      kv_cache_eviction_policy: "lru"
+      max_memory_mb: 50000
+
+    m2_max_64gb:
+      max_concurrent_sessions: 2
+      kv_cache_eviction_policy: "lru"
+      max_memory_mb: 50000
+
+    m3_max_64gb:
+      max_concurrent_sessions: 2
+      kv_cache_eviction_policy: "lru"
+      max_memory_mb: 50000
+
   # 7B Student Model
   student_7b:
     model_weights_mb: 7000  # INT8 weights (~7GB)

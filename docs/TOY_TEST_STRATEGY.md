@@ -183,7 +183,7 @@ training_config = {
 
 ```python
 # Example: 8-ball model teacher stub
-def magic_8_ball_teacher_logits(token_ids, vocab_size, tokenizer=None):
+def eight_ball_teacher_logits(token_ids, vocab_size, tokenizer=None):
     if tokenizer is not None:
         # Use real mystical phrases
         mystical_phrases = ["It is certain", "Outlook good", "Very doubtful"]

@@ -1,4 +1,4 @@
-![8-Ball](../8-ball.png)
+![8-Ball](../8-ball-wm.png)
 
 # 8-Ball
 
@@ -346,7 +346,7 @@ For production deployment, see the [CoreML Runtime Guide](../coreml/runtime/READ
 ## Citation
 
 ```bibtex
-@model{magic-8-ball-2025,
+@model{8-ball-2025,
   title={8-Ball: Ultra-Efficient Distilled Language Model},
   author={Rosebrook, Darian},
   year={2025},
@@ -611,7 +611,7 @@ make 8-ball
 ### Citation
 
 ```bibtex
-@model{magic-8-ball-2025,
+@model{8-ball-2025,
   title={8-Ball: Distilled Language Model},
   author={Rosebrook, Darian},
   year={2025},

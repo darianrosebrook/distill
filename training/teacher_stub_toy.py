@@ -7,9 +7,9 @@ Used by run_toy_distill.py to generate teacher logits during training.
 Supports both regular toy training and 8-Ball mystical training.
 
 Usage:
-    from training.teacher_stub_toy import teacher_logits, 8_ball_teacher_logits
+    from training.teacher_stub_toy import teacher_logits, eight_ball_teacher_logits
     logits = teacher_logits(token_ids, vocab_size=512)
-    mystical_logits = 8_ball_teacher_logits(token_ids, vocab_size=512)
+    mystical_logits = eight_ball_teacher_logits(token_ids, vocab_size=512)
 """
 
 import torch
@@ -35,8 +35,7 @@ def teacher_logits(token_ids: torch.Tensor, vocab_size: int = 512) -> torch.Tens
     device = token_ids.device
 
     # Create logits tensor
-    logits = torch.zeros((batch_size, seq_len, vocab_size),
-                         device=device, dtype=torch.float32)
+    logits = torch.zeros((batch_size, seq_len, vocab_size), device=device, dtype=torch.float32)
 
     # Deterministic "good" distribution: peaked at pretend token IDs
     # These represent tokens like "ok", "tool", "call", "{", "}"
@@ -66,7 +65,9 @@ def teacher_logits(token_ids: torch.Tensor, vocab_size: int = 512) -> torch.Tens
     return logits
 
 
-def magic_8_ball_teacher_logits(token_ids: torch.Tensor, vocab_size: int = 512, tokenizer=None) -> torch.Tensor:
+def eight_ball_teacher_logits(
+    token_ids: torch.Tensor, vocab_size: int = 512, tokenizer=None
+) -> torch.Tensor:
     """
     Generate context-aware 8-Ball teacher logits using real mystical token sequences.
 
@@ -88,12 +89,90 @@ def magic_8_ball_teacher_logits(token_ids: torch.Tensor, vocab_size: int = 512, 
     device = token_ids.device
 
     # Create logits tensor
-    logits = torch.zeros((batch_size, seq_len, vocab_size),
-                         device=device, dtype=torch.float32)
+    logits = torch.zeros((batch_size, seq_len, vocab_size), device=device, dtype=torch.float32)
 
+    # 8-ball answer token IDs (200-219) - use these for classification approach
+    eight_ball_token_ids = list(range(200, 220)) if vocab_size >= 220 else []
+
+    # Binary classifier token IDs (300-301) - YES/NO decisions
+    binary_token_ids = list(range(300, 302)) if vocab_size >= 302 else []
+
+    # Ternary classifier token IDs (400-402) - YES/NO/UNCERTAIN decisions
+    ternary_token_ids = list(range(400, 403)) if vocab_size >= 403 else []
+
+    # CLASSIFICATION APPROACH: Check for ternary classifier first (highest priority)
+    if ternary_token_ids and vocab_size >= 403:
+        # Ternary classifier: Boost YES/NO/UNCERTAIN tokens at answer position
+        for token_id in ternary_token_ids:
+            logits[..., token_id] += 2.0  # Baseline boost
+
+        # Very strong boost at the final position (where answer should appear)
+        for b in range(batch_size):
+            question_hash = hash(tuple(token_ids[b].cpu().numpy())) % 3
+            preferred_answer_id = ternary_token_ids[question_hash]
+
+            # Strong boost for the preferred answer at final position
+            logits[b, -1, preferred_answer_id] += 15.0
+
+            # Moderate boost for other ternary answers
+            for token_id in ternary_token_ids:
+                if token_id != preferred_answer_id:
+                    logits[b, -1, token_id] += 5.0
+
+        # Normalize to prevent overflow
+        logits = logits / (logits.abs().max() + 1e-8) * 10.0
+        return logits
+
+    # CLASSIFICATION APPROACH: Check for binary classifier second
+    elif binary_token_ids and vocab_size >= 302:
+        # Binary classifier: Boost YES/NO tokens at answer position
+        for token_id in binary_token_ids:
+            logits[..., token_id] += 2.0  # Baseline boost
+
+        # Very strong boost at the final position (where answer should appear)
+        for b in range(batch_size):
+            question_hash = hash(tuple(token_ids[b].cpu().numpy())) % 2
+            preferred_answer_id = binary_token_ids[question_hash]
+
+            # Strong boost for the preferred answer at final position
+            logits[b, -1, preferred_answer_id] += 15.0
+
+            # Moderate boost for other binary answer
+            for token_id in binary_token_ids:
+                if token_id != preferred_answer_id:
+                    logits[b, -1, token_id] += 5.0
+
+        # Normalize to prevent overflow
+        logits = logits / (logits.abs().max() + 1e-8) * 10.0
+        return logits
+
+    # CLASSIFICATION APPROACH: If vocab_size supports it, use 8-ball token IDs
+    elif eight_ball_token_ids and vocab_size >= 220:
+        # Boost all 8-ball answer tokens everywhere (baseline preference)
+        for token_id in eight_ball_token_ids:
+            logits[..., token_id] += 2.0  # Baseline boost
+
+        # Very strong boost at the final position (where answer should appear)
+        # Use question hash to deterministically pick which answer
+        for b in range(batch_size):
+            question_hash = hash(tuple(token_ids[b].cpu().numpy())) % 20
+            preferred_answer_id = eight_ball_token_ids[question_hash]
+            
+            # Strong boost for the preferred answer at final position
+            logits[b, -1, preferred_answer_id] += 15.0
+            
+            # Moderate boost for other 8-ball answers
+            for token_id in eight_ball_token_ids:
+                if token_id != preferred_answer_id:
+                    logits[b, -1, token_id] += 5.0
+        
+        # Normalize to prevent overflow
+        logits = logits / (logits.abs().max() + 1e-8) * 10.0
+        return logits
+
+    # FALLBACK: Original approach using real mystical phrases
     if tokenizer is not None:
-
-        # NEW: Use real mystical phrases and their token sequences
+        # Use real mystical phrases and boost their actual token IDs
         mystical_phrases = [
             "It is certain",
             "It is decidedly so",
@@ -114,76 +193,91 @@ def magic_8_ball_teacher_logits(token_ids: torch.Tensor, vocab_size: int = 512, 
             "My reply is no",
             "My sources say no",
             "Outlook not so good",
-            "Very doubtful"
+            "Very doubtful",
         ]
 
-        try:
-            # Get token sequences for each mystical phrase
-            mystical_token_sequences = []
-            for phrase in mystical_phrases:
-                try:
-                    tokens = tokenizer.encode(phrase, add_special_tokens=False)
-                    if tokens:  # Only add non-empty sequences
-                        mystical_token_sequences.append(tokens)
-                except Exception:
-                    continue
+        # Collect all unique tokens that appear in mystical phrases
+        mystical_tokens = set()
+        for phrase in mystical_phrases:
+            try:
+                tokens = tokenizer.encode(phrase, add_special_tokens=False)
+                mystical_tokens.update(tokens)
+            except Exception:
+                continue
 
-            # Add baseline preferences for mystical tokens everywhere (small boost)
-            for seq in mystical_token_sequences:
-                for token_id in seq:
-                    if token_id < vocab_size:
-                        # Small baseline preference for mystical tokens
-                        logits[..., token_id] += 0.1
-        except Exception:
-            mystical_token_sequences = []
+        mystical_tokens = [t for t in mystical_tokens if t < vocab_size]
 
-        # Context-aware: only boost mystical tokens where answers should appear
-        # Based on training data, mystical answers appear after ~10-15 tokens of prompt
+        # Boost mystical tokens everywhere (strong baseline preference)
+        for token_id in mystical_tokens:
+            logits[..., token_id] += 3.0  # Strong baseline boost
+
+        # Very strong boost in answer positions (where mystical responses should appear)
+        # Based on training data analysis, answers appear after ~5-10 tokens
         for b in range(batch_size):
             for t in range(seq_len):
-                # Only boost mystical tokens in positions where answers typically appear
-                if t >= 10:  # Assume prompts are ~10 tokens, answers come after
-                    # Boost tokens that appear in mystical sequences at this relative position
-                    relative_pos = t - 10  # Position within the answer
-                    for seq in mystical_token_sequences:
-                        if relative_pos < len(seq):
-                            token_id = seq[relative_pos]
-                            if token_id < vocab_size:
-                                # Higher score for exact sequence matches in answer positions
-                                logits[b, t, token_id] += 3.0
+                if t >= 5:  # Answers appear after prompt
+                    relative_pos = t - 5
 
-                    # Additional boost for mystical words in answer positions
-                    if relative_pos < 5:  # First few tokens of answer
-                        mystical_words = ["it", "outlook",
-                                          "yes", "cannot", "very"]
-                        for word in mystical_words:
+                    # Boost mystical tokens very strongly in answer positions
+                    for token_id in mystical_tokens:
+                        logits[b, t, token_id] += 8.0
+
+                    # Extra boost for common starting tokens in mystical answers
+                    if relative_pos == 0:  # First token of answer
+                        # Common mystical starters: "It", "Yes", "Without", "Outlook", etc.
+                        starter_tokens = []
+                        for phrase in ["It", "Yes", "Without", "Outlook", "My"]:
                             try:
-                                word_tokens = tokenizer.encode(
-                                    word, add_special_tokens=False)
-                                for token_id in word_tokens:
-                                    if token_id < vocab_size:
-                                        logits[b, t, token_id] += 1.0
+                                tokens = tokenizer.encode(phrase, add_special_tokens=False)
+                                starter_tokens.extend(tokens[:1])  # First token only
                             except Exception:
                                 continue
+                        for token_id in starter_tokens:
+                            if token_id < vocab_size:
+                                logits[b, t, token_id] += 15.0  # Very strong boost for starters
+
     else:
-        # FALLBACK: Original arbitrary token method (if no tokenizer)
+        # FALLBACK: Use actual token IDs from mystical phrases (hardcoded for reliability)
+        # These are the actual token IDs from the tokenizer for mystical words
         mystical_tokens = [
-            # "it", "is", "certain", etc.
-            10, 15, 25, 30, 35, 40, 45, 50, 55, 60,
-            65, 70, 75, 80, 85, 90, 95, 100, 105, 110,  # mystical words
-            115, 120, 125, 130, 135, 140, 145, 150, 155, 160,  # more mystical tokens
-            7, 8, 12, 13, 17, 18, 22, 23  # punctuation and special chars
+            # From "It is certain": 739(It), 338(is), 3058(certain)
+            739,
+            338,
+            3058,
+            # From "Yes": 3869
+            3869,
+            # From "Outlook good": 4451(Out), 6914(look), 1781(good), 451(not), 577(so)
+            4451,
+            6914,
+            1781,
+            451,
+            577,
+            # From "My reply is no": 1619(My), 8908(reply), 694(no)
+            1619,
+            8908,
+            694,
+            # From "Very doubtful": 18064(Very), 7404(doubt), 1319(ful)
+            18064,
+            7404,
+            1319,
+            # Common mystical punctuation and special tokens
+            373,
+            372,
+            368,
+            447,
+            322,  # "on", "it", "ly", "ha", "and"
         ]
 
         mystical_tokens = [t for t in mystical_tokens if t < vocab_size]
 
-        for mystical_token in mystical_tokens:
-            logits[..., mystical_token] = 4.0
+        # Boost mystical tokens everywhere
+        for token_id in mystical_tokens:
+            logits[..., token_id] += 1.0
 
-    # Apply gentle normalization (keep positive values for preferred tokens)
-    # Only subtract a small baseline, don't make everything non-positive
-    # Dampen negative but keep positive
+    # Apply normalization that preserves strong preferences
+    # Keep positive values, dampen negative ones
     logits = torch.where(logits > 0, logits, logits * 0.1)
-    logits = logits * 1.5  # Mystical temperature scaling
+    # Scale up significantly to provide very strong teacher signal
+    logits = logits * 5.0
 
     return logits

@@ -1,11 +1,11 @@
 {
   "generated_at": "2025-11-13T07:29:16.518741",
   "charts": {
-    "latency": "docs/assets/magic_8_ball/latency_comparison.svg",
-    "cost": "docs/assets/magic_8_ball/cost_comparison.svg",
-    "throughput": "docs/assets/magic_8_ball/throughput_comparison.svg",
-    "efficiency_multipliers": "docs/assets/magic_8_ball/efficiency_multipliers.svg",
-    "billion_scale_savings": "docs/assets/magic_8_ball/billion_scale_savings.svg",
-    "model_size": "docs/assets/magic_8_ball/model_size_comparison.svg"
+    "latency": "docs/assets/8_ball/latency_comparison.svg",
+    "cost": "docs/assets/8_ball/cost_comparison.svg",
+    "throughput": "docs/assets/8_ball/throughput_comparison.svg",
+    "efficiency_multipliers": "docs/assets/8_ball/efficiency_multipliers.svg",
+    "billion_scale_savings": "docs/assets/8_ball/billion_scale_savings.svg",
+    "model_size": "docs/assets/8_ball/model_size_comparison.svg"
   }
 }

@@ -1,0 +1,7 @@
+{
+  "add_prefix_space": false,
+  "bos_token": "[BOS]",
+  "eos_token": "[EOS]",
+  "unk_token": "[UNK]",
+  "pad_token": "[PAD]"
+}

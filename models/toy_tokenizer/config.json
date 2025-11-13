@@ -1,0 +1,10 @@
+{
+  "model_type": "bpe",
+  "vocab_size": 340,
+  "unk_token": "[UNK]",
+  "bos_token": "[BOS]", 
+  "eos_token": "[EOS]",
+  "pad_token": "[PAD]",
+  "add_prefix_space": false,
+  "tokenizer_class": "BPETokenizer"
+}

@@ -246,6 +246,67 @@ def create_minimal_tokenizer(output_dir: Path, vocab_size: int):
             vocab[token] = next_id
             next_id += 1
 
+    # Reserve tokens 200-219 for 8-ball answers (if vocab_size allows)
+    eight_ball_answers = [
+        "<BALL_IT_IS_CERTAIN>",
+        "<BALL_IT_IS_DECIDEDLY_SO>",
+        "<BALL_WITHOUT_A_DOUBT>",
+        "<BALL_YES_DEFINITELY>",
+        "<BALL_YOU_MAY_RELY_ON_IT>",
+        "<BALL_AS_I_SEE_IT_YES>",
+        "<BALL_MOST_LIKELY>",
+        "<BALL_OUTLOOK_GOOD>",
+        "<BALL_YES>",
+        "<BALL_SIGNS_POINT_TO_YES>",
+        "<BALL_REPLY_HAZY_TRY_AGAIN>",
+        "<BALL_ASK_AGAIN_LATER>",
+        "<BALL_BETTER_NOT_TELL_YOU_NOW>",
+        "<BALL_CANNOT_PREDICT_NOW>",
+        "<BALL_CONCENTRATE_AND_ASK_AGAIN>",
+        "<BALL_DONT_COUNT_ON_IT>",
+        "<BALL_MY_REPLY_IS_NO>",
+        "<BALL_MY_SOURCES_SAY_NO>",
+        "<BALL_OUTLOOK_NOT_SO_GOOD>",
+        "<BALL_VERY_DOUBTFUL>",
+    ]
+
+    # Add 8-ball answer tokens at IDs 200-219
+    if vocab_size > 219:
+        for i, answer_token in enumerate(eight_ball_answers):
+            token_id = 200 + i
+            if token_id < vocab_size:
+                vocab[answer_token] = token_id
+                next_id = max(next_id, token_id + 1)
+
+    # Reserve tokens 300-301 for binary classifier YES/NO (if vocab_size allows)
+    binary_answers = [
+        "<DECISION_YES>",
+        "<DECISION_NO>",
+    ]
+
+    # Add binary classifier tokens at IDs 300-301
+    if vocab_size > 301:
+        for i, answer_token in enumerate(binary_answers):
+            token_id = 300 + i
+            if token_id < vocab_size:
+                vocab[answer_token] = token_id
+                next_id = max(next_id, token_id + 1)
+
+    # Reserve tokens 400-402 for ternary classifier YES/NO/UNCERTAIN (if vocab_size allows)
+    ternary_answers = [
+        "<TERNARY_YES>",
+        "<TERNARY_NO>",
+        "<TERNARY_UNCERTAIN>",
+    ]
+
+    # Add ternary classifier tokens at IDs 400-402
+    if vocab_size > 402:
+        for i, answer_token in enumerate(ternary_answers):
+            token_id = 400 + i
+            if token_id < vocab_size:
+                vocab[answer_token] = token_id
+                next_id = max(next_id, token_id + 1)
+
     # Fill remaining vocabulary with synthetic tokens
     while next_id < vocab_size:
         token = f"<token_{next_id}>"
@@ -461,7 +522,18 @@ def export_to_huggingface_format(checkpoint_path: str, output_dir: Path):
         renamed_state_dict[new_key] = value
 
     # Save renamed model state dict
-    torch.save(renamed_state_dict, output_dir / "pytorch_model.bin")
+    # Try to save as safetensors first (avoids torch.load vulnerability)
+    try:
+        from safetensors.torch import save_file
+        save_file(renamed_state_dict, output_dir / "model.safetensors")
+        print("✅ Saved model as safetensors (safe from torch.load vulnerability)")
+    except ImportError:
+        print("⚠️  safetensors not available, saving as PyTorch .bin (may have torch.load issues)")
+        torch.save(renamed_state_dict, output_dir / "pytorch_model.bin")
+    except Exception as e:
+        print(
+            f"⚠️  Failed to save as safetensors: {e}, falling back to PyTorch .bin")
+        torch.save(renamed_state_dict, output_dir / "pytorch_model.bin")
 
     # Create config.json (simplified HuggingFace format)
     # Use LlamaForCausalLM architecture name for llama.cpp compatibility
@@ -568,8 +640,32 @@ def convert_to_gguf_direct(hf_dir: Path, output_gguf: Path):
         gguf_writer.add_head_count_kv(config.num_key_value_heads)
         gguf_writer.add_layer_norm_rms_eps(config.rms_norm_eps)
 
-        # Add tokenizer info - use llama tokenizer model to avoid BPE merge requirements
-        gguf_writer.add_tokenizer_model("llama")
+        # Detect tokenizer type - use appropriate model type
+        # Check if tokenizer is BPE (has merges) or SentencePiece
+        tokenizer_model_type = "llama"  # Default for SentencePiece
+        tokenizer_json_path = Path(hf_dir) / "tokenizer.json"
+
+        if tokenizer_json_path.exists():
+            # Check tokenizer.json for model type
+            import json
+            try:
+                with open(tokenizer_json_path) as f:
+                    tok_json = json.load(f)
+                model_type = tok_json.get("model", {}).get("type", "")
+                if model_type == "BPE":
+                    # BPE tokenizer - use gpt2 format (Ollama supports BPE via gpt2)
+                    tokenizer_model_type = "gpt2"
+                    print(f"   Detected BPE tokenizer, using 'gpt2' model type")
+            except Exception as e:
+                print(f"   Warning: Could not read tokenizer.json: {e}")
+
+        # Fallback: check tokenizer object attributes
+        if tokenizer_model_type == "llama":
+            if hasattr(tokenizer, "model") and hasattr(tokenizer.model, "merges"):
+                tokenizer_model_type = "gpt2"
+                print(f"   Detected BPE tokenizer (has merges), using 'gpt2' model type")
+
+        gguf_writer.add_tokenizer_model(tokenizer_model_type)
         gguf_writer.add_tokenizer_pre("default")
 
         # Add tokens
@@ -583,15 +679,15 @@ def convert_to_gguf_direct(hf_dir: Path, output_gguf: Path):
 
         gguf_writer.add_token_list(tokens)
 
-        # Add special tokens
-        if tokenizer.bos_token:
-            gguf_writer.add_token_bos(tokenizer.bos_token_id)
-        if tokenizer.eos_token:
-            gguf_writer.add_token_eos(tokenizer.eos_token_id)
-        if tokenizer.unk_token:
-            gguf_writer.add_token_unk(tokenizer.unk_token_id)
-        if tokenizer.pad_token:
-            gguf_writer.add_token_pad(tokenizer.pad_token_id)
+        # Add special tokens (using updated API method names)
+        if tokenizer.bos_token and tokenizer.bos_token_id is not None:
+            gguf_writer.add_bos_token_id(tokenizer.bos_token_id)
+        if tokenizer.eos_token and tokenizer.eos_token_id is not None:
+            gguf_writer.add_eos_token_id(tokenizer.eos_token_id)
+        if tokenizer.unk_token and tokenizer.unk_token_id is not None:
+            gguf_writer.add_unk_token_id(tokenizer.unk_token_id)
+        if tokenizer.pad_token and tokenizer.pad_token_id is not None:
+            gguf_writer.add_pad_token_id(tokenizer.pad_token_id)
 
         # For BPE tokenizers, we need merges. Create minimal merges for our vocabulary
         if hasattr(tokenizer, "model") and hasattr(tokenizer.model, "_mergeable_ranks"):
@@ -653,36 +749,62 @@ def convert_to_gguf_direct(hf_dir: Path, output_gguf: Path):
         state_dict = model.state_dict()
 
         # Map PyTorch parameter names to GGUF names
-        param_mapping = {
-            "embed_tokens.weight": "token_embd.weight",
-            "layers.{i}.self_attn.q_proj.weight": "blk.{i}.attn_q.weight",
-            "layers.{i}.self_attn.k_proj.weight": "blk.{i}.attn_k.weight",
-            "layers.{i}.self_attn.v_proj.weight": "blk.{i}.attn_v.weight",
-            "layers.{i}.self_attn.o_proj.weight": "blk.{i}.attn_output.weight",
-            "layers.{i}.mlp.gate_proj.weight": "blk.{i}.ffn_gate.weight",
-            "layers.{i}.mlp.up_proj.weight": "blk.{i}.ffn_up.weight",
-            "layers.{i}.mlp.down_proj.weight": "blk.{i}.ffn_down.weight",
-            "layers.{i}.input_layernorm.weight": "blk.{i}.attn_norm.weight",
-            "layers.{i}.post_attention_layernorm.weight": "blk.{i}.ffn_norm.weight",
-            "norm.weight": "output_norm.weight",
-            "lm_head.weight": "output.weight",
-        }
-
+        # GGUF uses specific naming conventions for Llama models
         for pt_name, tensor in state_dict.items():
-            gguf_name = pt_name
-            # Apply mapping
-            for pt_pattern, gguf_pattern in param_mapping.items():
-                if pt_pattern in pt_name:
-                    gguf_name = pt_name.replace(pt_pattern, gguf_pattern)
-                    break
+            gguf_name = None
 
-            # Convert to float16
+            # Handle embeddings
+            if pt_name == "model.embed_tokens.weight":
+                gguf_name = "token_embd.weight"
+            # Handle output layer
+            elif pt_name == "lm_head.weight":
+                gguf_name = "output.weight"
+            # Handle final layer norm
+            elif pt_name == "model.norm.weight":
+                gguf_name = "output_norm.weight"
+            # Handle transformer layers
+            elif pt_name.startswith("model.layers."):
+                # Extract layer number
+                parts = pt_name.split(".")
+                # e.g., "model.layers.0.self_attn..." -> "0"
+                layer_idx = parts[2]
+
+                if "self_attn.q_proj.weight" in pt_name:
+                    gguf_name = f"blk.{layer_idx}.attn_q.weight"
+                elif "self_attn.k_proj.weight" in pt_name:
+                    gguf_name = f"blk.{layer_idx}.attn_k.weight"
+                elif "self_attn.v_proj.weight" in pt_name:
+                    gguf_name = f"blk.{layer_idx}.attn_v.weight"
+                elif "self_attn.o_proj.weight" in pt_name:
+                    gguf_name = f"blk.{layer_idx}.attn_output.weight"
+                elif "mlp.gate_proj.weight" in pt_name:
+                    gguf_name = f"blk.{layer_idx}.ffn_gate.weight"
+                elif "mlp.up_proj.weight" in pt_name:
+                    gguf_name = f"blk.{layer_idx}.ffn_up.weight"
+                elif "mlp.down_proj.weight" in pt_name:
+                    gguf_name = f"blk.{layer_idx}.ffn_down.weight"
+                elif "input_layernorm.weight" in pt_name:
+                    gguf_name = f"blk.{layer_idx}.attn_norm.weight"
+                elif "post_attention_layernorm.weight" in pt_name:
+                    gguf_name = f"blk.{layer_idx}.ffn_norm.weight"
+
+            if gguf_name is None:
+                print(
+                    f"⚠️  Warning: Unknown parameter name '{pt_name}', skipping...")
+                continue
+
+            # Convert to float16 and add tensor
             tensor_f16 = tensor.to(torch.float16)
             gguf_writer.add_tensor(gguf_name, tensor_f16.numpy())
+            print(
+                f"   Added tensor: {pt_name} -> {gguf_name} ({tensor.shape})")
 
-        # Write the GGUF file
+        # Write the GGUF file (requires specific sequence)
         print("   Writing GGUF file...")
-        gguf_writer.write()
+        gguf_writer.write_header_to_file()
+        gguf_writer.write_kv_data_to_file()
+        gguf_writer.write_tensors_to_file()  # Handles TI data internally
+        gguf_writer.close()
 
         print(f"✅ GGUF conversion complete: {output_gguf}")
         print(
@@ -908,6 +1030,23 @@ def main():
 
     checkpoint_path = Path(args.checkpoint)
     output_gguf = Path(args.output)
+
+    # Auto-organize outputs into toys directories based on checkpoint path
+    checkpoint_str = str(checkpoint_path)
+    if "8ball" in checkpoint_str:
+        toy_type = "8ball"
+    elif "binary" in checkpoint_str:
+        toy_type = "binary"
+    elif "ternary" in checkpoint_str:
+        toy_type = "ternary"
+    else:
+        toy_type = "pipeline"
+
+    # If output path doesn't already include toys/, prepend it
+    output_str = str(output_gguf)
+    if not output_str.startswith("toys/"):
+        output_gguf = Path(f"toys/{toy_type}/{output_str}")
+        args.output = str(output_gguf)
 
     if not checkpoint_path.exists():
         print(f"❌ Checkpoint not found: {checkpoint_path}")

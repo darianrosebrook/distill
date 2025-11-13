@@ -114,6 +114,7 @@ Process-step supervision targets are automatically used during training when ava
 The training uses two main loss components:
 
 1. **JSON Validity Loss** (`json_validity_weight`, default: 0.3)
+
    - Penalizes invalid JSON generation
    - Uses pre-extracted JSON token IDs when available
    - Falls back to text-based extraction for backward compatibility
@@ -131,7 +132,7 @@ Process-step supervision is configured in the training config:
 process_supervision:
   loss_json_validity_weight: 0.3
   loss_tool_select_weight: 0.7
-  tool_names: ["read_file", "web.search", "file.write"]  # Optional: list of available tools
+  tool_names: ["read_file", "web.search", "file.write"] # Optional: list of available tools
 ```
 
 #### Training Step
@@ -162,6 +163,7 @@ pytest tests/integration/test_process_step_integration.py
 ```
 
 Tests verify:
+
 - Dataset loads process-step targets correctly
 - Batches contain target fields
 - Loss functions compute correctly with token IDs
@@ -170,6 +172,7 @@ Tests verify:
 ### Example Usage
 
 1. **Generate dataset with process-step targets**:
+
 ```bash
 python -m scripts.make_kd_mix_hardened \
     --out data/kd_mix.jsonl \
@@ -179,6 +182,7 @@ python -m scripts.make_kd_mix_hardened \
 ```
 
 2. **Verify targets in dataset**:
+
 ```python
 import json
 with open('data/kd_mix.jsonl') as f:
@@ -188,6 +192,7 @@ with open('data/kd_mix.jsonl') as f:
 ```
 
 3. **Train with process-step supervision**:
+
 ```bash
 python -m training.distill_process \
     --config configs/process_supervision.yaml \
@@ -212,3 +217,81 @@ python -m training.distill_process \
 - More sophisticated integration span detection
 - Support for multi-tool sequences
 - Alignment of token IDs with sequence positions for more accurate loss computation
+
+## Common Pitfalls & Debugging
+
+### Vocabulary Mismatch
+
+**🚨 Critical Issue: Always suspect "too good to be true" convergence metrics!**
+
+One of the most insidious bugs in distillation training occurs when there's a mismatch between the model's expected vocabulary size and the tokenizer's actual vocabulary.
+
+#### Symptoms
+
+- Suspiciously fast convergence (e.g., 55 steps instead of expected 1000+)
+- Model generates gibberish or repetitive outputs
+- Training appears successful but produces meaningless results
+
+#### Root Cause
+
+```python
+# PROBLEMATIC: Model expects small vocab, tokenizer has large vocab
+model = StudentLM(ModelCfg(vocab_size=512))  # Model expects 512 tokens
+tokenizer = load_tokenizer()  # But tokenizer has 30,000+ tokens!
+
+# Result: 75-80% of training tokens get clamped to vocab_size-1
+# Training data becomes gibberish: "<s>),🎱), this),), The),),),..."
+```
+
+#### Detection
+
+```python
+# Check for vocabulary mismatch
+model_vocab = model_config['vocab_size']
+tokenizer_vocab = len(tokenizer) if hasattr(tokenizer, '__len__') else tokenizer.vocab_size
+
+if tokenizer_vocab > model_vocab * 2:
+    print(f"🚨 VOCAB MISMATCH: Model expects {model_vocab}, tokenizer has {tokenizer_vocab}")
+    print("This will cause token clamping and gibberish training!")
+```
+
+#### Solution
+
+```python
+# ✅ CORRECT: Use matching vocabulary sizes
+model = StudentLM(ModelCfg(vocab_size=tokenizer.vocab_size))
+# OR retrain tokenizer to match model vocab_size
+```
+
+#### Prevention
+
+- Always verify `tokenizer.vocab_size == model_config['vocab_size']` before training
+- Be suspicious of convergence faster than 1-2% of expected steps
+- Test model outputs - gibberish generation indicates tokenization issues
+- Use full vocabulary sizes unless specifically constrained by model architecture
+- Monitor token clamping warnings: `⚠ clamped token ids to vocab_size=512` indicates mismatch
+
+#### Real-World Example
+
+During 8-ball toy model training investigation, we discovered:
+
+- Model trained with `vocab_size=512` but tokenizer had `30,000+` tokens
+- **75-80% of training tokens were clamped** to meaningless ID 511
+- Training data became complete gibberish: `"<s>),🎱), this),), The),),),..."`
+- Model "converged" in 55 steps by learning to navigate nonsense, not actual patterns
+- After fixing vocabulary alignment, loss curves normalized (7.9+ vs suspicious 2.5)
+- Model appropriately struggled with real learning challenges
+
+**Key Lesson**: Fast convergence metrics are often red flags, not success indicators! Always validate that model outputs make sense, not just that loss decreases.
+
+#### Automated Detection
+
+The toy distillation script (`training/run_toy_distill.py`) now includes automatic vocabulary mismatch detection:
+
+- Checks tokenizer vocab size vs model vocab size on startup
+- Warns if mismatch exceeds 2x threshold (critical issue)
+- Warns for any mismatch (minor issue)
+- Calculates percentage of tokens that will be clamped
+- Provides recommendations for fixing the mismatch
+
+This prevents silent failures where training appears successful but produces meaningless models.

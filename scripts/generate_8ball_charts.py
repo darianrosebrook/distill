@@ -21,8 +21,8 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 
-def load_magic8_benchmarks(report_path="eval/reports/magic_8_ball_e2e.json"):
-    """Load 8-Ball benchmark data."""
+def load_8ball_benchmarks(report_path="eval/reports/8_ball_e2e.json"):
+    """Load 8-ball benchmark data."""
     if os.path.exists(report_path):
         with open(report_path) as f:
             return json.load(f)
@@ -262,9 +262,7 @@ def generate_efficiency_multipliers_chart(output_dir):
         )
 
     ax.set_yscale("log")
-    ax.set_ylabel(
-        "Cost Multiplier (8-Ball = 1×)", fontsize=12, fontweight="bold", color="white"
-    )
+    ax.set_ylabel("Cost Multiplier (8-Ball = 1×)", fontsize=12, fontweight="bold", color="white")
     ax.set_title(
         "Cost Efficiency Multipliers: How Much More Expensive?",
         fontsize=14,
@@ -415,10 +413,10 @@ def generate_model_size_chart(output_dir):
 def main():
     """Generate all 8-Ball model card charts."""
     # Create output directory
-    output_dir = project_root / "docs" / "assets" / "magic_8_ball"
+    output_dir = project_root / "docs" / "assets" / "8_ball"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print("🎨 Generating 8-Ball Model Card Charts...")
+    print("🎨 Generating 8-ball Model Card Charts...")
     print("=" * 60)
 
     # Generate all charts

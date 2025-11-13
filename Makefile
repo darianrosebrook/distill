@@ -1,4 +1,4 @@
-.PHONY: kd inter proc qat onnx coreml probes eval release format judge worker drafter caws-eval contextual-gen contextual-extract contextual-verify contextual-pipeline gen-scale-1k gen-scale-10k verify-scale-1k verify-scale-10k verify-dual-tokenizers verify-next-registry gen-teacher-heavy verify-teacher-heavy eval-runner-openai eval-runner-local eval-smoke speed-coreml train-student-speed train-student-qat 8-ball magic-8-ball 8-ball-gguf magic-8-ball-gguf
+.PHONY: kd inter proc qat onnx coreml probes eval release format judge worker drafter caws-eval contextual-gen contextual-extract contextual-verify contextual-pipeline gen-scale-1k gen-scale-10k verify-scale-1k verify-scale-10k verify-dual-tokenizers verify-next-registry gen-teacher-heavy verify-teacher-heavy eval-runner-openai eval-runner-local eval-smoke speed-coreml train-student-speed train-student-qat 8-ball 8-ball-gguf
 
 # Worker model (primary generator, ~9B)
 worker:
@@ -543,12 +543,11 @@ toy-e2e: toy-clean
 	fi
 	@echo "Toy E2E OK → eval/reports/toy_e2e.json"
 
-.PHONY: 8-ball magic-8-ball
-8-ball: magic-8-ball
-magic-8-ball: toy-clean
+.PHONY: 8-ball
+8-ball: toy-clean
 	@echo "🎱 Starting 8-ball E2E Pipeline 🎱"
-	$(PYTHON) -m data.make_toy_kd --out /tmp/8_ball_kd.jsonl --n 128 --magic-8-ball
-	$(PYTHON) -m training.run_toy_distill --in /tmp/8_ball_kd.jsonl --out /tmp/8_ball.ckpt --epochs 2 --mps 0 --magic-8-ball
+	$(PYTHON) -m data.make_toy_kd --out /tmp/8_ball_kd.jsonl --n 128 --8-ball
+	$(PYTHON) -m training.run_toy_distill --in /tmp/8_ball_kd.jsonl --out /tmp/8_ball.ckpt --epochs 2 --mps 0 --8-ball
 	$(PYTHON) -m conversion.export_pytorch --checkpoint /tmp/8_ball.ckpt --out /tmp/8_ball_exported --toy --mode prefill --seq 64 --enumerated-T 64 128 256
 	@if [ -f /tmp/8_ball_exported/student_prefill_T128.pt ]; then \
 		$(PYTHON) -m conversion.convert_coreml --backend pytorch --in /tmp/8_ball_exported/student_prefill_T128.pt --out /tmp/8_ball_T128.mlpackage --seq 128 --compute-units all --toy || echo "⚠️  CoreML conversion may have failed (CoreML may not be available)"; \
@@ -562,13 +561,12 @@ magic-8-ball: toy-clean
 	fi
 	@echo "🎱 8-ball E2E Complete! → eval/reports/8_ball_e2e.json 🎱"
 
-.PHONY: 8-ball-gguf magic-8-ball-gguf
-8-ball-gguf: magic-8-ball-gguf
-magic-8-ball-gguf:
+.PHONY: 8-ball-gguf
+8-ball-gguf:
 	@echo "🎱 Converting 8-ball to GGUF for Ollama (Optional) 🎱"
 	@if [ ! -f /tmp/8_ball.ckpt ]; then \
 		echo "⚠️  8-ball checkpoint not found. Running full pipeline first..."; \
-		$(MAKE) magic-8-ball; \
+		$(MAKE) 8-ball; \
 	fi
 	@echo "⚠️  GGUF conversion has tokenizer compatibility issues with custom tokenizers."
 	@echo "   This is an optional feature - CoreML conversion (above) is the primary goal."

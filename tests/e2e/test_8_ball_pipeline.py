@@ -1,11 +1,11 @@
 """
-End-to-end 8-Ball pipeline test.
+End-to-end 8-ball pipeline test.
 
 Tests full flow: generate → train → export → convert → verify.
-Uses the 8-Ball toy model to validate the complete distillation pipeline.
+Uses the 8-ball toy model to validate the complete distillation pipeline.
 
 Usage:
-    pytest tests/e2e/test_magic_8_ball_pipeline.py -v
+    pytest tests/e2e/test_8_ball_pipeline.py -v
 """
 
 import pytest
@@ -42,25 +42,25 @@ def find_python311():
 @pytest.fixture
 def temp_dir():
     """Create temporary directory for test artifacts."""
-    with tempfile.TemporaryDirectory(prefix="magic8ball_e2e_") as tmpdir:
+    with tempfile.TemporaryDirectory(prefix="8ball_e2e_") as tmpdir:
         yield Path(tmpdir)
 
 
 @pytest.mark.slow
-def test_magic_8_ball_pipeline_e2e(temp_dir):
-    """Test full 8-Ball pipeline end-to-end."""
+def test_8_ball_pipeline_e2e(temp_dir):
+    """Test full 8-ball pipeline end-to-end."""
     # Paths
-    dataset_path = temp_dir / "magic_8_ball_kd.jsonl"
-    checkpoint_path = temp_dir / "magic_8_ball.ckpt"
+    dataset_path = temp_dir / "8_ball_kd.jsonl"
+    checkpoint_path = temp_dir / "8_ball.ckpt"
     export_dir = temp_dir / "exported"
-    mlpackage_path = temp_dir / "magic_8_ball_T128.mlpackage"
-    report_path = temp_dir / "magic_8_ball_e2e.json"
+    mlpackage_path = temp_dir / "8_ball_T128.mlpackage"
+    report_path = temp_dir / "8_ball_e2e.json"
 
-    print("\n🎱 MAGIC 8 BALL E2E PIPELINE TEST 🎱")
+    print("\n🎱 8-BALL E2E PIPELINE TEST 🎱")
     print("=" * 60)
 
-    # Step 1: Generate 8-Ball KD dataset
-    print("\n[Step 1] Generating 8-Ball KD dataset...")
+    # Step 1: Generate 8-ball KD dataset
+    print("\n[Step 1] Generating 8-ball KD dataset...")
     result = subprocess.run(
         [
             sys.executable,
@@ -70,7 +70,7 @@ def test_magic_8_ball_pipeline_e2e(temp_dir):
             str(dataset_path),
             "--n",
             "128",
-            "--magic-8-ball",
+            "--eight-ball",
         ],
         capture_output=True,
         text=True,
@@ -80,8 +80,8 @@ def test_magic_8_ball_pipeline_e2e(temp_dir):
     print(f"✅ Dataset created: {dataset_path}")
     print(f"   Output: {result.stdout}")
 
-    # Step 2: Train 8-Ball model
-    print("\n[Step 2] Training 8-Ball model...")
+    # Step 2: Train 8-ball model
+    print("\n[Step 2] Training 8-ball model...")
     result = subprocess.run(
         [
             sys.executable,
@@ -95,7 +95,7 @@ def test_magic_8_ball_pipeline_e2e(temp_dir):
             "2",
             "--mps",
             "0",
-            "--magic-8-ball",
+            "--eight-ball",
         ],
         capture_output=True,
         text=True,
@@ -111,7 +111,7 @@ def test_magic_8_ball_pipeline_e2e(temp_dir):
     assert "model_state_dict" in checkpoint
     assert "config" in checkpoint
     assert "meta" in checkpoint
-    assert checkpoint["meta"].get("model_type") == "magic-8-ball"
+    assert checkpoint["meta"].get("model_type") == "8-ball"
     print(f"✅ Checkpoint verified: model_type={checkpoint['meta'].get('model_type')}")
 
     # Step 3: Export to TorchScript (requires Python 3.11)
@@ -262,7 +262,7 @@ def test_magic_8_ball_pipeline_e2e(temp_dir):
         print(f"   Shapes OK: {summary.get('shapes_ok', [])}")
         print(f"   Tool span F1: {summary.get('tool_span_micro_f1', 0.0):.4f}")
 
-    print("\n🎉 8-Ball E2E pipeline test PASSED!")
+    print("\n🎉 8-ball E2E pipeline test PASSED!")
     print("=" * 60)
 
 

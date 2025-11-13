@@ -270,16 +270,31 @@ Small deterministic slice enforcing fixture coverage and CAWS gates before merge
 <p align="center">
   <img src="8-ball.png" alt="8-ball" width="100" height="100">
   <br>
-  <em>🎱 Our toy models include a hyper-optimized 8-ball for mystical testing! 🎱</em>
+  <em>🎱 Our toy models enable fast pipeline testing without expensive compute! 🎱</em>
 </p>
 
 **Comprehensive lightweight testing without large language models or expensive compute** - validates the complete distillation pipeline using deterministic, optimized test doubles. Enables fast iteration during development while ensuring production-ready integration.
+
+**Two Toy Models for Different Testing Scenarios:**
+
+1. **Toy Baseline Model** - Tests general pipeline functionality and tool span extraction
+   - Purpose: Validates core distillation pipeline, tool-calling patterns, and integration points
+   - Training data: Simple tool-calling examples (e.g., `tool.call{"name":"sum","args":{"a":1,"b":2}}`)
+   - Use case: General pipeline validation, tool span detection, claims extraction testing
+   - Command: `make toy-e2e`
+
+2. **8-ball Model** - Tests domain-specific pattern learning with mystical responses
+   - Purpose: Validates domain-specific learning, pattern recognition, and response generation
+   - Training data: 8-ball style fortune-telling responses (e.g., "It is certain", "Very doubtful")
+   - Use case: Testing domain adaptation, pattern learning, response quality validation
+   - Command: `make 8-ball`
+
+Both models use the same architecture (~623K parameters) and training pipeline, but test different aspects of the distillation system. The toy baseline focuses on structural correctness (tool spans, JSON parsing), while the 8-ball model focuses on semantic pattern learning (domain-specific responses).
 
 **Key Features:**
 
 - **Fast execution**: Full pipeline in ≤4 minutes on CPU
 - **Complete coverage**: All integration points tested
-- **Complete Gibberish**: Model is virtually useless
 - **Deterministic**: Reproducible results across environments
 - **Production ready**: Same interfaces and validation as real models
 
@@ -320,7 +335,7 @@ ollama run 8-ball "Will this work?"
 
 The conversion script handles: PyTorch → HuggingFace → GGUF → Ollama Modelfile generation.
 
-**✅ Model Validation**: The 8-ball successfully learned its training patterns! It generates appropriate mystical responses with 8-ball phrases like "Concentrate and ask again", "Very doubtful", and "It is decidedly so" ✨🔮
+**✅ Model Validation**: The 8-ball successfully learned its training patterns! It generates appropriate responses with 8-ball phrases like "Concentrate and ask again", "Very doubtful", and "It is decidedly so". This validates that the distillation pipeline can learn domain-specific patterns from teacher outputs.
 
 ### Conversion Process Learnings
 

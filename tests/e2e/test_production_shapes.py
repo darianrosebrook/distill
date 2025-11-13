@@ -9,7 +9,7 @@ Usage:
 
 Note:
     This test requires a production checkpoint. For testing with toy models,
-    use test_magic_8_ball_pipeline.py instead.
+    use test_8_ball_pipeline.py instead.
 """
 
 import pytest
@@ -73,7 +73,7 @@ def test_production_shapes_validation(production_shapes, primary_shape, tmp_path
     Test that production shapes validate correctly.
 
     This test requires a production checkpoint. For automated testing,
-    use test_magic_8_ball_pipeline.py with toy models instead.
+    use test_8_ball_pipeline.py with toy models instead.
     """
     # This is a template test - requires actual checkpoint
     checkpoint_path = tmp_path / "production_checkpoint.pt"

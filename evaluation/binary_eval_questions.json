@@ -1,0 +1,24 @@
+{
+  "questions": [
+    "EVIDENCE: The code passes all unit tests with 100% coverage. All integration tests pass. No critical bugs reported. QUESTION: Should we proceed? ANSWER (YES or NO):",
+    "EVIDENCE: Multiple critical security vulnerabilities found in dependency. No fix available from vendor. Production system at risk. QUESTION: Should we proceed? ANSWER (YES or NO):",
+    "EVIDENCE: Performance benchmarks show 50% improvement over previous version. Memory usage reduced by 30%. All SLAs met. QUESTION: Should we proceed? ANSWER (YES or NO):",
+    "EVIDENCE: Only 60% test coverage. Several edge cases not tested. Documentation incomplete. QUESTION: Should we proceed? ANSWER (YES or NO):",
+    "EVIDENCE: Feature implemented successfully. User acceptance testing passed. Ready for production deployment. QUESTION: Should we proceed? ANSWER (YES or NO):",
+    "EVIDENCE: Database migration script tested successfully. Rollback plan documented. Data integrity verified. QUESTION: Should we proceed? ANSWER (YES or NO):",
+    "EVIDENCE: API response times increased by 200%. Memory leak detected. Performance regression. QUESTION: Should we proceed? ANSWER (YES or NO):",
+    "EVIDENCE: Code review completed with minor style issues. All functionality implemented correctly. Tests passing. QUESTION: Should we proceed? ANSWER (YES or NO):",
+    "EVIDENCE: Breaking API changes introduced. All clients need updates. Migration guide incomplete. QUESTION: Should we proceed? ANSWER (YES or NO):",
+    "EVIDENCE: Load testing completed successfully. System handles 10x expected load. Scalability verified. QUESTION: Should we proceed? ANSWER (YES or NO):",
+    "EVIDENCE: Unit tests failing. Build broken. Cannot proceed with deployment. QUESTION: Should we proceed? ANSWER (YES or NO):",
+    "EVIDENCE: All integration tests pass. End-to-end workflows verified. Quality gates passed. QUESTION: Should we proceed? ANSWER (YES or NO):",
+    "EVIDENCE: Third-party service dependency down. No fallback implemented. High availability risk. QUESTION: Should we proceed? ANSWER (YES or NO):",
+    "EVIDENCE: Code changes minimal and focused. Impact analysis completed. Safe to deploy. QUESTION: Should we proceed? ANSWER (YES or NO):",
+    "EVIDENCE: Database schema changes untested. Migration script incomplete. Data loss risk. QUESTION: Should we proceed? ANSWER (YES or NO):",
+    "EVIDENCE: Performance monitoring implemented. Alerting configured. Observability complete. QUESTION: Should we proceed? ANSWER (YES or NO):",
+    "EVIDENCE: API contract changes undocumented. Client applications may break. QUESTION: Should we proceed? ANSWER (YES or NO):",
+    "EVIDENCE: Security review completed. No vulnerabilities found. Compliance verified. QUESTION: Should we proceed? ANSWER (YES or NO):",
+    "EVIDENCE: Test environment unstable. Flaky tests detected. Reliability concerns. QUESTION: Should we proceed? ANSWER (YES or NO):",
+    "EVIDENCE: Feature flags implemented. Gradual rollout plan ready. Risk mitigation in place. QUESTION: Should we proceed? ANSWER (YES or NO):"
+  ]
+}

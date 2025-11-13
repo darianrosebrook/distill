@@ -14,12 +14,12 @@ This directory contains automatically generated SVG charts for the 8-Ball model 
 ## Generation
 
 These charts are automatically generated when running `make 8-ball` via the script:
-`scripts/generate_magic8_charts.py`
+`scripts/generate_8ball_charts.py`
 
 ## Regeneration
 
 To regenerate charts manually:
 ```bash
-python scripts/generate_magic8_charts.py
+python scripts/generate_8ball_charts.py
 ```
 
