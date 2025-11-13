@@ -24,6 +24,10 @@ jobs:
           pip install -e ".[dev]" || pip install -r requirements-core.txt
           pip install pytest
 
+      - name: Set PYTHONPATH
+        run: |
+          echo "PYTHONPATH=$PWD:$PYTHONPATH" >> $GITHUB_ENV
+
       - name: Run broker fixture hit-rate smoke
         run: |
           make ci-broker-smoke

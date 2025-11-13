@@ -399,7 +399,7 @@ validate-sharding:
 		--tolerance 1e-3
 
 ci-broker-smoke:
-	pytest -q -k broker_fixtures_hit_rate tests/ci/test_broker_fixtures_hit_rate.py
+	pytest -q -k broker_fixtures_hit_rate tests/test_caws_compliance_gates.py
 
 validate-sharding:
 	python -m scripts.validate_sharding_determinism \
