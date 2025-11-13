@@ -1,0 +1,3 @@
+{"id": "drafter_001", "role": "drafter", "prompt": "Generate a short response about Python", "teacher_output": "Python is a programming language.", "target_student_behavior": "Should generate concise response and halt appropriately", "scoring_rubric": {"type": "judge_model", "pass_threshold": 0.8}, "metadata": {"max_length": 50}}
+{"id": "drafter_002", "role": "drafter", "prompt": "Explain async programming in detail", "teacher_output": "Async programming allows concurrent execution...", "target_student_behavior": "Should generate longer response when appropriate", "scoring_rubric": {"type": "judge_model", "pass_threshold": 0.8}, "metadata": {"min_length": 100}}
+

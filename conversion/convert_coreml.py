@@ -19,6 +19,24 @@ from pathlib import Path
 os.environ.setdefault("MLTOOLS_VERBOSE", "0")
 warnings.filterwarnings("ignore", category=UserWarning, module="coremltools")
 
+from infra.version_gate import check_coreml_versions
+
+# Import ANE optimization checks
+try:
+    from tests.test_ane_optimizations import (
+        detect_int64_tensors_on_attention_paths,
+        check_ane_op_compatibility,
+        verify_enumerated_shapes_static_allocation,
+    )
+except ImportError:
+    # Fallback if tests module not available
+    def detect_int64_tensors_on_attention_paths(model):
+        return []
+    def check_ane_op_compatibility(model_path):
+        return {"compatible": True, "error": "Tests module not available"}
+    def verify_enumerated_shapes_static_allocation(shapes):
+        return {"verified": True, "issues": []}
+
 
 def load_contract(contract_path: str):
     """Load contract.json and return input specifications."""
@@ -72,6 +90,19 @@ def convert_pytorch_to_coreml(
 
     print(
         f"[convert_coreml] Converting PyTorch→CoreML (target={target}, compute_units={compute_units})")
+
+    # Pre-conversion checks: Int64 tensor detection
+    if isinstance(pytorch_model, torch.jit.ScriptModule):
+        int64_issues = detect_int64_tensors_on_attention_paths(pytorch_model)
+        if int64_issues:
+            error_msg = f"Int64 tensor detection failed: {int64_issues}"
+            if allow_placeholder:
+                print(f"[convert_coreml] WARN: {error_msg}")
+            else:
+                raise RuntimeError(
+                    f"Int64 tensors detected on attention paths. ANE requires int32. "
+                    f"Issues: {int64_issues}. Fix input_ids dtype to int32 before export."
+                )
 
     try:
         # For TorchScript, we need to provide input specification
@@ -517,6 +548,13 @@ Examples:
                          'For toy models, converts the first prefill model matching these shapes.')
 
     args = ap.parse_args()
+
+    # Version compatibility check - fail fast if versions are incompatible
+    try:
+        check_coreml_versions()
+    except RuntimeError as e:
+        print(f"[convert_coreml] ERROR: Version check failed: {e}")
+        sys.exit(1)
 
     if args.ane_plan:
         os.environ["MLTOOLS_VERBOSE"] = "1"

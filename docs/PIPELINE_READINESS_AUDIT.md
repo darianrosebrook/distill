@@ -1,560 +1,658 @@
-# Pipeline Readiness Audit
+Short answer: yes, and you’re actually in a better place than most people who throw money at KD runs. The architecture of your pipeline is sound; the remaining risk is in **glue** and **governance**: places where configs can drift, exports can silently change, or numeric edge cases can slip through.
 
-**Author**: @darianrosebrook  
-**Date**: 2024-12-19  
-**Purpose**: Comprehensive audit of the distillation and conversion pipeline for production readiness, identifying scope, dependencies, fragilities, and priorities.
+Below is an audit framed around three questions:
 
----
-
-## Executive Summary
-
-This audit examines the complete pipeline from dataset generation through model training, export, CoreML conversion, evaluation, and governance. The pipeline is **functionally complete** with all critical issues identified and most resolved. The system demonstrates strong design with robust error handling, comprehensive testing, and clear production paths.
-
-**Overall Status**: ✅ **Production Ready** (with recommended improvements)
-
-**Key Findings**:
-
-- Complete end-to-end pipeline from data generation to CoreML deployment
-- Robust error handling and retry logic throughout
-- Comprehensive evaluation and validation mechanisms
-- Several specific issues identified with clear remediation paths
-- Well-defined priorities aligned with project goals
+1. **Where can this break in expensive or silent ways?**
+2. **What would keep it from running well on M1 Max / future M-series?**
+3. **What lets you recover or confidently say “this is good enough to invest in”?**
 
 ---
 
-## 1. Pipeline Scope
+## 1. Distillation & Training: Logic, Losses, and Failure Modes
 
-The entire pipeline from data preparation to model export is in scope. This includes:
+You’ve got a very rich distillation setup:
 
-### 1.1 Dataset Generation (`scripts/`)
+- KL + CE on teacher tokens
+- Tool-step supervision (tool name, JSON args, integration)
+- Intermediate layer matching (optional)
+- Length-aware KD
+- Early-tool-call loss
+- Halt-head loss
+- Curricula (latent reasoning, code-mode, sequence-length progression)
 
-**Knowledge Distillation Dataset Creation:**
+That’s powerful — but many of the failure modes are _interactions_ between these pieces rather than any one part.
 
-- `make_kd_mix.py` and `make_kd_mix_hardened.py` generate mixed prompt datasets by querying the teacher model
-- The hardened version extracts structured targets (tool names, JSON args, integration spans) for process-step supervision
-- Implements caching of teacher outputs (MD5-hashed by prompt) to avoid duplicate API calls
-- Robust retry logic with exponential backoff (up to 5 retries) for rate limits and transient errors
-- Non-fatal error handling: failed prompts increment error count and continue processing
+### 1.1 Loss composition & schedules
 
-**Process-Step Supervision Extraction:**
+**Potential issues**
 
-- `extract_process_targets.py` parses teacher outputs to identify:
-  - Tool name spans
-  - JSON argument spans
-  - Integration spans (how tool results are integrated into responses)
-- Produces token-level targets (token IDs and masks) for each component
-- Uses byte-level offsets and tokenizer mapping for alignment validation
+- A single term silently dominates gradients (especially CE on teacher vs KL, or tool losses vs main LM loss).
+- Length-aware KD and halt-head loss can fight: one penalizes long outputs, the other encourages “correct” stopping based on a different signal.
+- Early-tool-call loss can encourage “spammy tools” if not tied to correctness or downstream reward.
 
-**Contextual Prompt Generation & Verification:**
+**Concrete improvements**
 
-- `generate_contextual_prompts.py` creates specialized prompts with controlled complexity and structure
-- `verify_contextual_set.py` checks dataset quality:
-  - Integration span alignment
-  - No forbidden content
-  - Multi-locale validation
-  - PII redaction support
+1. **Per-loss gradient norm tracking** (per batch or per N steps):
 
-### 1.2 Model Training (`training/`)
+   - Log: `||∇θ L_ce||`, `||∇θ L_kl||`, `||∇θ L_tool||`, `||∇θ L_len||`, `||∇θ L_halt||`.
+   - Alert if any term’s norm consistently exceeds, say, **5–10×** the others over a window.
+   - Gate training start for “real” runs behind a quick smoke run that confirms gradient balance.
 
-**Knowledge Distillation (KD) Training:**
+2. **Loss ablation checkpoints**:
 
-- `distill_kd.py` performs main KD training with multiple loss components:
-  - KL divergence between teacher and student logits
-  - Cross-entropy on teacher's next-token predictions
-  - Process-step supervision losses (tool name, JSON args, integration spans)
-  - Optional intermediate layer matching
-  - Self-evaluation heads
-  - Halt heads (for learned halting)
-  - CAWS compliance loss
-  - Claim extraction loss
-- Supports curriculum learning for context lengths (4K → 8K → 16K progression)
-- Gradient accumulation and memory optimization (micro-batches of 2 with grad_accumulation of 16)
-- Checkpointing every `save_every` steps (default 2000) with resume capability
+   - Define 2–3 canonical _mini_ experiments:
 
-**Process-Step Supervision Training:**
+     - Base KD (KL + CE only)
+     - KD + tool supervision
+     - KD + tool + length + halt
 
-- `distill_process.py` trains specifically on tool usage decisions
-- Supervises tool name selection, JSON argument validity, and integration patterns
-- Uses pre-extracted token IDs when available, falls back to text-based extraction
+   - Save metrics & sample outputs for each and treat them as a **regression test suite** before major refactors.
 
-**Quantization-Aware Training:**
+3. **Scheduled weights as part of config, not code**:
 
-- `quant_qat_int8.py` fine-tunes with INT8 weight quantization (FP16 activations)
-- Introduces fake quantization during training to simulate int8 precision
-- Custom `QuantizedLinear` and `QuantizedAttention` modules
+   - All weights (KL, CE, tool, JSON, integration, length, halt, early-tool-call) should be:
 
-**Answer Generation Stage:**
-
-- `distill_answer_generation.py` handles final stage distillation focusing on direct answer quality after tool use
-
-### 1.3 Model Export (`conversion/`)
-
-**PyTorch Export (Production Path):**
-
-- `export_pytorch.py` exports to TorchScript/ExportedProgram format
-- Supports prefill and decode modes with KV cache handling
-- Generates contract JSON files specifying:
-  - Input/output names, shapes, and dtypes
-  - Enumerated sequence lengths (`enumerated_T`)
-  - Batch size (B), sequence length (T), vocabulary (V) dimensions
-- Exports multiple prefill models for enumerated shapes (default: [2048, 4096, 8192, 16384])
-- Single decode model (sequence length 1 with KV cache)
-
-**CoreML Conversion (Production Path):**
-
-- `convert_coreml.py` converts PyTorch models to CoreML mlpackage
-- Uses public MIL (Model Intermediate Language) converter API
-- Handles both TorchScript and ExportedProgram
-- Reads contract.json for input specifications
-- Supports enumerated shapes automatically
-- Placeholder creation option for CI (intentional, smoke tests only)
-
-**ONNX Export (Debug Only):**
-
-- `export_onnx.py` provides optional ONNX export for debugging
-- Not used in production path
-- Useful for model inspection and validation
-
-**Judge/Drafter Models:**
-
-- `judge_export_onnx.py` and `judge_export_coreml.py` handle judge-specific exports
-- Judge enumerates shorter contexts (256, 512, 1024) for efficiency
-- Each model variant has its own export pipeline tuned to context length needs
-
-### 1.4 Quantization & Optimization
-
-- INT8 weights with FP16 activations for efficient inference
-- Two-stage process: QAT during training, then export with quantized weights
-- Shape enumeration for ANE efficiency (512, 1024, 2048, 4096 tokens)
-- ANE compatibility checks via `coreml/ane_checks.py`
-- Runtime parity validation via `coreml/probes/compare_probes.py` (target ≤2% relative error)
-
-### 1.5 Evaluation & Governance (`eval/` and `arbiter/`)
-
-**CAWS-Compliant Evaluation Harness:**
-
-- Deterministic evaluation with tool broker and fixture replay
-- Measures integration span F1, tool selection accuracy, JSON validity
-- Checks for disallowed behaviors (control integration, privacy violations)
-- Enforces quality gates:
-  - Integration F1 (lax) ≥ 0.90
-  - Privacy OK Rate = 1.0 (hard fail)
-  - Control Integration = 0 (hard fail)
-  - Fixture Hit-Rate ≥ 95% (warn/fail)
-
-**Judge Model Training:**
-
-- `arbiter/judge_training/` handles pairwise ranking and clause labeling
-- Trained to evaluate outputs for CAWS compliance
-- Exported similarly to worker model
-
-**Claim Extraction:**
-
-- `arbiter/claims/` extracts and verifies claims from model outputs
-- Ensures model statements can be evaluated by judge
-
-**Production Conversion Path:**
-
-- Primary path: `PyTorch → TorchScript/ExportedProgram → CoreML`
-- ONNX is optional for debugging only, not in production pipeline
+     - Declared in a **single config object**.
+     - Logged into checkpoint metadata.
+     - Validated by a “config diff” when resuming, to avoid resuming a run with different loss weights than the initial stage.
 
 ---
 
-## 2. Tools and Libraries
+### 1.2 Halt head + Length-aware KD + Curriculum
 
-### 2.1 Critical Dependencies
+**Potential issues**
 
-**CoreMLTools (≥9.0) – Critical**
+- **Halt head** may be trained on distributions that don’t match your student’s eventual deployment (e.g., different max lengths, different tool behavior).
+- Length-aware KD (15% excess threshold) might be too rigid once you start latent reasoning: good answers may legitimately be longer but more structured.
+- Curriculum (teacher reasoning → student reasoning) can create **catastrophic verbosity collapse** (student stops early everywhere) if the halt signal overgeneralizes.
 
-- Used for PyTorch → CoreML conversion
-- Uses public MIL converter API (`ct.convert()` with `convert_to="mlprogram"`)
-- **Python Version Requirement**: 3.10 or 3.11 only (not 3.13+)
-- Version checks enforced via `infra/version_gate.py`
-- Pinned to version 9.0 in requirements for stability
-- Special considerations:
-  - API changes can break conversion
-  - Monitor release notes for breaking changes
-  - Some ops may silently fall back to CPU (checked via `ane_checks.py`)
+**Concrete improvements**
 
-**PyTorch (≥2.3) – Critical**
+1. **Explicit halt calibration dataset**:
 
-- Required for training and export
-- Uses `torch.export` (ExportedProgram) for model export pipeline
-- Falls back to `torch.jit.trace` if ExportedProgram unavailable
-- Minimum PyTorch 2.0+ for ExportedProgram API
-- Version consistency important across training and export
+   - Construct a small held-out set (hundreds of examples) with:
 
-**Hugging Face Transformers (≥4.43) – Important**
+     - Clear “good stopping point” labels.
+     - Some intentionally over-long and under-short completions.
 
-- Used for tokenizer and teacher model loading
-- Student model uses custom architecture but HF-compatible tokenizer
-- Same tokenizer (Llama-2) used for both teacher and student
-- Pinned to 4.43 to avoid tokenizer behavior changes
-- Potential issue: tokenization differences could cause process supervision span misalignment (mitigated with byte-level offsets)
+   - After training, evaluate:
 
-**Accelerate (≥0.33) – Important**
+     - ROC curve for halt decisions vs ground truth.
+     - Expected effective length vs reference length.
 
-- Used for distributed training and multi-GPU support
-- Handles gradient accumulation and device dispatching
-- Version consistency required for reproducibility
+   - Use that as a **repeatable checkpoint gate**.
 
-### 2.2 Optional Dependencies
+2. **Disentangle length-penalty and halt-learning**:
 
-**ONNX / ONNX Runtime (ONNX ≥1.16, ORT ≥1.18) – Debug Only**
+   - Consider:
 
-- Not part of production pipeline
-- Useful for model inspection and validation
-- ONNX export available for debugging and graph viewing
-- Apple Silicon optimized ORT build available for performance profiling
+     - Use **length-aware KD only in early stages**, when the student mostly copies teacher structure.
+     - Weight it down or turn it off when you lean into latent reasoning, letting the halt head govern length more.
 
-**Other Libraries:**
+3. **Curriculum logging**:
 
-- `datasets` (≥2.20) – Dataset loading/manipulation
-- `numpy`, `scipy` – Math libraries for evaluation metrics
-- `typer` – CLI tool building
-- `pydantic`, `jsonschema` – Schema validation in eval harness
+   - For each curriculum stage, record:
 
-**Not Used:**
+     - % of tokens that are teacher vs student generated.
+     - Average output length vs teacher.
+     - Halt-probability distribution across positions.
 
-- OpenVINO, NVIDIA TensorRT, HuggingFace Optimum (custom QAT + CoreML path)
+   - Alert if:
 
-### 2.3 Special Attention Areas
-
-1. **CoreMLTools Version Compatibility**: Monitor for API changes, test upgrades carefully
-2. **PyTorch Export Consistency**: Ensure same version used for training and export
-3. **Python Version**: Strictly 3.10 or 3.11 (enforced by version gates)
-4. **Tokenizer Compatibility**: Ensure teacher and student use same tokenizer
+     - Average length collapses suddenly (e.g., -40% vs prior stage).
+     - Halt head fires too early on >X% of samples.
 
 ---
 
-## 3. Known Fragilities and Issues
+### 1.3 Tool name / JSON / integration supervision
 
-### 3.1 Critical Issues (Must Fix)
+You’ve got a strong idea here: supervising _structure_ instead of raw CoT. That’s exactly what you want for ToS compliance.
 
-**1. Attention Mask Handling in Transformer Blocks**
+**Potential issues**
 
-**Issue**: The `attention_mask` in `MHA_GQA.forward` is not masking padding tokens correctly. Currently, adding a binary mask (0/1) to attention scores boosts real token scores by +1 rather than suppressing padded tokens.
+- Teacher JSON might be malformed in some samples; if you trust it blindly, you’re training the student on “broken” structures.
+- Tool schemas might evolve, but your distillation data remains old — student learns stale schemas.
+- Integration-pattern loss can become “style loss” that punishes perfectly-viable but slightly different patterns.
 
-**Location**: `models/student/architectures/gqa_transformer.py`
+**Concrete improvements**
 
-**Impact**: Padded tokens contribute normally to attention, causing subtle train/eval discrepancies. Becomes important with mixed-length sequences up to 16k.
+1. **Pre-distillation data validation pass**:
 
-**Recommendation**: Convert binary mask to additive form:
+   - Validate every tool call in the corpus against a schema:
 
-```python
-# Convert [B, T] mask (1 for tokens, 0 for pad) to additive mask
-mask = attn_mask.unsqueeze(1).unsqueeze(2).to(attn_scores.dtype)  # [B,1,1,T]
-attn_scores = attn_scores + (1 - mask) * -10000.0
-```
+     - JSON parses.
+     - Required fields present.
+     - Tool name exists in a canonical registry.
 
-Alternatively, use boolean mask with `masked_fill_`:
+   - Drop or mark invalid examples; log a **corruption rate**.
 
-```python
-attn_scores.masked_fill_(~mask, -1e4)
-```
+2. **Schema versioning in the dataset**:
 
-**2. Loading Model Config on Export**
+   - In each sample’s metadata, include:
 
-**Issue**: `export_pytorch.py` constructs fresh `ModelCfg()` instead of loading from checkpoint, causing potential dimension mismatches.
+     - `tool_schema_version`
+     - `orchestrator_version` (if relevant)
 
-**Location**: `conversion/export_pytorch.py` (line ~160-169)
+   - At distillation time, assert that:
 
-**Impact**: Exported model may have incorrect dimensions or dropped weights. Could export 7B model when 9B was trained.
+     - The version in the dataset matches or is compatible with the version your target runtime uses.
 
-**Recommendation**: Load config from checkpoint:
+   - If you change schemas, re-run a **migration script** on the distillation data and deliberately bump a dataset version.
 
-```python
-if 'model_state_dict' in checkpoint:
-    state_dict = checkpoint['model_state_dict']
-    cfg_dict = checkpoint.get('config', {})
-    cfg = ModelCfg(**cfg_dict)  # Use saved config
-else:
-    state_dict = checkpoint
-    cfg = ModelCfg()
-```
+3. **Integration loss bounded by semantic success, not string equality**:
 
-This ensures exported model exactly matches trained model and allows switching between model sizes without hard-coding.
+   - Rather than penalizing exact text mismatch, consider:
 
-### 3.2 High Priority Issues (Should Fix)
+     - Using a “pattern classifier” (small model or heuristic) that answers “does this integration correctly use the tool result?” and train against that signal.
 
-**3. Gradient Checkpointing Activation**
+   - At minimum, define permissive patterns:
 
-**Issue**: `model.gradient_checkpointing_enable()` is called but `StudentLM` doesn't implement this method (not a HuggingFace `PreTrainedModel`), so checkpointing is effectively disabled.
-
-**Location**: `training/distill_kd.py` (line ~899-907)
-
-**Impact**: Missing memory savings during training, potentially limiting batch size or context length.
-
-**Recommendation**: Implement manual gradient checkpointing:
-
-```python
-# In StudentLM.forward
-if self.checkpointing:
-    x = torch.utils.checkpoint.checkpoint(blk, x, attn_mask)
-else:
-    x = blk(x, attn_mask)
-```
-
-Add `self.checkpointing` flag that `gradient_checkpointing_enable()` sets to True.
-
-**4. Judge Export Placeholder Config**
-
-**Issue**: `judge_export_onnx.py` uses hardcoded placeholder config instead of loading from `configs/judge_4b.yaml`.
-
-**Location**: `conversion/judge_export_onnx.py` (line ~26-34)
-
-**Impact**: If judge config changes (e.g., to 7B), export script would still build 4B model.
-
-**Recommendation**: Load config from YAML file or checkpoint to ensure consistency between training and export.
-
-### 3.3 Medium Priority Issues (Known Fragilities)
-
-**5. Process-Step Extraction Accuracy – Medium Risk**
-
-**Location**: `scripts/extract_process_targets.py` and `training/extractors.py`
-
-**Issue**: Heuristic-based extraction of tool names, JSON arguments, and integration spans from teacher output. Relies on consistent formatting patterns. If teacher deviates, extraction may miss or mis-align spans.
-
-**Mitigation**:
-
-- Validation checks for token span alignment
-- Fallback to on-the-fly extraction if pre-extracted IDs unavailable
-- Tool names validated against known registry
-- Limitations documented in Distillation Guide
-
-**Status**: Functional but could be improved. Future work: more robust integration span detection (possibly using special tokens or small LM for labeling).
-
-**6. CoreMLTools Version Compatibility – Low Risk (Monitored)**
-
-**Location**: `conversion/convert_coreml.py` and `infra/version_gate.py`
-
-**Issue**: CoreMLTools API changes could break conversion. Version pinned to 9.0, but future versions (9.1, 10.0) may introduce breaking changes.
-
-**Mitigation**:
-
-- Version checks and error handling
-- `allow_placeholder` option for CI (intentional, smoke tests only)
-- Relies only on stable, documented APIs
-- ANE op-compatibility checked via `ane_checks.py`
-
-**Status**: Under control. Tested on coremltools 9.0 with macOS 13/14. Models use standard transformer ops well-supported on ANE.
-
-**7. Model Parity on Apple Silicon – Low Risk (Per-Model Verification)**
-
-**Location**: `coreml/probes/compare_probes.py`
-
-**Issue**: Numerical precision differences between PyTorch and CoreML can cause behavioral differences, especially with INT8 quantization.
-
-**Mitigation**:
-
-- Automated parity probes with random input sequences
-- Target ≤2% relative error at critical outputs (attention blocks, logits)
-- Enumerated shapes improve parity (fixed-size buffers reduce variability)
-- Conversion failures treated as critical (no silent fallback)
-
-**Status**: Initial tests show <1% divergence on logits. Re-run probes after any architecture or quantization changes.
-
-**8. Training Complexity & Maintainability – Low Risk to Correctness**
-
-**Location**: `training/distill_kd.py` (~1800+ lines)
-
-**Issue**: Single large file orchestrating multiple training modes, loss functions, and curriculum scheduling. High complexity increases risk of hidden bugs and unintended side effects.
-
-**Mitigation**:
-
-- Comprehensive integration tests
-- Extensive logging of loss components
-- Planned refactor: split into focused modules (core KD loop, process supervision, QAT logic)
-
-**Status**: Functionally correct, successfully used for smaller models. Refactor planned for maintainability.
-
-**9. Integration Span Detection (Heuristic) – Low Risk**
-
-**Location**: `training/extractors.py` – `identify_integration_spans()`
-
-**Issue**: Heuristic detection of where tool results are integrated into responses. May miss cases or produce false positives.
-
-**Mitigation**: Supplementary feature (main signals are tool selection and JSON arguments). Future improvement: teacher-labeled integration content.
-
-**Status**: Nice-to-have feature, doesn't break core functionality.
-
-### 3.4 Resolved Issues
-
-- ✅ **Intermediate Distillation Stage**: `distill_intermediate.py` properly deprecated (functionality integrated into `distill_kd.py`)
-- ✅ **Placeholder Judge Components**: `PlaceholderEntailmentJudge` properly documented and warned
-
-### 3.5 Future Enhancements (Not Blocking)
-
-**Length-Aware KD**: No explicit loss term to penalize verbose outputs beyond teacher length. Could implement hinge loss or length prediction head.
-
-**Halt Head for Drafter**: Separate output predicting when to stop generating. Would improve speculative decoding performance.
+     - E.g., allow synonyms, minor reordering, and variable naming differences in code-mode scenarios.
 
 ---
 
-## 4. Priorities
+### 1.4 Code-Mode training & worker/judge/drafter roles
 
-### 4.1 Priority Order
+You’re distinguishing **worker (code/tool-heavy)**, **judge**, and **drafter**. That’s great, but:
 
-**1. Model Quality Parity with Teacher – Highest Priority**
+**Potential issues**
 
-**Rationale**: Primary goal is reproducing reasoning quality of large teachers (e.g., Kimi K2 Thinking 32B) in small, local models. If quality degrades too much, other factors (speed, reproducibility) don't justify use.
+- Code-mode preference loss could cause overuse of orchestration (wrapping everything in types) when a simple direct call is fine.
+- Judge models might be overfitted to your current metrics rubric and misgeneralize to new tasks.
+- Drafter model’s halt behavior must be consistent with worker/judge expectations, or your speculative decoding may thrash.
 
-**Quality Gates**:
+**Concrete improvements**
 
-- Integration span F1 (lax) ≥ 0.90
-- Tool selection accuracy ≥ 90%
-- JSON validity ≥ 98%
+1. **Guardrails for CodeModePreferenceLoss**:
 
-**Measurement**: CAWS-compliant evaluation harness with deterministic fixture replay. CI fails if metrics fall short.
+   - Hard rule: evaluate code-mode preference only on:
 
-**Automation**: Quality gates enforced in CI with pass/fail reporting on each threshold.
+     - Multi-step tool chains.
+     - Larger payloads.
+     - PII-sensitive tasks (where you truly want typed orchestration).
 
-**2. Training-Time Reproducibility – High Priority**
+   - Implement this as:
 
-**Rationale**: Essential for CI/CD governance and regression detection. Enables confident resume from checkpoints and trust in improvements vs. noise.
+     - A **mask** over your loss: if not eligible, set the weight to 0.
 
-**Mechanisms**:
+   - Add assertions in unit tests:
 
-- Fixed seeds everywhere (data pipeline, model initialization, random augmentations)
-- Dataset fingerprinting (SHA-256 in dataset header and eval reports)
-- Deterministic sharding (stable hash partitioning by sample ID)
-- Tool usage replay (cached tool results for consistency)
-- Fingerprint validation (CI fails if fingerprints don't match)
+     - For random batches, count how many tokens/positions are “eligible”; alert if that fraction drifts wildly vs design.
 
-**Why It Matters**: Before investing in large training run, need confidence that partial results are trustworthy and improvements are real.
+2. **Judge sanity checks**:
 
-**3. Inference-Time Reliability – High Priority**
+   - Before using judge in your CAWS gates, do:
 
-**Rationale**: Model must work correctly and efficiently on target hardware (M1 Max, M2, M3). Quality without usability is not useful.
+     - Consistency check: sample pairs of outputs, see if judge decisions align with simple heuristics (e.g., “this one compiles, the other doesn’t”).
+     - Calibration: for scenarios where you can compute an objective metric (e.g., exact answer, unit test passing), ensure judge scores correlate.
 
-**Key Aspects**:
+3. **Drafter alignment with worker**:
 
-- CoreML model robustness (loads and runs without errors)
-- ANE utilization (runs primarily on Neural Engine, not CPU fallback)
-- Performance targets:
-  - TTFT ≤ 2.0s @4k, ≤ 3.0s @16k
-  - Throughput ≥ 25 tok/s @4k, ≥ 15 tok/s @16k
-- Memory management (fits in 64GB, no swapping)
-- Error handling (graceful degradation if ANE unavailable)
+   - Prepare a small suite of **drafter → worker** test cases:
 
-**Forward Compatibility**: Logic to select appropriate CoreML target (macOS13 vs macOS14) for newer chips.
+     - Drafter produces speculative tokens.
+     - Worker refines them under a fixed budget.
 
-**4. CAWS Compliance (Governance) – High Priority (Must Not Overlook)**
+   - Ensure drafter’s halt head produces segments that are:
 
-**Rationale**: Cannot deploy model that fails compliance checks. Hard gates enforced in CI.
-
-**Compliance Gates**:
-
-- Privacy OK Rate = 1.0 (hard fail)
-- Control Integration = 0 (hard fail)
-- Fixture Hit-Rate ≥ 95% (warn/fail)
-
-**Enforcement**: Compliance is non-negotiable. Single privacy failure blocks release. Designed into process via data filtering and special loss terms.
-
-**Trade-offs**: If trade-off exists (e.g., refusal responses for compliance), accept tiny quality hit to ensure compliance.
-
-### 4.2 Balanced Approach
-
-The balanced approach prioritizes:
-
-1. **Quality and compliance first** (must be good and safe)
-2. **Reproducibility and stability** (trust improvements, catch regressions)
-3. **Deployment reliability** (fast and reliable on device)
-
-These goals are aligned and tracked in evaluation reports. Project ready only when all gates pass.
-
-### 4.3 Recovery and Fault Tolerance
-
-Built-in mechanisms for recovery:
-
-- **Checkpointing**: Periodic saves during training (every 2000 steps) with resume capability
-- **Idempotent Export**: `export_pytorch.py` and `convert_coreml.py` can be rerun safely
-- **Teacher Query Cache**: Cached teacher outputs avoid duplicate API calls on re-runs
-
-These ensure pipeline is robust and automation-friendly.
+     - Big enough to be efficient.
+     - Not so large that worker wastes time rewriting everything.
 
 ---
 
-## 5. Recommendations Summary
+## 2. Tokenizer, Vocab, and Thinking/Tool Tags
 
-### 5.1 Immediate Actions (Before Training)
+For Kimi-K2-like models, tokenization around thinking/tool tags is _critical_.
 
-1. **Fix attention mask handling** in `MHA_GQA.forward` (Critical)
-2. **Fix model config loading** in `export_pytorch.py` (Critical)
-3. **Implement gradient checkpointing** in `StudentLM` (High Priority)
-4. **Update judge export** to load config from YAML (High Priority)
+You already mentioned:
 
-### 5.2 Verification Steps
+- Tokenizer consistency via SHA-256 fingerprinting.
+- (Elsewhere in your work) a tokenizer/vocab migration module.
 
-1. **Run parity probes** on exported CoreML model (verify ≤2% relative error)
-2. **Run ANE checks** to ensure model runs on Neural Engine
-3. **Run pre-training readiness checks** (`scripts/verify_pre_training_readiness.py`)
-4. **Run short mock training** (`scripts/test_training_execution.sh`) to catch misconfigurations
+**Potential issues**
 
-### 5.3 Future Improvements (Not Blocking)
+- Special tokens (thinking tags, tool tags, BOS/EOS, padding) misaligned between:
 
-1. **Refactor training code** into focused modules (maintainability)
-2. **Improve integration span detection** (more robust heuristics or teacher labeling)
-3. **Add length-aware KD loss** (if verbose outputs become issue)
-4. **Implement halt head for Drafter** (speculative decoding optimization)
+  - Teacher,
+  - Student,
+  - Exported PyTorch model,
+  - CoreML export.
 
-### 5.4 Monitoring and Maintenance
+- New special tokens added later without re-exporting / re-quantizing.
+- Masking logic misaligned with the new IDs, leading to subtle training/export bugs.
 
-1. **Monitor CoreMLTools releases** for breaking changes
-2. **Re-run parity probes** after any architecture or quantization changes
-3. **Track training complexity** and plan refactoring when appropriate
-4. **Maintain documentation** alignment with implementation
+**Concrete improvements**
+
+1. **Tokenizer contract tests**
+
+   - Create a `tokenizer_contract_test.py` that verifies, for all relevant tokenizers:
+
+     - Special token IDs match a single authoritative `tokens.json` (or similar).
+     - Thinking/tool tokens form **single tokens** (not split).
+     - Round trip for a reference prompt with thinking/tool tags stays stable across:
+
+       - Teacher tokenizer
+       - Student tokenizer
+       - Any runtime tokenizer used by CoreML host.
+
+   - Gate training and export on this passing.
+
+2. **Vocab migration audit log**
+
+   - When you run the tokenizer migration:
+
+     - Save a JSON record:
+
+       - Old vocab hash.
+       - New vocab hash.
+       - List of added tokens and assigned IDs.
+       - A small sample of affected strings and their old vs new tokenization.
+
+   - This makes debugging any downstream behavior much easier.
+
+3. **Masking & special-token safety tests**
+
+   - Unit tests to ensure:
+
+     - Padding mask never masks non-padding special tokens (BOS/EOS/thinking/tool tags).
+     - Loss masking (ignore index) never hides tool/JSON tokens when they are supposed to be supervised.
 
 ---
 
-## 6. Conclusion
+## 3. Export & CoreML Conversion: Contracts, Numerics, and ANE
 
-The pipeline demonstrates strong design with comprehensive error handling, robust testing, and clear production paths. All critical issues have been identified with clear remediation paths. The system is **production-ready** with the recommended fixes applied.
+Your production path:
 
-**Key Strengths**:
+> PyTorch → ExportedProgram → CoreML (ANE-optimized), with enumerated shapes, INT8 weights + FP16 activations, prefill/decode separation.
 
-- Complete end-to-end pipeline
-- Robust error handling and retry logic
-- Comprehensive evaluation and validation
-- Clear production path (PyTorch → CoreML)
-- Well-defined quality gates and priorities
+This is exactly what you want for M1 Max & friends, but a lot of pain typically hides here.
 
-**Areas for Improvement**:
+### 3.1 ExportedProgram and graph transforms
 
-- Attention mask handling (critical fix)
-- Model config loading on export (critical fix)
-- Gradient checkpointing implementation (high priority)
-- Training code refactoring (maintainability)
+You’ve already hit:
 
-With the critical fixes applied, the pipeline is ready for production training runs with confidence in reproducibility, quality, and deployment reliability.
+- Topological ordering issues (`aten_mul_tensor` before `embedding_default`).
+- Int64 and unsupported ops forcing CPU fallback or causing conversion failures.
+- FP16 / softmax / pooling issues (zeros, NaNs).
+
+**Concrete improvements**
+
+1. **FX/EP contract tests**
+
+   - Have a small script that:
+
+     - Exports the model at each target sequence length (512/1024/2048/4096).
+     - Runs:
+
+       - A **graph linter** that asserts:
+
+         - No unsupported ops (from a maintained denylist).
+         - No int64 tensors on paths that lead to softmax/attention.
+         - Nodes are topologically sorted (you can check manually before passing to `ExportedProgram`).
+
+   - Gate `make coreml` or equivalent on this passing.
+
+2. **Dtype & mask invariants**
+
+   - Before conversion, run a pass that:
+
+     - Asserts all attention masks are a consistent dtype (e.g., FP32 or bool), and are only cast once.
+     - Asserts softmax inputs are FP16/FP32, never INT.
+
+   - Log the number of casts added by your transformation; alert if it changes unexpectedly (exporter version drift).
+
+3. **Precision islands explicitly declared in config**
+
+   - List ops (or subgraphs) that must remain FP32 in a config:
+
+     - Softmax logits (optionally).
+     - LayerNorm stats.
+     - Any delicate pooling / normalization.
+
+   - Transformation code reads from this config; tests compare the resulting MIL / CoreML graph to ensure those islands exist.
 
 ---
 
-## Appendix: Code References
+### 3.2 CoreML contracts and regression testing
 
-### Training Components
+**Potential issues**
 
-- Combined KD loss: `training/losses.py` (lines 736-780)
-- Process-step supervision: `training/losses.py` (tool_name_loss, json_argument_loss, integration_copy_loss)
-- Curriculum learning: `training/distill_kd.py` (get_sequence_length)
-- Checkpointing: `training/distill_kd.py` (save_checkpoint, resume logic)
+- Zero/NaN outputs from FP16 + INT8 quantization.
+- Changes in CoreML or coremltools versions altering kernels or introducing bugs.
+- Enumerated shapes getting out of sync: training/eval use 4096 but export only supports up to 2048, etc.
 
-### Export Components
+**Concrete improvements**
 
-- PyTorch export: `conversion/export_pytorch.py`
-- CoreML conversion: `conversion/convert_coreml.py`
-- Contract generation: `conversion/export_pytorch.py` (contract.json)
+1. **Golden-vector regression tests**
 
-### Evaluation Components
+   - For each enumerated shape (512/1024/2048/4096):
 
-- Evaluation harness: `eval/cli.py`, `eval/HARNESS.md`
-- Tool broker: `eval/tool_broker/broker.py`
-- Parity probes: `coreml/probes/compare_probes.py`
-- ANE checks: `coreml/ane_checks.py`
+     - Save a small set of:
 
-### Known Issues
+       - Input token IDs & masks.
+       - PyTorch outputs (logits or hidden states).
 
-- Attention mask: `models/student/architectures/gqa_transformer.py` (MHA_GQA.forward)
-- Config loading: `conversion/export_pytorch.py` (line ~160-169)
-- Gradient checkpointing: `training/distill_kd.py` (line ~899-907)
-- Judge export: `conversion/judge_export_onnx.py` (line ~26-34)
+     - In a test, load the CoreML model, run those inputs, and assert:
+
+       - Cosine similarity ≥ 0.999 for hidden states or logits (tunable).
+       - No NaNs, no Infs.
+
+   - Run this in CI on macOS.
+
+2. **ANE residency & fallback detection**
+
+   - In your Mac test harness:
+
+     - Log which device each CoreML layer runs on.
+     - Assert a minimum % of layers or ops are on ANE for each configuration.
+
+   - If CoreML regresses and starts pushing key ops back to GPU/CPU, you catch it before trusting performance numbers.
+
+3. **IO contract tests**
+
+   - Define a single `coreml_contract.json` that specifies:
+
+     - Input names, shapes, dtypes (for each enumerated shape).
+     - Output names and shapes.
+
+   - Before publishing an mlpackage:
+
+     - Validate the exported CoreML model against this contract.
+
+   - This protects you from subtle exporter changes and is especially important when you start using multiple student architectures.
+
+---
+
+### 3.3 Quantization (INT8 weights + FP16 activations)
+
+**Potential issues**
+
+- Calibration data not representative of your deployment workloads, causing degradation on your real workloads while benchmark tasks look fine.
+- Per-tensor quant instead of per-channel on critical projections.
+- Quantization of LayerNorm / RMSNorm parameters causing instability.
+
+**Concrete improvements**
+
+1. **Calibration dataset design**
+
+   - Build calibration from:
+
+     - Realistic prompts that:
+
+       - Use tools.
+       - Use code.
+       - Use long context (not just short completions).
+
+   - Confirm:
+
+     - Distribution of activations matches (at least roughly) what you see in on-device telemetry.
+
+2. **Quantization recipes per submodule**
+
+   - For each submodule (Q/K/V/O projections, MLP in/out, RMSNorm, embeddings):
+
+     - Define in config:
+
+       - Whether to use per-channel or per-tensor.
+       - Whether to leave in FP16 / FP32.
+
+   - Tests validate that the quantized CoreML model matches the recipe.
+
+3. **Quantization A/B testing**
+
+   - Maintain:
+
+     - Unquantized FP16 CoreML model.
+     - Quantized INT8+FP16 model.
+
+   - Run the same golden-vector regression tests for both; track:
+
+     - Accuracy delta (cosine similarity).
+     - Latency and memory usage.
+
+   - Only ship quantized variants once deltas are within acceptable bounds.
+
+---
+
+## 4. Runtime on M1 Max & Newer M-Series: Performance & Observability
+
+Your target is:
+
+- M1 Max 64 GB (primary).
+- Newer M-series Pro/Max (secondary).
+
+Given your student sizes (3–9B range) and INT8+FP16, this is very doable, but you want to be _intentional_ about performance.
+
+### 4.1 Memory & concurrency model
+
+**Key decisions**
+
+- Do you want to support multiple concurrent sessions on a 7–9B student, or mostly single-session interactive use?
+- How much headroom do you want to keep for other processes (browser, editor, etc.)?
+
+**Concrete improvements**
+
+1. **Memory budget spec**
+
+   - For each student size (e.g., 3B, 4B, 7B, 9B):
+
+     - Estimate and measure:
+
+       - Model weights memory (INT8).
+       - KV cache per-token footprint.
+       - Typical max concurrent sessions.
+
+   - Encode this into a runtime config:
+
+     - E.g., “on 64GB M1 Max, 7B student at 4K context → max concurrency = 2”.
+
+2. **KV cache reclaim policy**
+
+   - Implement:
+
+     - LRU or priority-based eviction of KV caches when memory usage nears threshold.
+
+   - Log:
+
+     - When evictions occur.
+     - Impact on latency.
+
+---
+
+### 4.2 Prefill / decode split & host-side orchestration
+
+You already have “separate wrappers for KV cache handling.” The main hazards:
+
+- Divergent prefill vs decode kernels between PyTorch and CoreML.
+- Mistakes in how KV cache indices are advanced on the host side.
+
+**Concrete improvements**
+
+1. **Prefill/decode consistency tests**
+
+   - For each enumerated shape:
+
+     - Run a “prefill+decode” pipeline both:
+
+       - In PyTorch.
+       - In CoreML.
+
+     - Ensure:
+
+       - Same outputs after N decode steps.
+       - KV cache contents (if observable) are consistent enough.
+
+2. **Host API contract**
+
+   - Define a clear API for your host (Swift or Python wrapper):
+
+     - `prefill(input_ids, attention_mask) → (state, logits)`
+     - `decode_step(state, new_token_ids) → (new_state, logits)`
+
+   - Version this contract; if you ever change KV cache layout or semantics, bump the version and gate loading.
+
+---
+
+### 4.3 Telemetry: TTFT, tokens/s, device usage
+
+Before spending money on long KD runs, you want to be able to say:
+
+> “A 7B student on M1 Max yields X ms TTFT, Y tok/s, with Z% ops on ANE.”
+
+**Concrete improvements**
+
+1. **Micro-benchmark suite**
+
+   - For each student and sequence length:
+
+     - Measure:
+
+       - TTFT for prefill-only.
+       - Tokens/sec for decode-only at steady-state.
+
+   - Log:
+
+     - Device utilization if observable (ANE vs GPU vs CPU).
+
+2. **Performance regression gates**
+
+   - Define acceptable tolerances:
+
+     - e.g., “TTFT must not regress by >20% between commits” for a given hardware.
+
+   - Add a small performance test job (even if not in every CI run, at least before major releases).
+
+---
+
+## 5. Reliability, Recovery, and “Error Proof” Behavior
+
+This is where you translate all the above into **confidence** rather than “hope it works.”
+
+### 5.1 Checkpointing & resume semantics
+
+You already have:
+
+- Comprehensive checkpointing.
+- Budget tracking (CAWS-style).
+- Resume capability.
+
+**Concrete improvements**
+
+1. **Atomic checkpoint semantics**
+
+   - Ensure checkpoints are written via:
+
+     - Temporary file → `fsync` → atomic rename.
+
+   - Include:
+
+     - Config snapshot.
+     - Data shard index.
+     - RNG states.
+
+   - On resume:
+
+     - Verify config fingerprint matches (or explicitly allow-and-log certain diffs, like learning rate schedule changes).
+
+2. **Budget-aware resume**
+
+   - When resuming:
+
+     - Read historical budget consumption (API calls, GPU hours).
+     - Enforce budgets across resumes (avoid accidental double-spend due to mis-configured restarts).
+
+---
+
+### 5.2 Teacher API robustness (for KD with external teacher)
+
+You mentioned:
+
+- Logit caching for expensive teacher API calls.
+- Tiered rate limiting.
+
+**Concrete improvements**
+
+1. **Cache integrity**
+
+   - Cache entries should store:
+
+     - Teacher version.
+     - Prompt hash.
+     - Full response payload (not just logits).
+
+   - Before using cached results:
+
+     - Assert teacher version compatibility.
+     - Verify hashes.
+
+2. **Partial-batch failure handling**
+
+   - If a batch of teacher calls partially fails:
+
+     - Don’t discard the whole batch by default.
+     - Mark failed items as “retry later” and proceed with the rest.
+
+   - At training time:
+
+     - Dataset iterator should skip missing teacher targets gracefully and log a **missing-teacher ratio**.
+
+---
+
+### 5.3 Evaluation & CAWS gating
+
+You’re already doing deterministic evaluation and CAWS-style budget gates. The missing piece is to explicitly tie the end-to-end pipeline into **one orchestrated test suite**.
+
+**Concrete improvements**
+
+1. **End-to-end “mini pipeline” smoke test**
+
+   - Before any expensive run, run a full pipeline on a tiny slice:
+
+     - Distill 100–500 examples into a tiny student (e.g., 125M params).
+     - Export that student to CoreML.
+     - Run golden-vector & functional evals.
+
+   - If that passes, you “unlock” the budget for the big run.
+
+2. **Scenario-based tests**
+
+   - Define canonical scenarios for:
+
+     - Tool chains (multi-step tools).
+     - Code-mode orchestration.
+     - Halt behavior in long reasoning chains.
+
+   - Evaluate:
+
+     - Teacher vs student vs (optionally) another baseline.
+
+   - Require the student to hit certain thresholds vs teacher to allow a run to continue.
+
+---
+
+## 6. Prioritized Action List Before You Spend Money
+
+If I had to pick a “do this first” list to be comfortable sinking real money into training, it would be:
+
+**Critical (do before serious spend)**
+
+1. **Loss gradient norm logging + ablation run baselines** (Section 1.1).
+2. **Tokenizer/ID contract tests** across teacher, student, export, and runtime (Section 2.1).
+3. **FX/ExportedProgram linter + CoreML golden-vector regression tests** for all enumerated shapes (Sections 3.1–3.2).
+4. **Quantization A/B tests vs FP16 CoreML** for at least one student size (Section 3.3).
+5. **End-to-end “mini pipeline” smoke test** from PyTorch KD → CoreML → on-device inference (Section 5.3).
+
+**High value (soon after)**
+
+6. Halt head calibration dataset + evaluation (Section 1.2).
+7. Schema-validated tool/JSON distillation data with versioning (Section 1.3).
+8. Memory budget spec for each student size on M1 Max + KV cache eviction policy (Sections 4.1–4.2).
+9. Atomic checkpoint writes + strict resume config checks (Section 5.1).
+
+**Nice-to-have but worthwhile**
+
+10. Performance regression gates for TTFT & tokens/s on M1 Max.
+11. Drafter/worker/judge integration tests for speculative decoding chains.
+12. Per-module quantization recipe config with tests to enforce it.
+
+---

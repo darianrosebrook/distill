@@ -69,6 +69,90 @@ def check_coremltools() -> str:
             "coremltools not installed. Install with: pip install coremltools>=9.0")
 
 
+def check_pytorch() -> str:
+    """Check PyTorch version.
+
+    Returns:
+        Version string of PyTorch.
+
+    Raises:
+        RuntimeError: If PyTorch is not installed or version is too old.
+    """
+    try:
+        import torch
+        version = torch.__version__
+        # Parse version: "2.3.0" -> (2, 3)
+        parts = version.split('.')
+        major = int(parts[0])
+        minor = int(parts[1]) if len(parts) > 1 else 0
+        if major < 2 or (major == 2 and minor < 0):
+            raise RuntimeError(
+                f"PyTorch {version} detected. "
+                "This project requires PyTorch >= 2.0. "
+                "For best compatibility, use PyTorch >= 2.3.0"
+            )
+        return version
+    except ImportError:
+        raise RuntimeError(
+            "PyTorch not installed. Install with: pip install torch>=2.0")
+
+
+def check_transformers() -> str:
+    """Check HuggingFace Transformers version.
+
+    Returns:
+        Version string of transformers.
+
+    Raises:
+        RuntimeError: If transformers is not installed or version is too old.
+    """
+    try:
+        import transformers
+        version = transformers.__version__
+        # Parse version: "4.43.0" -> (4, 43)
+        parts = version.split('.')
+        major = int(parts[0])
+        minor = int(parts[1]) if len(parts) > 1 else 0
+        if major < 4 or (major == 4 and minor < 43):
+            raise RuntimeError(
+                f"transformers {version} detected. "
+                "This project requires transformers >= 4.43. "
+                f"Current: {version}"
+            )
+        return version
+    except ImportError:
+        raise RuntimeError(
+            "transformers not installed. Install with: pip install transformers>=4.43")
+
+
+def check_accelerate() -> str:
+    """Check HuggingFace Accelerate version.
+
+    Returns:
+        Version string of accelerate.
+
+    Raises:
+        RuntimeError: If accelerate is not installed or version is too old.
+    """
+    try:
+        import accelerate
+        version = accelerate.__version__
+        # Parse version: "0.33.0" -> (0, 33)
+        parts = version.split('.')
+        major = int(parts[0])
+        minor = int(parts[1]) if len(parts) > 1 else 0
+        if major < 0 or (major == 0 and minor < 33):
+            raise RuntimeError(
+                f"accelerate {version} detected. "
+                "This project requires accelerate >= 0.33. "
+                f"Current: {version}"
+            )
+        return version
+    except ImportError:
+        raise RuntimeError(
+            "accelerate not installed. Install with: pip install accelerate>=0.33")
+
+
 def check_onnxruntime(required: bool = False) -> Optional[str]:
     """Check if onnxruntime is available (optional for smoke tests).
 
@@ -93,6 +177,58 @@ def check_onnxruntime(required: bool = False) -> Optional[str]:
         return None
 
 
+def check_training_versions() -> dict:
+    """Check versions required for training.
+
+    Returns:
+        Dictionary with check results.
+
+    Raises:
+        RuntimeError: If any required dependency is missing or version is incompatible.
+    """
+    results = {
+        "python": check_python_version(),
+        "pytorch": check_pytorch(),
+        "transformers": check_transformers(),
+        "accelerate": check_accelerate(),
+    }
+    return results
+
+
+def check_export_versions() -> dict:
+    """Check versions required for PyTorch export.
+
+    Returns:
+        Dictionary with check results.
+
+    Raises:
+        RuntimeError: If any required dependency is missing or version is incompatible.
+    """
+    results = {
+        "python": check_python_version(),
+        "pytorch": check_pytorch(),
+    }
+    return results
+
+
+def check_coreml_versions() -> dict:
+    """Check versions required for CoreML conversion.
+
+    Returns:
+        Dictionary with check results.
+
+    Raises:
+        RuntimeError: If any required dependency is missing or version is incompatible.
+    """
+    results = {
+        "python": check_python_version(),
+        "macos": check_macos_version(),
+        "coremltools": check_coremltools(),
+        "pytorch": check_pytorch(),
+    }
+    return results
+
+
 def check_all(skip_ort: bool = False) -> dict:
     """Run all checks. Returns dict of results.
 
@@ -106,6 +242,9 @@ def check_all(skip_ort: bool = False) -> dict:
         "python": check_python_version(),
         "macos": check_macos_version(),
         "coremltools": check_coremltools(),
+        "pytorch": check_pytorch(),
+        "transformers": check_transformers(),
+        "accelerate": check_accelerate(),
         "onnxruntime": check_onnxruntime(required=not skip_ort),
     }
     return results

@@ -1,0 +1,121 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Distillation Pipeline Configuration Schema",
+  "description": "Unified configuration schema for training, export, and runtime",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version",
+      "default": "1.0"
+    },
+    "model": {
+      "type": "object",
+      "description": "Model architecture configuration",
+      "properties": {
+        "d_model": {"type": "integer", "minimum": 128},
+        "n_layers": {"type": "integer", "minimum": 1},
+        "n_heads": {"type": "integer", "minimum": 1},
+        "n_kv_heads": {"type": "integer", "minimum": 1},
+        "d_head": {"type": "integer", "minimum": 8},
+        "vocab_size": {"type": "integer", "minimum": 100},
+        "rope_theta": {"type": "number", "default": 10000.0},
+        "rope_scaling": {"type": ["object", "null"], "default": null},
+        "use_halt_head": {"type": "boolean", "default": false}
+      },
+      "required": ["d_model", "n_layers", "n_heads", "n_kv_heads", "d_head", "vocab_size"]
+    },
+    "training": {
+      "type": "object",
+      "description": "Training recipe configuration",
+      "properties": {
+        "loss_weights": {
+          "type": "object",
+          "properties": {
+            "ce": {"type": "number", "default": 1.0},
+            "kl": {"type": "number", "default": 0.1},
+            "tool": {"type": "number", "default": 0.5},
+            "length": {"type": "number", "default": 0.1},
+            "halt": {"type": "number", "default": 0.2}
+          }
+        },
+        "grad_checkpointing": {"type": "boolean", "default": false},
+        "max_steps": {"type": "integer", "minimum": 1},
+        "batch_size": {"type": "integer", "minimum": 1},
+        "learning_rate": {"type": "number", "minimum": 0.0},
+        "warmup_steps": {"type": "integer", "minimum": 0},
+        "save_steps": {"type": "integer", "minimum": 1},
+        "eval_steps": {"type": "integer", "minimum": 1}
+      },
+      "required": ["max_steps", "batch_size", "learning_rate"]
+    },
+    "export": {
+      "type": "object",
+      "description": "Export recipe configuration",
+      "properties": {
+        "enumerated_shapes": {
+          "type": "array",
+          "items": {"type": "integer", "minimum": 1},
+          "minItems": 1
+        },
+        "quantization": {
+          "type": "object",
+          "properties": {
+            "weight_bits": {"type": "integer", "enum": [8, 16]},
+            "act_bits": {"type": "integer", "enum": [8, 16]},
+            "quantize_embeddings": {"type": "boolean", "default": false}
+          }
+        },
+        "precision_islands": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Operations that must remain FP32"
+        },
+        "target": {"type": "string", "default": "macOS13"},
+        "compute_units": {"type": "string", "enum": ["all", "cpuandgpu", "cpuonly"], "default": "all"}
+      },
+      "required": ["enumerated_shapes"]
+    },
+    "evaluation": {
+      "type": "object",
+      "description": "Evaluation recipe configuration",
+      "properties": {
+        "gates": {
+          "type": "object",
+          "properties": {
+            "privacy_ok_rate": {"type": "number", "minimum": 0.0, "maximum": 1.0, "default": 1.0},
+            "control_integration": {"type": "number", "maximum": 0.0, "default": 0.0},
+            "fixture_hit_rate": {"type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.95},
+            "integration_f1": {"type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.90},
+            "json_validity": {"type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.98}
+          }
+        },
+        "scenario_suite_path": {"type": "string"},
+        "golden_vector_path": {"type": "string"}
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "description": "Runtime recipe configuration",
+      "properties": {
+        "memory_budgets": {
+          "type": "object",
+          "properties": {
+            "model_weights_mb": {"type": "number", "minimum": 0.0},
+            "kv_cache_per_token_mb": {"type": "number", "minimum": 0.0},
+            "max_concurrent_sessions": {"type": "integer", "minimum": 1}
+          }
+        },
+        "kv_cache_eviction": {
+          "type": "object",
+          "properties": {
+            "policy": {"type": "string", "enum": ["LRU", "priority"], "default": "LRU"},
+            "max_memory_mb": {"type": "number", "minimum": 0.0}
+          }
+        }
+      }
+    }
+  },
+  "required": ["model", "training", "export"]
+}
+

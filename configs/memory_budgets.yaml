@@ -1,0 +1,136 @@
+# Memory Budget Specifications
+#
+# Defines memory budgets for each student model size and context length.
+# Used for runtime memory management and KV cache eviction policies.
+#
+# @author: @darianrosebrook
+
+memory_budgets:
+  # 3B Student Model
+  student_3b:
+    model_weights_mb: 3000  # INT8 weights (~3GB)
+    kv_cache_per_token_mb: 0.05  # FP16 KV cache per token
+    max_context_length: 4096
+    
+    # Per hardware configuration
+    m1_max_64gb:
+      max_concurrent_sessions: 4
+      kv_cache_eviction_policy: "lru"
+      max_memory_mb: 50000  # Leave headroom for system
+      
+    m2_max_64gb:
+      max_concurrent_sessions: 4
+      kv_cache_eviction_policy: "lru"
+      max_memory_mb: 50000
+      
+    m3_max_64gb:
+      max_concurrent_sessions: 5
+      kv_cache_eviction_policy: "lru"
+      max_memory_mb: 50000
+
+  # 4B Student Model
+  student_4b:
+    model_weights_mb: 4000  # INT8 weights (~4GB)
+    kv_cache_per_token_mb: 0.07  # FP16 KV cache per token
+    max_context_length: 4096
+    
+    m1_max_64gb:
+      max_concurrent_sessions: 3
+      kv_cache_eviction_policy: "lru"
+      max_memory_mb: 50000
+      
+    m2_max_64gb:
+      max_concurrent_sessions: 3
+      kv_cache_eviction_policy: "lru"
+      max_memory_mb: 50000
+      
+    m3_max_64gb:
+      max_concurrent_sessions: 4
+      kv_cache_eviction_policy: "lru"
+      max_memory_mb: 50000
+
+  # 7B Student Model
+  student_7b:
+    model_weights_mb: 7000  # INT8 weights (~7GB)
+    kv_cache_per_token_mb: 0.12  # FP16 KV cache per token
+    max_context_length: 4096
+    
+    m1_max_64gb:
+      max_concurrent_sessions: 2
+      kv_cache_eviction_policy: "lru"
+      max_memory_mb: 50000
+      
+    m2_max_64gb:
+      max_concurrent_sessions: 2
+      kv_cache_eviction_policy: "lru"
+      max_memory_mb: 50000
+      
+    m3_max_64gb:
+      max_concurrent_sessions: 3
+      kv_cache_eviction_policy: "lru"
+      max_memory_mb: 50000
+
+  # 9B Student Model
+  student_9b:
+    model_weights_mb: 9000  # INT8 weights (~9GB)
+    kv_cache_per_token_mb: 0.15  # FP16 KV cache per token
+    max_context_length: 4096
+    
+    m1_max_64gb:
+      max_concurrent_sessions: 2
+      kv_cache_eviction_policy: "lru"
+      max_memory_mb: 50000
+      
+    m2_max_64gb:
+      max_concurrent_sessions: 2
+      kv_cache_eviction_policy: "lru"
+      max_memory_mb: 50000
+      
+    m3_max_64gb:
+      max_concurrent_sessions: 2
+      kv_cache_eviction_policy: "lru"
+      max_memory_mb: 50000
+
+  # 9B Student Model at 16K context
+  student_9b_16k:
+    model_weights_mb: 9000  # INT8 weights (~9GB)
+    kv_cache_per_token_mb: 0.15  # FP16 KV cache per token
+    max_context_length: 16384
+    
+    m1_max_64gb:
+      max_concurrent_sessions: 1
+      kv_cache_eviction_policy: "priority"  # Use priority-based eviction for long context
+      max_memory_mb: 50000
+      
+    m2_max_64gb:
+      max_concurrent_sessions: 1
+      kv_cache_eviction_policy: "priority"
+      max_memory_mb: 50000
+      
+    m3_max_64gb:
+      max_concurrent_sessions: 1
+      kv_cache_eviction_policy: "priority"
+      max_memory_mb: 50000
+
+# KV Cache Eviction Policies
+eviction_policies:
+  lru:
+    name: "Least Recently Used"
+    description: "Evict least recently used cache entries when memory limit reached"
+    implementation: "coreml/runtime/kv_cache_optimized.py"
+    
+  priority:
+    name: "Priority-Based"
+    description: "Evict based on priority (e.g., older sessions, lower priority tasks)"
+    implementation: "coreml/runtime/kv_cache_optimized.py"
+    priority_factors:
+      - session_age
+      - task_priority
+      - cache_hit_rate
+
+# Memory Monitoring
+monitoring:
+  eviction_logging: true
+  memory_pressure_threshold: 0.85  # Alert when memory usage > 85%
+  eviction_impact_tracking: true  # Track latency impact of evictions
+

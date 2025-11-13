@@ -1,0 +1,52 @@
+# Precision Islands Configuration
+#
+# Defines operations/subgraphs that must remain FP32 during CoreML conversion.
+# These are delicate operations that require higher precision to maintain numerical stability.
+#
+# @author: @darianrosebrook
+
+precision_islands:
+  # Softmax operations (optional - can be FP16 for performance)
+  softmax:
+    enabled: false  # Set to true to keep softmax in FP32
+    ops:
+      - "softmax"
+      - "log_softmax"
+    reason: "FP16 softmax can cause underflow/overflow, but FP16 is usually acceptable for most cases"
+
+  # LayerNorm statistics
+  layernorm:
+    enabled: true
+    ops:
+      - "layer_norm"
+      - "rms_norm"
+      - "group_norm"
+    reason: "LayerNorm statistics (mean/variance) must be FP32 to maintain numerical stability"
+
+  # Delicate pooling/normalization operations
+  normalization:
+    enabled: true
+    ops:
+      - "batch_norm"
+      - "instance_norm"
+      - "adaptive_avg_pool"
+      - "adaptive_max_pool"
+    reason: "Normalization operations require FP32 for accurate statistics"
+
+  # Attention mask operations
+  attention_mask:
+    enabled: false  # Usually fine in FP16
+    ops:
+      - "add"  # When adding mask to attention scores
+      - "mul"  # When scaling attention scores
+    reason: "Attention mask operations can be FP16, but FP32 may be needed for very large sequences"
+
+  # Loss computation (training only, not relevant for inference)
+  loss:
+    enabled: false
+    ops:
+      - "cross_entropy"
+      - "mse_loss"
+      - "kl_div"
+    reason: "Loss computation is training-only, not relevant for CoreML export"
+

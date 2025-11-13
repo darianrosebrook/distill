@@ -8,12 +8,14 @@ Usage:
 """
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import torch
 import torch.nn as nn
 
 from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
+from infra.version_gate import check_export_versions
 
 
 class PrefillWrapper(nn.Module):
@@ -211,65 +213,103 @@ def main():
                     help='Handle toy checkpoint schema (normalize arch config)')
     args = ap.parse_args()
 
+    # Version compatibility check - fail fast if versions are incompatible
+    try:
+        check_export_versions()
+    except RuntimeError as e:
+        print(f"[export_pytorch] ERROR: Version check failed: {e}")
+        sys.exit(1)
+
     # Load model
     checkpoint = torch.load(args.checkpoint, map_location='cpu')
 
-    # Load config from checkpoint if available
-    cfg = None
-    if 'config' in checkpoint:
-        config_data = checkpoint['config']
-        arch_cfg = config_data.get('arch', {})
+    # Load config from checkpoint - required for correct architecture
+    if 'config' not in checkpoint:
+        raise ValueError(
+            f"Checkpoint {args.checkpoint} missing 'config' field. "
+            "Cannot determine model architecture. Please use a checkpoint saved with config."
+        )
 
-        # Handle toy checkpoint schema
-        if args.toy:
-            # Normalize toy arch config to production export spec
-            export_spec = {
-                'd_model': arch_cfg.get('hidden_size') or arch_cfg.get('d_model', 128),
-                'n_layers': arch_cfg.get('n_layers', 2),
-                'n_heads': arch_cfg.get('n_heads', 4),
-                'n_kv_heads': arch_cfg.get('n_kv_heads', 2),
-                'd_head': arch_cfg.get('d_head') or (arch_cfg.get('hidden_size', 128) // arch_cfg.get('n_heads', 4)),
-                'vocab_size': arch_cfg.get('vocab_size', 512),
-                'rope_theta': arch_cfg.get('rope_theta', 10000.0),
-                'rope_scaling': arch_cfg.get('rope_scaling', 'dynamic'),
-                'dropout': arch_cfg.get('dropout', 0.0),
-            }
-            # Use export_spec values
-            cfg = ModelCfg(
-                d_model=export_spec['d_model'],
-                n_layers=export_spec['n_layers'],
-                n_heads=export_spec['n_heads'],
-                n_kv_heads=export_spec['n_kv_heads'],
-                d_head=export_spec['d_head'],
-                vocab_size=export_spec['vocab_size'],
-                rope_theta=export_spec['rope_theta'],
-                rope_scaling=export_spec['rope_scaling'],
-                dropout=export_spec['dropout'],
-            )
-        else:
-            # Production checkpoint schema
-            cfg = ModelCfg(
-                d_model=arch_cfg.get('d_model', 4096),
-                n_layers=arch_cfg.get('n_layers', 32),
-                n_heads=arch_cfg.get('n_heads', 32),
-                n_kv_heads=arch_cfg.get('n_kv_heads', 8),
-                d_head=arch_cfg.get('d_head', 128),
-                vocab_size=arch_cfg.get('vocab_size', 32000),
-                rope_theta=arch_cfg.get('rope_theta', 10000.0),
-                rope_scaling=arch_cfg.get('rope_scaling', 'dynamic'),
-                dropout=arch_cfg.get('dropout', 0.0),
+    config_data = checkpoint['config']
+    arch_cfg = config_data.get('arch', {})
+
+    if not arch_cfg:
+        raise ValueError(
+            f"Checkpoint {args.checkpoint} config missing 'arch' section. "
+            "Cannot determine model architecture."
+        )
+
+    # Handle toy checkpoint schema
+    if args.toy:
+        # Normalize toy arch config to production export spec
+        export_spec = {
+            'd_model': arch_cfg.get('hidden_size') or arch_cfg.get('d_model', 128),
+            'n_layers': arch_cfg.get('n_layers', 2),
+            'n_heads': arch_cfg.get('n_heads', 4),
+            'n_kv_heads': arch_cfg.get('n_kv_heads', 2),
+            'd_head': arch_cfg.get('d_head') or (arch_cfg.get('hidden_size', 128) // arch_cfg.get('n_heads', 4)),
+            'vocab_size': arch_cfg.get('vocab_size', 512),
+            'rope_theta': arch_cfg.get('rope_theta', 10000.0),
+            'rope_scaling': arch_cfg.get('rope_scaling', 'dynamic'),
+            'dropout': arch_cfg.get('dropout', 0.0),
+        }
+        # Use export_spec values
+        cfg = ModelCfg(
+            d_model=export_spec['d_model'],
+            n_layers=export_spec['n_layers'],
+            n_heads=export_spec['n_heads'],
+            n_kv_heads=export_spec['n_kv_heads'],
+            d_head=export_spec['d_head'],
+            vocab_size=export_spec['vocab_size'],
+            rope_theta=export_spec['rope_theta'],
+            rope_scaling=export_spec['rope_scaling'],
+            dropout=export_spec['dropout'],
+        )
+    else:
+        # Production checkpoint schema - require all essential fields
+        required_fields = ['d_model', 'n_layers',
+                           'n_heads', 'n_kv_heads', 'd_head', 'vocab_size']
+        missing_fields = [f for f in required_fields if f not in arch_cfg]
+        if missing_fields:
+            raise ValueError(
+                f"Checkpoint config missing required architecture fields: {missing_fields}. "
+                f"Found fields: {list(arch_cfg.keys())}"
             )
 
-    if cfg is None:
-        cfg = ModelCfg()
+        cfg = ModelCfg(
+            d_model=arch_cfg['d_model'],
+            n_layers=arch_cfg['n_layers'],
+            n_heads=arch_cfg['n_heads'],
+            n_kv_heads=arch_cfg['n_kv_heads'],
+            d_head=arch_cfg['d_head'],
+            vocab_size=arch_cfg['vocab_size'],
+            rope_theta=arch_cfg.get('rope_theta', 10000.0),
+            rope_scaling=arch_cfg.get('rope_scaling', 'dynamic'),
+            dropout=arch_cfg.get('dropout', 0.0),
+        )
+
+    # Also load model flags from config if available
+    use_self_evaluation = config_data.get('use_self_evaluation', False)
+    use_halt_head = config_data.get('use_halt_head', False)
 
     if 'model_state_dict' in checkpoint:
         state_dict = checkpoint['model_state_dict']
     else:
         state_dict = checkpoint
 
-    model = StudentLM(cfg)
-    model.load_state_dict(state_dict)
+    model = StudentLM(
+        cfg, use_self_evaluation=use_self_evaluation, use_halt_head=use_halt_head)
+
+    # Load state dict with strict=True to catch mismatches
+    try:
+        model.load_state_dict(state_dict, strict=True)
+    except RuntimeError as e:
+        raise RuntimeError(
+            f"Failed to load model state dict. Architecture mismatch detected. "
+            f"Config: d_model={cfg.d_model}, n_layers={cfg.n_layers}, n_heads={cfg.n_heads}, "
+            f"n_kv_heads={cfg.n_kv_heads}, d_head={cfg.d_head}, vocab_size={cfg.vocab_size}. "
+            f"Original error: {e}"
+        )
     model.eval()
 
     output_dir = Path(args.out)

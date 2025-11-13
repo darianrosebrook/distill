@@ -85,8 +85,10 @@ class KDDataset(Dataset):
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        # Load data
+        # Load data and extract fingerprint
         self.samples = []
+        self.dataset_fingerprint = None
+        self.dataset_header = None
         self._load_data()
 
     def _load_data(self):
@@ -96,11 +98,24 @@ class KDDataset(Dataset):
                 f"Dataset file not found: {self.jsonl_path}")
 
         with open(self.jsonl_path, 'r', encoding='utf-8') as f:
+            first_line = True
             for line_num, line in enumerate(f):
                 if not line.strip():
                     continue
                 try:
                     data = json.loads(line)
+                    
+                    # Check for dataset header (first line with __header__ flag)
+                    if first_line and data.get("__header__", False):
+                        self.dataset_header = data
+                        # Extract fingerprint if available
+                        if "dataset_sha256" in data:
+                            self.dataset_fingerprint = data["dataset_sha256"]
+                        first_line = False
+                        continue
+                    
+                    first_line = False
+                    
                     if "prompt" not in data or "teacher_text" not in data:
                         print(
                             f"[KDDataset] WARN: Skipping line {line_num+1}: missing required fields")

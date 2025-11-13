@@ -1,0 +1,3 @@
+{"id": "judge_001", "role": "judge", "prompt": "Compare outputs A and B: A='Hello world', B='Hello world'", "teacher_output": "VERDICT: EQUAL", "target_student_behavior": "Should identify outputs as equal", "scoring_rubric": {"type": "judge_model", "pass_threshold": 0.8}, "metadata": {}}
+{"id": "judge_002", "role": "judge", "prompt": "Compare outputs A and B: A='Hello', B='World'", "teacher_output": "VERDICT: DIFFERENT", "target_student_behavior": "Should identify outputs as different", "scoring_rubric": {"type": "judge_model", "pass_threshold": 0.8}, "metadata": {}}
+

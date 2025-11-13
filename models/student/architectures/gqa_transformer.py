@@ -163,8 +163,15 @@ class MHA_GQA(nn.Module):
         scale = 1.0 / math.sqrt(self.d_head)
         attn_scores = torch.matmul(q, k.transpose(-2, -1)) * scale  # [B,H,T,T]
         if attn_mask is not None:
-            # mask is additive (-1e4 on masked)
-            attn_scores = attn_scores + attn_mask
+            # Convert binary mask [B, T] (1=real token, 0=pad) to additive mask [B, 1, 1, T]
+            # Padding positions get -1e4, real tokens get 0
+            # Ensure mask dtype matches attn_scores dtype
+            mask_dtype = attn_scores.dtype
+            # attn_mask is [B, T] with 1s for real tokens, 0s for padding
+            # Expand to [B, 1, 1, T] for broadcasting
+            additive_mask = (1.0 - attn_mask.to(mask_dtype)
+                             ).unsqueeze(1).unsqueeze(2) * -1e4
+            attn_scores = attn_scores + additive_mask
         attn = F.softmax(attn_scores, dim=-1)
         attn = self.attn_dropout(attn)
         y = torch.matmul(attn, v)  # [B,H,T,Dh]
@@ -265,6 +272,9 @@ class StudentLM(nn.Module):
         self.lm_head = nn.Linear(
             self.cfg.d_model, self.cfg.vocab_size, bias=False)
 
+        # Gradient checkpointing flag
+        self.checkpointing = False
+
         # Self-evaluation head (optional)
         self.use_self_evaluation = use_self_evaluation
         if use_self_evaluation:
@@ -280,6 +290,10 @@ class StudentLM(nn.Module):
         if use_halt_head:
             # Halt head outputs 2 logits: [continue, halt]
             self.halt_head = nn.Linear(self.cfg.d_model, 2)
+
+    def gradient_checkpointing_enable(self):
+        """Enable gradient checkpointing to reduce memory usage during training."""
+        self.checkpointing = True
 
     def forward(
         self,
@@ -317,10 +331,18 @@ class StudentLM(nn.Module):
         if return_hidden_states:
             hidden_states.append(x)  # Include embedding output
 
-        for blk in self.blocks:
-            x = blk(x, attn_mask)
-            if return_hidden_states:
-                hidden_states.append(x)
+        # Use gradient checkpointing if enabled (trades compute for memory)
+        if self.checkpointing:
+            for blk in self.blocks:
+                x = torch.utils.checkpoint.checkpoint(
+                    blk, x, attn_mask, use_reentrant=False)
+                if return_hidden_states:
+                    hidden_states.append(x)
+        else:
+            for blk in self.blocks:
+                x = blk(x, attn_mask)
+                if return_hidden_states:
+                    hidden_states.append(x)
 
         x = self.norm_f(x)
 
@@ -347,7 +369,7 @@ class StudentLM(nn.Module):
             result.append(eval_score)
         if return_halt_logits and halt_logits is not None:
             result.append(halt_logits)
-        
+
         if len(result) == 1:
             return result[0]
         return tuple(result)
@@ -378,16 +400,16 @@ class StudentLM(nn.Module):
             updated_caches.append(kv_new)
 
         x = self.norm_f(x)
-        
+
         # Halt head logits (if enabled)
         halt_logits = None
         if return_halt_logits and self.use_halt_head:
             # Use current hidden state for halt head
             pooled = x.squeeze(1)  # [B, D] (remove sequence dim)
             halt_logits = self.halt_head(pooled)  # [B, 2]
-        
+
         logits = self.lm_head(x).to(dtype=torch.float16)
-        
+
         if return_halt_logits and halt_logits is not None:
             return logits, updated_caches, halt_logits
         return logits, updated_caches  # [B,1,V], list of (k,v) tuples

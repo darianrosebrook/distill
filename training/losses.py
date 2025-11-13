@@ -579,6 +579,17 @@ def combined_kd_loss(
         total_loss = total_loss + halt_weight * halt_loss
 
     losses["total"] = total_loss
+    
+    # Assert loss finiteness (catch NaNs/Infs early)
+    if not torch.isfinite(total_loss).all():
+        nan_count = torch.isnan(total_loss).sum().item()
+        inf_count = torch.isinf(total_loss).sum().item()
+        raise RuntimeError(
+            f"Total loss is not finite in combined_kd_loss: "
+            f"NaN count={nan_count}, Inf count={inf_count}. "
+            f"Individual losses: {[(k, v.item() if isinstance(v, torch.Tensor) else v) for k, v in losses.items()]}"
+        )
+    
     return losses
 
 
@@ -837,7 +848,7 @@ def _claim_supported_by_teacher(student_claim: Any, teacher_claims: List[Any]) -
     """
     Check if a student claim is supported by teacher claims.
 
-    Uses simplified text similarity and keyword matching.
+    PLACEHOLDER: Uses simplified text similarity and keyword matching.
     Real implementation would use semantic similarity and entailment checking.
     """
     if not teacher_claims:

@@ -55,28 +55,13 @@ def main(config: str = "conversion/shape_sets.json", judge_config: str = "config
         config: Path to shape_sets.json (for sequence lengths)
         judge_config: Path to judge model config YAML
     """
-    # Load judge configuration from YAML
-    try:
-        judge_cfg = load_judge_config(judge_config)
-        print(f"[judge_export_onnx] Loaded judge config from: {judge_config}")
-        print(
-            f"[judge_export_onnx] Model config: d_model={judge_cfg.d_model}, n_layers={judge_cfg.n_layers}")
-    except Exception as e:
-        print(
-            f"[judge_export_onnx] Warning: Failed to load config {judge_config}: {e}")
-        print("[judge_export_onnx] Using default config values")
-        # Fallback to defaults if config loading fails
-        judge_cfg = ModelCfg(
-            d_model=2048,
-            n_layers=24,
-            n_heads=16,
-            n_kv_heads=4,
-            d_head=128,
-            vocab_size=32000,
-            rope_theta=10000.0,
-            rope_scaling="dynamic",
-            dropout=0.0
-        )
+    # Load judge configuration from YAML - required for correct architecture
+    judge_cfg = load_judge_config(judge_config)
+    print(f"[judge_export_onnx] Loaded judge config from: {judge_config}")
+    print(
+        f"[judge_export_onnx] Model config: d_model={judge_cfg.d_model}, n_layers={judge_cfg.n_layers}, "
+        f"n_heads={judge_cfg.n_heads}, n_kv_heads={judge_cfg.n_kv_heads}, "
+        f"d_head={judge_cfg.d_head}, vocab_size={judge_cfg.vocab_size}")
 
     # Judge uses short enumerated shapes: 512, 1024, 2048
     # (Judge reads summaries/claims, not full transcripts)

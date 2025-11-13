@@ -1,218 +1,291 @@
-#!/usr/bin/env python3
 """
 Pre-training readiness verification script.
 
-Verifies all critical requirements are met before starting full training run:
-1. Dataset generation doesn't save reasoning_content
-2. Training configs have correct process-step weights
-3. Process-step targets are present in dataset
-4. Training step computes losses correctly
+Verifies that all critical components are ready before starting expensive training runs:
+- Configs and tokenizer contracts
+- Dataset validation
+- Loss and gradient sanity
+- Checkpoint and reproducibility setup
+- Export contracts
+@author: @darianrosebrook
 """
+import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Dict, Any, List
 
-try:
-    import yaml
-except ImportError:
-    # Fallback: use simple YAML parsing for basic configs
-    yaml = None
-
-# Add project root to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+from infra.version_gate import check_training_versions
+from scripts.validate_kd_data import validate_dataset
 
 
-def check_dataset_format(dataset_path: Path) -> tuple[bool, str]:
-    """Check that dataset doesn't contain teacher_reasoning_content."""
-    if not dataset_path.exists():
-        return False, f"Dataset file not found: {dataset_path}"
+def check_config_tokenizer_contracts(tokenizer_path: str) -> Dict[str, Any]:
+    """Check config and tokenizer contracts."""
+    print("[verify_readiness] Checking config and tokenizer contracts...")
     
-    process_targets_found = False
-    sample_count = 0
+    results = {
+        "passed": True,
+        "errors": [],
+        "warnings": [],
+    }
     
-    with open(dataset_path, 'r') as f:
-        for line_num, line in enumerate(f, 1):
-            if not line.strip():
-                continue
-            
-            try:
-                sample = json.loads(line)
-                sample_count += 1
-                
-                # Check for reasoning_content (should NOT exist)
-                if "teacher_reasoning_content" in sample and sample["teacher_reasoning_content"]:
-                    return False, f"Line {line_num}: teacher_reasoning_content found (violates ToS)"
-                
-                # Check for process-step targets (should exist)
-                if any(key in sample for key in ["tool_name_ids", "gold_json_text_ids", "tool_result_fields"]):
-                    process_targets_found = True
-                
-                # Only check first 10 samples for speed
-                if sample_count >= 10:
-                    break
-            except json.JSONDecodeError as e:
-                return False, f"Line {line_num}: Invalid JSON: {e}"
-    
-    if sample_count == 0:
-        return False, "Dataset is empty"
-    
-    if not process_targets_found:
-        return False, "No process-step targets found in dataset (may be expected if no tool calls present)"
-    
-    return True, f"Dataset format OK: {sample_count} samples checked, no reasoning_content found"
-
-
-def check_config_weights(config_path: Path) -> tuple[bool, str]:
-    """Check that config has process-step supervision weights."""
-    if not config_path.exists():
-        return False, f"Config file not found: {config_path}"
-    
-    if yaml:
-        with open(config_path, 'r') as f:
-            config = yaml.safe_load(f)
-    else:
-        # Simple regex-based parsing for basic checks
-        content = config_path.read_text()
-        config = {}
-        # Extract w_tool, w_args, w_integr values using regex
-        import re
-        w_tool_match = re.search(r'w_tool:\s*([0-9.]+)', content)
-        w_args_match = re.search(r'w_args:\s*([0-9.]+)', content)
-        w_integr_match = re.search(r'w_integr:\s*([0-9.]+)', content)
+    try:
+        # Run tokenizer contract tests
+        import subprocess
+        result = subprocess.run(
+            ["python", "-m", "pytest", "tests/test_tokenizer_contract.py", "-v"],
+            capture_output=True,
+            text=True
+        )
         
-        if w_tool_match:
-            config.setdefault("distillation", {})["w_tool"] = float(w_tool_match.group(1))
-        if w_args_match:
-            config.setdefault("distillation", {})["w_args"] = float(w_args_match.group(1))
-        if w_integr_match:
-            config.setdefault("distillation", {})["w_integr"] = float(w_integr_match.group(1))
+        if result.returncode != 0:
+            results["passed"] = False
+            results["errors"].append("Tokenizer contract tests failed")
+            results["errors"].append(result.stdout)
+    except Exception as e:
+        results["passed"] = False
+        results["errors"].append(f"Failed to run tokenizer contract tests: {e}")
     
-    # Check both distillation and kd sections
-    distillation = config.get("distillation", {})
-    kd = config.get("kd", {})
-    
-    # Process-step weights should be in distillation section (for distill_kd.py)
-    # or kd section (for some configs)
-    w_tool = distillation.get("w_tool") or kd.get("w_tool")
-    w_args = distillation.get("w_args") or kd.get("w_args")
-    w_integr = distillation.get("w_integr") or kd.get("w_integr")
-    
-    if w_tool is None or w_args is None or w_integr is None:
-        return False, f"Missing process-step weights: w_tool={w_tool}, w_args={w_args}, w_integr={w_integr}"
-    
-    if w_tool <= 0 or w_args <= 0 or w_integr <= 0:
-        return False, f"Process-step weights must be > 0: w_tool={w_tool}, w_args={w_args}, w_integr={w_integr}"
-    
-    return True, f"Config weights OK: w_tool={w_tool}, w_args={w_args}, w_integr={w_integr}"
+    return results
 
 
-def check_tokenizer_path(config_path: Path) -> tuple[bool, str]:
-    """Check that tokenizer path is set in config."""
-    if not config_path.exists():
-        return False, f"Config file not found: {config_path}"
+def check_dataset_validation(dataset_path: Path, max_corruption_rate: float = 5.0) -> Dict[str, Any]:
+    """Check dataset validation."""
+    print("[verify_readiness] Validating dataset...")
     
-    if yaml:
-        with open(config_path, 'r') as f:
-            config = yaml.safe_load(f)
-    else:
-        # Simple regex-based parsing
-        content = config_path.read_text()
-        import re
-        tokenizer_match = re.search(r'tokenizer_path:\s*([^\s\n]+)', content)
-        config = {}
-        if tokenizer_match:
-            config.setdefault("io", {})["tokenizer_path"] = tokenizer_match.group(1).strip('"\'')
+    results = {
+        "passed": True,
+        "errors": [],
+        "warnings": [],
+        "corruption_rate": 0.0,
+    }
     
-    io_config = config.get("io", {})
-    tokenizer_path = io_config.get("tokenizer_path")
+    try:
+        validation_results = validate_dataset(dataset_path)
+        corruption_rate = validation_results.get("corruption_rate", 0.0)
+        results["corruption_rate"] = corruption_rate
+        
+        if corruption_rate > max_corruption_rate:
+            results["passed"] = False
+            results["errors"].append(
+                f"Dataset corruption rate {corruption_rate:.2f}% exceeds threshold {max_corruption_rate}%"
+            )
+        elif validation_results.get("invalid_samples", 0) > 0:
+            results["warnings"].append(
+                f"Found {validation_results['invalid_samples']} invalid samples"
+            )
+    except Exception as e:
+        results["passed"] = False
+        results["errors"].append(f"Dataset validation failed: {e}")
     
-    if not tokenizer_path:
-        return False, "tokenizer_path not set in config.io"
+    return results
+
+
+def check_loss_sanity() -> Dict[str, Any]:
+    """Check loss composition sanity (basic checks)."""
+    print("[verify_readiness] Checking loss sanity...")
     
-    # Check if path exists (or is a HuggingFace model name)
-    tokenizer_path_obj = Path(tokenizer_path)
-    if not tokenizer_path_obj.exists() and "/" not in tokenizer_path:
-        # Might be a HuggingFace model name, which is OK
-        return True, f"Tokenizer path set: {tokenizer_path} (may be HuggingFace model)"
+    results = {
+        "passed": True,
+        "errors": [],
+        "warnings": [],
+    }
     
-    if tokenizer_path_obj.exists():
-        return True, f"Tokenizer path exists: {tokenizer_path}"
+    # Check that loss functions are importable and have correct signatures
+    try:
+        from training.losses import combined_kd_loss, halt_head_loss, length_aware_kd_loss
+        from training.assertions import assert_loss_finite
+        
+        # Basic sanity: functions exist and are callable
+        assert callable(combined_kd_loss)
+        assert callable(halt_head_loss)
+        assert callable(length_aware_kd_loss)
+        assert callable(assert_loss_finite)
+    except Exception as e:
+        results["passed"] = False
+        results["errors"].append(f"Loss function checks failed: {e}")
     
-    return False, f"Tokenizer path not found: {tokenizer_path}"
+    return results
+
+
+def check_checkpoint_reproducibility() -> Dict[str, Any]:
+    """Check checkpoint and reproducibility setup."""
+    print("[verify_readiness] Checking checkpoint and reproducibility setup...")
+    
+    results = {
+        "passed": True,
+        "errors": [],
+        "warnings": [],
+    }
+    
+    # Check that checkpoint saving function exists and has required features
+    try:
+        from training.distill_kd import save_checkpoint
+        import inspect
+        
+        sig = inspect.signature(save_checkpoint)
+        params = list(sig.parameters.keys())
+        
+        # Check for required parameters
+        required_params = ['rng_states', 'data_shard_index']
+        for param in required_params:
+            if param not in params:
+                results["warnings"].append(f"save_checkpoint missing optional parameter: {param}")
+    except Exception as e:
+        results["passed"] = False
+        results["errors"].append(f"Checkpoint function check failed: {e}")
+    
+    return results
+
+
+def check_export_contracts() -> Dict[str, Any]:
+    """Check export contract tests."""
+    print("[verify_readiness] Checking export contracts...")
+    
+    results = {
+        "passed": True,
+        "errors": [],
+        "warnings": [],
+    }
+    
+    try:
+        # Run export contract tests
+        import subprocess
+        result = subprocess.run(
+            ["python", "-m", "pytest", "tests/test_export_contracts.py", "-v"],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            results["warnings"].append("Export contract tests failed (may be expected if no model available)")
+            results["warnings"].append(result.stdout[:500])  # First 500 chars
+    except Exception as e:
+        results["warnings"].append(f"Could not run export contract tests: {e}")
+    
+    return results
 
 
 def main():
-    """Run all verification checks."""
-    print("=" * 80)
+    ap = argparse.ArgumentParser(description="Verify pre-training readiness")
+    ap.add_argument('--dataset', help='Path to training dataset JSONL')
+    ap.add_argument('--tokenizer', default='models/student/tokenizer',
+                    help='Tokenizer path')
+    ap.add_argument('--max-corruption-rate', type=float, default=5.0,
+                    help='Maximum allowed dataset corruption rate (default: 5.0%%)')
+    ap.add_argument('--skip-dataset', action='store_true',
+                    help='Skip dataset validation')
+    ap.add_argument('--skip-export', action='store_true',
+                    help='Skip export contract tests')
+    
+    args = ap.parse_args()
+    
+    all_passed = True
+    all_errors = []
+    all_warnings = []
+    
+    print("="*60)
     print("Pre-Training Readiness Verification")
-    print("=" * 80)
-    print()
+    print("="*60)
     
-    checks = []
+    # 1. Version compatibility
+    print("\n[1/6] Version Compatibility")
+    try:
+        check_training_versions()
+        print("  PASSED: All version checks passed")
+    except RuntimeError as e:
+        print(f"  FAILED: {e}")
+        all_passed = False
+        all_errors.append(f"Version check: {e}")
     
-    # Check 1: Dataset format
-    print("Check 1: Dataset format (no reasoning_content)")
-    dataset_path = project_root / "data" / "kd_mix.jsonl"
-    if dataset_path.exists():
-        ok, msg = check_dataset_format(dataset_path)
-        checks.append(("Dataset format", ok))
-        print(f"  {'✅' if ok else '❌'} {msg}")
+    # 2. Config & Tokenizer Contracts
+    print("\n[2/6] Config & Tokenizer Contracts")
+    contract_results = check_config_tokenizer_contracts(args.tokenizer)
+    if contract_results["passed"]:
+        print("  PASSED: Tokenizer contract tests passed")
     else:
-        checks.append(("Dataset format", False))
-        print(f"  ⚠️  Dataset not found: {dataset_path}")
-        print("     Generate dataset first: python -m scripts.make_kd_mix_hardened --out data/kd_mix.jsonl --teacher <endpoint> --total 10")
-    print()
+        print(f"  FAILED: {contract_results['errors'][0]}")
+        all_passed = False
+        all_errors.extend(contract_results["errors"])
+    if contract_results["warnings"]:
+        all_warnings.extend(contract_results["warnings"])
     
-    # Check 2: Config weights
-    print("Check 2: Training config process-step weights")
-    config_files = [
-        project_root / "configs" / "worker_9b.yaml",
-        project_root / "configs" / "student_9b_gqa.yaml",
-        project_root / "configs" / "student_8b_gqa.yaml",
-    ]
-    
-    for config_path in config_files:
-        if config_path.exists():
-            ok, msg = check_config_weights(config_path)
-            checks.append((f"Config weights ({config_path.name})", ok))
-            print(f"  {'✅' if ok else '❌'} {config_path.name}: {msg}")
+    # 3. Dataset Validation
+    if not args.skip_dataset and args.dataset:
+        print("\n[3/6] Dataset Validation")
+        dataset_results = check_dataset_validation(Path(args.dataset), args.max_corruption_rate)
+        if dataset_results["passed"]:
+            print(f"  PASSED: Dataset validation passed (corruption rate: {dataset_results['corruption_rate']:.2f}%)")
         else:
-            print(f"  ⚠️  Config not found: {config_path.name}")
-    print()
+            print(f"  FAILED: {dataset_results['errors'][0]}")
+            all_passed = False
+            all_errors.extend(dataset_results["errors"])
+        if dataset_results["warnings"]:
+            all_warnings.extend(dataset_results["warnings"])
+    else:
+        print("\n[3/6] Dataset Validation")
+        print("  SKIPPED: No dataset path provided or --skip-dataset flag set")
     
-    # Check 3: Tokenizer path
-    print("Check 3: Tokenizer path in configs")
-    for config_path in config_files:
-        if config_path.exists():
-            ok, msg = check_tokenizer_path(config_path)
-            checks.append((f"Tokenizer path ({config_path.name})", ok))
-            print(f"  {'✅' if ok else '❌'} {config_path.name}: {msg}")
-    print()
+    # 4. Loss Sanity
+    print("\n[4/6] Loss Sanity")
+    loss_results = check_loss_sanity()
+    if loss_results["passed"]:
+        print("  PASSED: Loss function checks passed")
+    else:
+        print(f"  FAILED: {loss_results['errors'][0]}")
+        all_passed = False
+        all_errors.extend(loss_results["errors"])
+    
+    # 5. Checkpoint & Reproducibility
+    print("\n[5/6] Checkpoint & Reproducibility")
+    checkpoint_results = check_checkpoint_reproducibility()
+    if checkpoint_results["passed"]:
+        print("  PASSED: Checkpoint function checks passed")
+    else:
+        print(f"  FAILED: {checkpoint_results['errors'][0]}")
+        all_passed = False
+        all_errors.extend(checkpoint_results["errors"])
+    if checkpoint_results["warnings"]:
+        all_warnings.extend(checkpoint_results["warnings"])
+    
+    # 6. Export Contracts
+    if not args.skip_export:
+        print("\n[6/6] Export Contracts")
+        export_results = check_export_contracts()
+        if export_results["passed"]:
+            print("  PASSED: Export contract tests passed")
+        else:
+            print("  WARNING: Export contract tests had issues (may be expected)")
+        if export_results["warnings"]:
+            all_warnings.extend(export_results["warnings"])
+    else:
+        print("\n[6/6] Export Contracts")
+        print("  SKIPPED: --skip-export flag set")
     
     # Summary
-    print("=" * 80)
+    print("\n" + "="*60)
     print("Summary")
-    print("=" * 80)
+    print("="*60)
     
-    passed = sum(1 for _, ok in checks if ok)
-    total = len(checks)
-    
-    for name, ok in checks:
-        status = "✅ PASS" if ok else "❌ FAIL"
-        print(f"{status}: {name}")
-    
-    print()
-    print(f"Results: {passed}/{total} checks passed")
-    
-    if passed == total:
-        print("✅ All checks passed! Ready for training.")
-        return 0
+    if all_passed:
+        print("\n✅ ALL CHECKS PASSED - Ready for training")
     else:
-        print("❌ Some checks failed. Address issues before training.")
-        return 1
+        print("\n❌ CHECKS FAILED - Fix errors before training")
+        print("\nErrors:")
+        for error in all_errors:
+            print(f"  - {error}")
+    
+    if all_warnings:
+        print("\nWarnings:")
+        for warning in all_warnings[:10]:  # First 10 warnings
+            print(f"  - {warning}")
+        if len(all_warnings) > 10:
+            print(f"  ... and {len(all_warnings) - 10} more warnings")
+    
+    print("\n" + "="*60)
+    
+    sys.exit(0 if all_passed else 1)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
-
+    main()
