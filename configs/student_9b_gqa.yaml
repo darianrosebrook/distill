@@ -24,7 +24,12 @@ optimizer:
   grad_clip: 1.0
 
 train:
-  seq_lengths: [2048, 4096, 8192, 16384]  # curriculum controls schedule
+  # M-series ANE-optimal shapes: 512/1024/2048 (primary), 4096 (long-context)
+  seq_lengths: [512, 1024, 2048, 4096]  # Enumerated shapes matching export (or curriculum)
+  use_enumerated_shapes: false  # Set to true to use enumerated shape training
+  # M-series production mix: focus on 512/1024 for tool calls, 2048 for reasoning, 4096 rare
+  shape_probs: [0.4, 0.4, 0.15, 0.05]  # Dirichlet distribution (512, 1024, 2048, 4096)
+  periodic_upweight_rare: true  # Periodically upweight rare shapes
   micro_batch_size: 4
   grad_accum: 8
   steps: 200000
@@ -33,9 +38,10 @@ train:
   seed: 1337
   save_every: 2000
   log_every: 50
+  val_every: 1000  # Speed metrics measurement frequency
 
 curriculum:
-  schedule: [20000, 60000, 120000, 200000]  # step boundaries per length
+  schedule: [20000, 60000, 120000, 200000]  # step boundaries per length (used if use_enumerated_shapes=false)
   mix_long_ctx_ratio: [0.1, 0.2, 0.3, 0.4]
   rope_scaling_consistency: true
 
@@ -48,6 +54,17 @@ kd:
   w_tool: 0.15      # Tool name selection loss weight
   w_args: 0.15      # JSON argument loss weight
   w_integr: 0.10    # Integration span loss weight
+  # Latency-aware losses (Phase 1)
+  use_length_aware_kd: false  # Enable length-aware KD loss
+  length_kd_weight: 0.05      # Weight for length-aware KD loss
+  length_kd_hinge: 0.15       # Hinge threshold (penalty starts at 15% excess)
+  length_kd_slope: 1.0        # Slope multiplier for penalty
+  use_early_tool_call_loss: false  # Enable early tool call loss
+  early_tool_weight: 0.05     # Weight for early tool call loss
+  early_tool_N: 25            # Number of tokens to consider for early tool call
+  early_tool_warmup_epochs: 5 # Epochs to ramp up early tool call loss
+  early_tool_json_prior_weight: 0.02  # Weight for JSON envelope prior
+  early_tool_ce_weight: 0.2   # Weight for cross-entropy when teacher prefix available
 
 process_supervision:
   constrained_decoding: true
@@ -56,7 +73,9 @@ process_supervision:
   loss_tool_select_weight: 0.7
 
 quant:
-  enabled: false            # turn on in quant_qat_int8.yaml stage
+  enabled: false            # Enable QAT in main distillation loop
+  start_fraction: 0.8       # Start QAT at 80% of training (last 20%)
+  lr_multiplier: 0.1        # LR multiplier for QAT (default: 10× lower)
   weight_bits: 8
   act_bits: 8
   observers: minmax_per_channel

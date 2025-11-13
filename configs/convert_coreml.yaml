@@ -2,14 +2,24 @@ coreml:
   precision: fp16
   mlprogram: true
   compute_units: all        # prefer ANE, fall back GPU
-  enumerate_shapes: [4096, 8192, 16384]
+  # M-series ANE-optimal shapes: 512/1024/2048 (primary), 4096 (long-context)
+  # Avoid >4096 (ANE efficiency drops, prefer chunking)
+  enumerate_shapes: [512, 1024, 2048, 4096]  # M-series optimized
   allow_low_precision: true
   weight_dequant_strategy: matmul_dequant  # exporter option if available
 
 ane:
-  must_place: ["attention_qk", "attention_softmax", "attention_value", "proj_out"]
-  allow_gpu: ["embedding", "final_logits"]
-  fail_if_cpu_ops_gt: 0
+  # Note: CoreML decides device placement at runtime; you cannot hard-force placement
+  # Instead:
+  # 1. Export with mlprogram and enumerated shapes
+  # 2. Avoid ops that force CPU (int64 tensors, unsupported activations)
+  # 3. Verify ANE placement empirically:
+  #    - Use Instruments → Core ML template to check ANE vs GPU time
+  #    - Sample wall-times during inference; measure ANE residency
+  # 4. Fail CI if ANE residency drops >10% vs baseline (via profiling)
+  # 
+  # Expected: Attention/MLP ops should run on ANE; embedding/logits may use GPU
+  # CPU fallbacks indicate export issues (int64 leaks, unsupported ops)
 
 validation:
   probe_points: ["embed","ln1","qkt","masked_logits","softmax","attn_out"]
