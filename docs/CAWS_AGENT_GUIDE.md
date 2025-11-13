@@ -442,7 +442,7 @@ vim .caws/working-spec.yaml # Add root cause note
 
 ---
 
-## Common Patterns & Best Practices
+## Common Patterns & Recommended Practices
 
 ### Pattern: Deterministic Testing
 

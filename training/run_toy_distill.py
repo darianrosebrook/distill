@@ -7,6 +7,7 @@ Saves checkpoint with unified schema compatible with export_pytorch.py --toy.
 Usage:
     python -m training.run_toy_distill --in toy_kd.jsonl --out toy.ckpt --epochs 2
 """
+from training.utils import sha256_state_dict
 import argparse
 import hashlib
 import json
@@ -38,54 +39,7 @@ def get_git_sha() -> str:
         return "unknown"
 
 
-def sha256_state_dict(state_dict: dict) -> str:
-    """
-    Compute SHA256 hash of model state dict.
-
-    Serializes tensor values to bytes for accurate hashing.
-    Uses tensor.numpy() to convert to NumPy array, then tobytes() for binary serialization.
-    """
-    import io
-
-    # Serialize state dict to bytes
-    buffer = io.BytesIO()
-
-    for key in sorted(state_dict.keys()):
-        tensor = state_dict[key]
-
-        # Write key name
-        buffer.write(key.encode('utf-8'))
-        buffer.write(b':')
-
-        # Write shape and dtype metadata
-        buffer.write(str(tensor.shape).encode('utf-8'))
-        buffer.write(b':')
-        buffer.write(str(tensor.dtype).encode('utf-8'))
-        buffer.write(b':')
-
-        # Write actual tensor data as bytes
-        # Convert to CPU and NumPy for serialization
-        if tensor.is_cuda:
-            tensor_cpu = tensor.cpu()
-        else:
-            tensor_cpu = tensor
-
-        # Convert to NumPy array and serialize to bytes
-        try:
-            tensor_np = tensor_cpu.detach().numpy()
-            tensor_bytes = tensor_np.tobytes()
-            buffer.write(tensor_bytes)
-        except Exception as e:
-            # Fallback: if conversion fails, use shape/dtype only
-            # This should rarely happen, but provides graceful degradation
-            print(
-                f"[run_toy_distill] WARN: Could not serialize tensor {key}: {e}")
-            buffer.write(b'<serialization_failed>')
-
-        buffer.write(b'|')  # Separator between tensors
-
-    content = buffer.getvalue()
-    return hashlib.sha256(content).hexdigest()
+# Import shared SHA256 utility
 
 
 def main():

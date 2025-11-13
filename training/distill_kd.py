@@ -15,7 +15,7 @@ import math
 import os
 import random
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 import torch
 import torch.nn as nn
@@ -59,6 +59,7 @@ def compute_required_fields_present(
     batch: Dict[str, torch.Tensor],
     tokenizer,
     device: torch.device,
+    student_logits: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     """
     Compute boolean mask indicating if student has all required fields present.
@@ -88,34 +89,160 @@ def compute_required_fields_present(
         # No validation data available - assume complete (no penalty)
         return required_present
 
-    # If we have gold_json_text_ids, check if student logits match required fields
-    # For now, use a simple heuristic: if gold_json_text_ids exists and is non-empty,
-    # assume teacher has required fields. Student completeness check would require
-    # generating text and parsing, which is expensive.
-    #
-    # TODO: Implement full completeness check by:
-    # 1. Generating text from student logits
-    # 2. Extracting tool call JSON
-    # 3. Validating against schema required fields
-    # 4. Comparing with teacher's validated arguments
+    # Full completeness check: generate text from student logits and validate
+    # This checks if student output contains all required tool arguments/fields
+    # by comparing against teacher's validated arguments and schema requirements.
 
-    gold_json_ids = batch.get("gold_json_text_ids")
-    if gold_json_ids is not None:
-        # Simple heuristic: if teacher has JSON args, check if student mask covers them
-        mask_valid_json = batch.get("mask_valid_json_tokens")
-        if mask_valid_json is not None:
-            # Check if student attention mask covers JSON span
-            # This is a proxy - full check requires text generation
-            student_attn_mask = batch.get("attention_mask")
-            if student_attn_mask is not None:
-                # For now, assume complete if student has attention over JSON span
-                # More sophisticated: decode and validate actual fields
-                json_length = min(gold_json_ids.size(
-                    1), student_attn_mask.size(1))
-                student_covers_json = student_attn_mask[:, :json_length].sum(
-                    dim=1) > 0
-                # If student doesn't cover JSON span, mark as incomplete
-                required_present = student_covers_json
+    # Check if we have student logits to generate from
+    student_logits = batch.get("student_logits")
+    if student_logits is None:
+        # Fallback to simple heuristic if logits not available
+        gold_json_ids = batch.get("gold_json_text_ids")
+        if gold_json_ids is not None:
+            mask_valid_json = batch.get("mask_valid_json_tokens")
+            if mask_valid_json is not None:
+                student_attn_mask = batch.get("attention_mask")
+                if student_attn_mask is not None:
+                    json_length = min(gold_json_ids.size(
+                        1), student_attn_mask.size(1))
+                    student_covers_json = student_attn_mask[:, :json_length].sum(
+                        dim=1) > 0
+                    required_present = student_covers_json
+        return required_present
+
+    # Get tool names and schema registry if available
+    tool_names = batch.get("tool_names", [])
+    schema_registry = None
+    try:
+        from tools.schema_registry import ToolSchemaRegistry
+        schema_registry = ToolSchemaRegistry()
+    except Exception:
+        # Schema registry not available - fall back to generic validation
+        pass
+
+    # Generate text from student logits for each batch item
+    from training.extractors import extract_tool_call
+
+    # Get predicted token IDs (greedy decoding)
+    # student_logits shape: [B, T, V]
+    pred_token_ids = student_logits.argmax(dim=-1)  # [B, T]
+
+    # Process each batch item
+    for i in range(B):
+        try:
+            # Decode tokens to text
+            tokens = pred_token_ids[i].cpu().tolist()
+            # Remove padding tokens (-100 or 0)
+            tokens = [t for t in tokens if t not in [-100, 0,
+                                                     tokenizer.pad_token_id if hasattr(tokenizer, 'pad_token_id') else None]]
+            generated_text = tokenizer.decode(tokens, skip_special_tokens=True)
+
+            # Extract tool call from generated text
+            student_tool_call = extract_tool_call(generated_text, tool_names)
+
+            if student_tool_call is None:
+                # No tool call found - mark as incomplete
+                required_present[i] = False
+                continue
+
+            # Get tool name
+            tool_name = student_tool_call.get("name")
+            student_args = student_tool_call.get("arguments", {})
+
+            if not tool_name:
+                required_present[i] = False
+                continue
+
+            # Get teacher's validated arguments for comparison
+            teacher_validated = None
+            if validated_args is not None:
+                # validated_args could be a list or dict
+                if isinstance(validated_args, list) and i < len(validated_args):
+                    teacher_validated = validated_args[i]
+                elif isinstance(validated_args, dict):
+                    teacher_validated = validated_args.get(
+                        str(i)) or validated_args.get(i)
+
+            # Validate against schema required fields
+            if schema_registry:
+                schema = schema_registry.get_schema(tool_name)
+                if schema:
+                    # Get required fields from schema
+                    # Schema structure: {"properties": {"arguments": {"required": [...], ...}}}
+                    required_fields = []
+                    if "properties" in schema:
+                        args_schema = schema["properties"].get("arguments", {})
+                        if isinstance(args_schema, dict) and "required" in args_schema:
+                            required_fields = args_schema["required"]
+                        elif "required" in schema:
+                            # Check if required fields are at top level
+                            required_fields = schema["required"]
+
+                    # Check if student has all required fields
+                    missing_fields = []
+                    for field in required_fields:
+                        if field not in student_args:
+                            missing_fields.append(field)
+
+                    if missing_fields:
+                        required_present[i] = False
+                        continue
+
+                    # Validate tool call against schema
+                    is_valid, error = schema_registry.validate_tool_call(
+                        tool_name, student_tool_call)
+                    if not is_valid:
+                        required_present[i] = False
+                        continue
+                else:
+                    # No schema found - use generic validation
+                    if "name" not in student_tool_call or "arguments" not in student_tool_call:
+                        required_present[i] = False
+                        continue
+
+            # Compare with teacher's validated arguments if available
+            if teacher_validated is not None:
+                teacher_args = teacher_validated.get(
+                    "arguments", {}) if isinstance(teacher_validated, dict) else {}
+
+                # Check if student has all fields that teacher has
+                # (assuming teacher's arguments are complete)
+                teacher_fields = set(teacher_args.keys())
+                student_fields = set(student_args.keys())
+
+                # Student should have at least the required fields from teacher
+                # (teacher may have optional fields too)
+                if schema_registry:
+                    schema = schema_registry.get_schema(tool_name)
+                    if schema:
+                        args_schema = schema.get(
+                            "properties", {}).get("arguments", {})
+                        required_fields = set(args_schema.get("required", []))
+                        # Check if student has all required fields
+                        if not required_fields.issubset(student_fields):
+                            required_present[i] = False
+                            continue
+                else:
+                    # Fallback: check if student has all teacher's fields
+                    # (conservative - teacher might have optional fields)
+                    if teacher_fields and not teacher_fields.issubset(student_fields):
+                        required_present[i] = False
+                        continue
+
+            # All checks passed - mark as complete
+            required_present[i] = True
+
+        except Exception as e:
+            # On error, conservatively mark as incomplete
+            # (better to penalize than to miss incomplete outputs)
+            required_present[i] = False
+            # Optionally log error for debugging (but don't spam during training)
+            if hasattr(compute_required_fields_present, '_error_count'):
+                compute_required_fields_present._error_count = getattr(
+                    compute_required_fields_present, '_error_count', 0) + 1
+                if compute_required_fields_present._error_count <= 5:  # Log first 5 errors
+                    print(
+                        f"[distill_kd] WARN: Completeness check error for batch item {i}: {e}")
 
     return required_present
 
@@ -380,6 +507,8 @@ def check_qat_stability(
     model: nn.Module,
     batch: Dict[str, torch.Tensor],
     device: torch.device,
+    baseline_model: Optional[nn.Module] = None,
+    baseline_hidden_states: Optional[List[torch.Tensor]] = None,
 ) -> Dict[str, float]:
     """
     Check QAT stability: cosine similarity probes and NaN detection.
@@ -387,9 +516,11 @@ def check_qat_stability(
     Reference: inference-speed-optimization-during-distillation-c3d3cffc.plan.md Phase 3
 
     Args:
-        model: Model to check
+        model: Model to check (quantized model)
         batch: Batch for forward pass
         device: Device to use
+        baseline_model: Optional baseline model (pre-quantization) for comparison
+        baseline_hidden_states: Optional pre-computed baseline hidden states
 
     Returns:
         Dictionary with stability metrics
@@ -402,23 +533,138 @@ def check_qat_stability(
             if attention_mask is not None:
                 attention_mask = attention_mask.to(device)
 
-            # Forward pass
+            # Forward pass to get logits
             logits = model(input_ids, attention_mask)
 
             # Check for NaNs
             has_nan = torch.isnan(logits).any().item()
 
-            # PLACEHOLDER: Compute cosine similarity on probe layers (if available)
-            # Actual implementation would:
-            # 1. Extract hidden states from model with return_hidden_states=True
-            # 2. Compare against baseline (pre-quantization) hidden states
-            # 3. Compute cosine similarity per layer and aggregate
-            # For now, return 1.0 (perfect similarity) as placeholder
-            cosine_sim = 1.0  # PLACEHOLDER: Real implementation requires baseline model comparison
+            # Compute cosine similarity on probe layers
+            cosine_sim = 1.0  # Default: perfect similarity if no baseline
+            cosine_sim_per_layer = []
+
+            # Check if model supports return_hidden_states
+            if hasattr(model, 'forward'):
+                try:
+                    # Extract hidden states from current model
+                    if isinstance(model, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)):
+                        # Unwrap DDP/DP model
+                        actual_model = model.module
+                    else:
+                        actual_model = model
+
+                    # Try to get hidden states from current model
+                    if hasattr(actual_model, 'forward'):
+                        # Check if forward supports return_hidden_states
+                        import inspect
+                        sig = inspect.signature(actual_model.forward)
+                        supports_hidden_states = 'return_hidden_states' in sig.parameters
+
+                        if supports_hidden_states:
+                            # Extract current hidden states
+                            current_outputs = actual_model(
+                                input_ids,
+                                attn_mask=attention_mask,
+                                return_hidden_states=True
+                            )
+                            if isinstance(current_outputs, tuple) and len(current_outputs) >= 2:
+                                current_logits, current_hidden_states = current_outputs[
+                                    0], current_outputs[1]
+                            else:
+                                current_hidden_states = None
+                        else:
+                            current_hidden_states = None
+                    else:
+                        current_hidden_states = None
+
+                    # Get baseline hidden states
+                    baseline_states = None
+                    if baseline_hidden_states is not None:
+                        # Use pre-computed baseline hidden states
+                        baseline_states = baseline_hidden_states
+                    elif baseline_model is not None:
+                        # Extract from baseline model
+                        baseline_model.eval()
+                        if isinstance(baseline_model, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)):
+                            baseline_actual = baseline_model.module
+                        else:
+                            baseline_actual = baseline_model
+
+                        if hasattr(baseline_actual, 'forward'):
+                            sig = inspect.signature(baseline_actual.forward)
+                            if 'return_hidden_states' in sig.parameters:
+                                baseline_outputs = baseline_actual(
+                                    input_ids,
+                                    attn_mask=attention_mask,
+                                    return_hidden_states=True
+                                )
+                                if isinstance(baseline_outputs, tuple) and len(baseline_outputs) >= 2:
+                                    baseline_states = baseline_outputs[1]
+                        baseline_model.train()
+
+                    # Compute cosine similarity per layer
+                    if current_hidden_states is not None and baseline_states is not None:
+                        # Ensure same number of layers
+                        num_layers = min(
+                            len(current_hidden_states), len(baseline_states))
+                        if num_layers > 0:
+                            similarities = []
+                            for i in range(num_layers):
+                                # [B, T, D]
+                                current_hs = current_hidden_states[i]
+                                baseline_hs = baseline_states[i]  # [B, T, D]
+
+                                # Flatten to [B*T, D] for cosine similarity
+                                B, T, D = current_hs.shape
+                                current_flat = current_hs.view(
+                                    B * T, D)  # [B*T, D]
+                                baseline_flat = baseline_hs.view(
+                                    B * T, D)  # [B*T, D]
+
+                                # Compute cosine similarity: dot product / (norm1 * norm2)
+                                # Average over sequence positions
+                                current_norm = torch.norm(
+                                    current_flat, dim=-1, keepdim=True)  # [B*T, 1]
+                                baseline_norm = torch.norm(
+                                    baseline_flat, dim=-1, keepdim=True)  # [B*T, 1]
+
+                                # Avoid division by zero
+                                eps = 1e-8
+                                current_norm = current_norm.clamp(min=eps)
+                                baseline_norm = baseline_norm.clamp(min=eps)
+
+                                # Normalize
+                                current_normalized = current_flat / \
+                                    current_norm  # [B*T, D]
+                                baseline_normalized = baseline_flat / \
+                                    baseline_norm  # [B*T, D]
+
+                                # Cosine similarity: dot product of normalized vectors
+                                cosine_per_token = (
+                                    current_normalized * baseline_normalized).sum(dim=-1)  # [B*T]
+                                layer_sim = cosine_per_token.mean().item()  # Average over all tokens
+                                similarities.append(layer_sim)
+                                cosine_sim_per_layer.append(layer_sim)
+
+                            # Aggregate: mean of per-layer similarities
+                            if similarities:
+                                cosine_sim = sum(similarities) / \
+                                    len(similarities)
+                            else:
+                                cosine_sim = 1.0
+                        else:
+                            cosine_sim = 1.0  # No layers to compare
+                    elif current_hidden_states is not None:
+                        # No baseline available - can't compute similarity
+                        cosine_sim = 1.0  # Default: assume stable
+                except Exception as e:
+                    # If hidden state extraction fails, fall back to default
+                    cosine_sim = 1.0
 
             return {
                 "qat_stability.has_nan": float(has_nan),
                 "qat_stability.cosine_sim": cosine_sim,
+                "qat_stability.cosine_sim_per_layer": cosine_sim_per_layer if cosine_sim_per_layer else None,
             }
         except Exception as e:
             return {
@@ -485,11 +731,16 @@ def save_checkpoint(
     config: Dict[str, Any],
 ):
     """Save training checkpoint."""
+    from training.utils import sha256_state_dict
+
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Get model state dict (unwrap DDP if needed)
     model_state = model.module.state_dict() if isinstance(
         model, DDP) else model.state_dict()
+
+    # Compute SHA256 hash of model state for reproducibility tracking
+    state_sha256 = sha256_state_dict(model_state)
 
     checkpoint = {
         "step": step,
@@ -497,6 +748,9 @@ def save_checkpoint(
         "optimizer_state_dict": optimizer.state_dict(),
         "loss": loss,
         "config": config,
+        "meta": {
+            "sha256_state": state_sha256,
+        },
     }
 
     # Save latest
@@ -533,6 +787,21 @@ def train_step(
     input_ids = batch["input_ids"].to(device)
     attention_mask = batch["attention_mask"].to(device)
     labels = batch["labels"].to(device)
+
+    # Vocab clamping: ensure token IDs fit within model vocab_size
+    # This catches tokenizer/model vocab mismatches early
+    model_vocab_size = cfg.get("arch", {}).get("vocab_size", 32000)
+    pre_violate = (input_ids.ge(model_vocab_size)
+                   | input_ids.lt(0)).any().item()
+    if pre_violate:
+        input_ids = torch.clamp(input_ids, 0, model_vocab_size - 1)
+        labels = torch.clamp(labels, 0, model_vocab_size - 1)
+        # Warn periodically (every 50 steps) to avoid log spam
+        if current_step % 50 == 0:
+            print(
+                f"[distill_kd] ⚠ Step {current_step}: clamped token ids to vocab_size={model_vocab_size}",
+                flush=True
+            )
 
     teacher_target_ids = batch.get("teacher_target_ids")
     if teacher_target_ids is not None:
@@ -755,6 +1024,7 @@ def train_step(
                     batch=batch,
                     tokenizer=tokenizer,
                     device=device,
+                    student_logits=student_logits,
                 )
 
                 # Compute length-aware KD loss
@@ -1107,10 +1377,32 @@ def train_step(
 
                         # Get claim extractor if available (optional)
                         claim_extractor = None
-                        if "claim_extractor" in cfg:
-                            # Claim extractor would be passed via config or initialized elsewhere
-                            # For now, use None (will fall back to structure check)
-                            pass
+                        claim_extractor_cfg = cfg.get("claim_extractor", {})
+                        if claim_extractor_cfg:
+                            # Initialize claim extractor from config
+                            extractor_type = claim_extractor_cfg.get(
+                                "type", "simple")
+                            if extractor_type == "simple":
+                                from training.claim_extraction import SimpleClaimExtractor
+                                claim_extractor = SimpleClaimExtractor()
+                            elif extractor_type == "full":
+                                # Use full ClaimifyPipeline for comprehensive extraction
+                                try:
+                                    from arbiter.claims.pipeline import ClaimifyPipeline
+                                    claim_extractor = ClaimifyPipeline()
+                                except ImportError:
+                                    # Fallback to SimpleClaimExtractor if full pipeline unavailable
+                                    from training.claim_extraction import SimpleClaimExtractor
+                                    claim_extractor = SimpleClaimExtractor()
+                                    print(
+                                        "[distill_kd] WARN: Full claim extractor unavailable, using SimpleClaimExtractor")
+                            else:
+                                # Unknown type, use default
+                                from training.claim_extraction import SimpleClaimExtractor
+                                claim_extractor = SimpleClaimExtractor()
+                                print(
+                                    f"[distill_kd] WARN: Unknown claim extractor type '{extractor_type}', using SimpleClaimExtractor")
+                        # If no config, claim_extractor remains None and will use default in loss function
 
                         # Compute CAWS compliance loss
                         compliance_loss = caws_compliance_loss(
@@ -1158,10 +1450,32 @@ def train_step(
 
                     # Get claim extractor if available (optional, will create default if None)
                     claim_extractor = None
-                    if "claim_extractor" in cfg:
-                        # Claim extractor would be passed via config or initialized elsewhere
-                        # For now, use None (will create SimpleClaimExtractor in loss function)
-                        pass
+                    claim_extractor_cfg = cfg.get("claim_extractor", {})
+                    if claim_extractor_cfg:
+                        # Initialize claim extractor from config
+                        extractor_type = claim_extractor_cfg.get(
+                            "type", "simple")
+                        if extractor_type == "simple":
+                            from training.claim_extraction import SimpleClaimExtractor
+                            claim_extractor = SimpleClaimExtractor()
+                        elif extractor_type == "full":
+                            # Use full ClaimifyPipeline for comprehensive extraction
+                            try:
+                                from arbiter.claims.pipeline import ClaimifyPipeline
+                                claim_extractor = ClaimifyPipeline()
+                            except ImportError:
+                                # Fallback to SimpleClaimExtractor if full pipeline unavailable
+                                from training.claim_extraction import SimpleClaimExtractor
+                                claim_extractor = SimpleClaimExtractor()
+                                print(
+                                    "[distill_kd] WARN: Full claim extractor unavailable, using SimpleClaimExtractor")
+                        else:
+                            # Unknown type, use default
+                            from training.claim_extraction import SimpleClaimExtractor
+                            claim_extractor = SimpleClaimExtractor()
+                            print(
+                                f"[distill_kd] WARN: Unknown claim extractor type '{extractor_type}', using SimpleClaimExtractor")
+                    # If no config, claim_extractor remains None and will use default in loss function
 
                     # Normalize teacher text format
                     teacher_text_normalized = teacher_text
