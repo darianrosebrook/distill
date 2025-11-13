@@ -7,42 +7,94 @@ import os
 import typer
 import torch
 import torch.nn as nn
+from pathlib import Path
 from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
 
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
 app = typer.Typer()
+
+
+def load_judge_config(config_path: str) -> ModelCfg:
+    """Load judge model configuration from YAML file."""
+    if yaml is None:
+        raise ImportError("PyYAML required. Install with: pip install pyyaml")
+
+    config_file = Path(config_path)
+    if not config_file.exists():
+        raise FileNotFoundError(f"Judge config not found: {config_path}")
+
+    with open(config_file, 'r', encoding='utf-8') as f:
+        cfg = yaml.safe_load(f) or {}
+
+    arch_cfg = cfg.get("arch", {})
+
+    # Extract model configuration from arch section
+    judge_cfg = ModelCfg(
+        d_model=arch_cfg.get("d_model", 2048),
+        n_layers=arch_cfg.get("n_layers", 24),
+        n_heads=arch_cfg.get("n_heads", 16),
+        n_kv_heads=arch_cfg.get("n_kv_heads", 4),
+        d_head=arch_cfg.get("d_head", 128),
+        vocab_size=arch_cfg.get("vocab_size", 32000),
+        rope_theta=arch_cfg.get("rope_theta", 10000.0),
+        rope_scaling=arch_cfg.get("rope_scaling", "dynamic"),
+        dropout=arch_cfg.get("dropout", 0.0),
+    )
+
+    return judge_cfg
 
 
 @app.command()
 def main(config: str = "conversion/shape_sets.json", judge_config: str = "configs/judge_4b.yaml"):
     """Export Judge model to ONNX with enumerated short shapes.
-    
+
     Args:
         config: Path to shape_sets.json (for sequence lengths)
-        judge_config: Path to judge model config
+        judge_config: Path to judge model config YAML
     """
+    # Load judge configuration from YAML
+    try:
+        judge_cfg = load_judge_config(judge_config)
+        print(f"[judge_export_onnx] Loaded judge config from: {judge_config}")
+        print(
+            f"[judge_export_onnx] Model config: d_model={judge_cfg.d_model}, n_layers={judge_cfg.n_layers}")
+    except Exception as e:
+        print(
+            f"[judge_export_onnx] Warning: Failed to load config {judge_config}: {e}")
+        print("[judge_export_onnx] Using default config values")
+        # Fallback to defaults if config loading fails
+        judge_cfg = ModelCfg(
+            d_model=2048,
+            n_layers=24,
+            n_heads=16,
+            n_kv_heads=4,
+            d_head=128,
+            vocab_size=32000,
+            rope_theta=10000.0,
+            rope_scaling="dynamic",
+            dropout=0.0
+        )
+
     # Judge uses short enumerated shapes: 512, 1024, 2048
     # (Judge reads summaries/claims, not full transcripts)
-    judge_seqs = [512, 1024, 2048]
-    
-    # PLACEHOLDER: Load judge-specific config
-    # Judge config should specify smaller model size (3-4B or 7B)
-    judge_cfg = ModelCfg(
-        d_model=2048,  # Smaller for 3-4B model
-        n_layers=24,
-        n_heads=16,
-        n_kv_heads=4,
-        d_head=128,
-        vocab_size=32000,
-        rope_theta=10000.0,
-        rope_scaling="dynamic",
-        dropout=0.0
-    )
-    
+    # Try to get from config, fallback to defaults
+    try:
+        with open(config, 'r') as f:
+            shape_data = json.load(f)
+            judge_seqs = shape_data.get("judge_sequences", [512, 1024, 2048])
+    except Exception:
+        # Fallback to defaults
+        judge_seqs = [512, 1024, 2048]
+
     model = StudentLM(judge_cfg)
     model.eval()
-    
+
     os.makedirs("artifacts/onnx/judge", exist_ok=True)
-    
+
     for T in judge_seqs:
         dummy = torch.zeros((1, T), dtype=torch.int32)
         path = f"artifacts/onnx/judge/judge_T{T}.onnx"
@@ -61,4 +113,3 @@ def main(config: str = "conversion/shape_sets.json", judge_config: str = "config
 
 if __name__ == "__main__":
     app()
-

@@ -18,6 +18,7 @@ from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
 
 class PrefillWrapper(nn.Module):
     """Wrapper for prefill export (full sequence, no KV cache)."""
+
     def __init__(self, model: StudentLM):
         super().__init__()
         self.model = model
@@ -28,13 +29,14 @@ class PrefillWrapper(nn.Module):
 
 class DecodeWrapper(nn.Module):
     """Wrapper for decode export (single token with KV cache)."""
+
     def __init__(self, model: StudentLM):
         super().__init__()
         self.model = model
 
     def forward(self, input_ids: torch.Tensor, *kv_caches) -> tuple:
         """Decode forward with KV cache inputs.
-        
+
         Args:
             input_ids: [B, 1] single token
             kv_caches: n_layers * 2 tensors (k_cache, v_cache) each [B, Hk, T_cache, Dh]
@@ -54,9 +56,10 @@ class DecodeWrapper(nn.Module):
                     kv_list.append((k_cache, v_cache))
             else:
                 kv_list.append(None)
-        
-        logits, updated_caches = self.model.forward_decode(input_ids, kv_list, pos=0)
-        
+
+        logits, updated_caches = self.model.forward_decode(
+            input_ids, kv_list, pos=0)
+
         # Flatten updated caches for export
         outputs = [logits]
         for k_cache, v_cache in updated_caches:
@@ -68,20 +71,27 @@ def export_prefill(model: StudentLM, example_input: torch.Tensor, output_path: P
     """Export prefill model (full sequence)."""
     wrapper = PrefillWrapper(model)
     wrapper.eval()
-    
+
     with torch.no_grad():
-        traced = torch.jit.trace(wrapper, (example_input, None))
+        # Trace with just input_ids (attn_mask is optional)
+        # Note: If wrapper returns dict, TorchScript will preserve structure
+        traced = torch.jit.trace(wrapper, example_input)
         traced.eval()
-    
+
+        # If wrapper returns dict, we need to handle it differently
+        # For now, keep returning tensor directly - CoreML will name it
+        # The output name stabilization happens in convert_coreml.py
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     traced.save(str(output_path))
     print(f"[export_pytorch] Saved prefill model: {output_path}")
-    
+
     # Create contract for prefill
     contract = {
         "inputs": [
             {"name": "input_ids", "dtype": "int32", "shape": ["B", "T"]},
-            {"name": "attn_mask", "dtype": "int32", "shape": ["B", "T"], "optional": True}
+            {"name": "attn_mask", "dtype": "int32",
+                "shape": ["B", "T"], "optional": True}
         ],
         "outputs": [
             {"name": "logits", "dtype": "float16", "shape": ["B", "T", "V"]}
@@ -93,7 +103,7 @@ def export_prefill(model: StudentLM, example_input: torch.Tensor, output_path: P
     with open(contract_path, 'w') as f:
         json.dump(contract, f, indent=2)
     print(f"[export_pytorch] Saved contract: {contract_path}")
-    
+
     return traced
 
 
@@ -101,23 +111,25 @@ def export_decode(model: StudentLM, output_path: Path, n_layers: int, n_kv_heads
     """Export decode model (single token with KV cache)."""
     wrapper = DecodeWrapper(model)
     wrapper.eval()
-    
+
     # Create example inputs: single token + empty KV caches
     example_input_ids = torch.zeros((1, 1), dtype=torch.int32)
     example_kv_inputs = []
     for _ in range(n_layers):
-        k_cache = torch.zeros((1, n_kv_heads, 0, d_head), dtype=torch.float16)  # Empty cache
+        k_cache = torch.zeros((1, n_kv_heads, 0, d_head),
+                              dtype=torch.float16)  # Empty cache
         v_cache = torch.zeros((1, n_kv_heads, 0, d_head), dtype=torch.float16)
         example_kv_inputs.extend([k_cache, v_cache])
-    
+
     with torch.no_grad():
-        traced = torch.jit.trace(wrapper, (example_input_ids, *example_kv_inputs))
+        traced = torch.jit.trace(
+            wrapper, (example_input_ids, *example_kv_inputs))
         traced.eval()
-    
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     traced.save(str(output_path))
     print(f"[export_pytorch] Saved decode model: {output_path}")
-    
+
     # Create contract for decode
     contract = {
         "inputs": [
@@ -135,67 +147,115 @@ def export_decode(model: StudentLM, output_path: Path, n_layers: int, n_kv_heads
     # Add KV cache inputs to contract
     for i in range(n_layers):
         contract["inputs"].extend([
-            {"name": f"k_cache_{i}", "dtype": "float16", "shape": ["B", n_kv_heads, "T_cache", d_head]},
-            {"name": f"v_cache_{i}", "dtype": "float16", "shape": ["B", n_kv_heads, "T_cache", d_head]},
+            {"name": f"k_cache_{i}", "dtype": "float16",
+                "shape": ["B", n_kv_heads, "T_cache", d_head]},
+            {"name": f"v_cache_{i}", "dtype": "float16",
+                "shape": ["B", n_kv_heads, "T_cache", d_head]},
         ])
-    
+
     contract_path = output_path.parent / f"{output_path.stem}_contract.json"
     with open(contract_path, 'w') as f:
         json.dump(contract, f, indent=2)
     print(f"[export_pytorch] Saved contract: {contract_path}")
-    
+
     return traced
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--checkpoint', required=True, help='Model checkpoint path (.pt)')
+    ap.add_argument('--checkpoint', required=True,
+                    help='Model checkpoint path (.pt)')
     ap.add_argument('--out', required=True, help='Output directory')
     ap.add_argument('--mode', choices=['prefill', 'decode', 'both'], default='both',
                     help='Export mode (default: both)')
-    ap.add_argument('--seq', type=int, default=2048, help='Example sequence length for prefill tracing')
+    ap.add_argument('--seq', type=int, default=2048,
+                    help='Example sequence length for prefill tracing')
     ap.add_argument('--enumerated-T', nargs='+', type=int, default=[2048, 4096, 8192, 16384],
                     help='Enumerated sequence lengths')
+    ap.add_argument('--toy', action='store_true',
+                    help='Handle toy checkpoint schema (normalize arch config)')
     args = ap.parse_args()
-    
+
     # Load model
     checkpoint = torch.load(args.checkpoint, map_location='cpu')
+
+    # Load config from checkpoint if available
+    cfg = None
+    if 'config' in checkpoint:
+        config_data = checkpoint['config']
+        arch_cfg = config_data.get('arch', {})
+
+        # Handle toy checkpoint schema
+        if args.toy:
+            # Normalize toy arch config to production export spec
+            export_spec = {
+                'd_model': arch_cfg.get('hidden_size') or arch_cfg.get('d_model', 128),
+                'n_layers': arch_cfg.get('n_layers', 2),
+                'n_heads': arch_cfg.get('n_heads', 4),
+                'n_kv_heads': arch_cfg.get('n_kv_heads', 2),
+                'd_head': arch_cfg.get('d_head') or (arch_cfg.get('hidden_size', 128) // arch_cfg.get('n_heads', 4)),
+                'vocab_size': arch_cfg.get('vocab_size', 512),
+                'rope_theta': arch_cfg.get('rope_theta', 10000.0),
+                'rope_scaling': arch_cfg.get('rope_scaling', 'dynamic'),
+                'dropout': arch_cfg.get('dropout', 0.0),
+            }
+            # Use export_spec values
+            cfg = ModelCfg(
+                d_model=export_spec['d_model'],
+                n_layers=export_spec['n_layers'],
+                n_heads=export_spec['n_heads'],
+                n_kv_heads=export_spec['n_kv_heads'],
+                d_head=export_spec['d_head'],
+                vocab_size=export_spec['vocab_size'],
+                rope_theta=export_spec['rope_theta'],
+                rope_scaling=export_spec['rope_scaling'],
+                dropout=export_spec['dropout'],
+            )
+        else:
+            # Production checkpoint schema
+            cfg = ModelCfg(
+                d_model=arch_cfg.get('d_model', 4096),
+                n_layers=arch_cfg.get('n_layers', 32),
+                n_heads=arch_cfg.get('n_heads', 32),
+                n_kv_heads=arch_cfg.get('n_kv_heads', 8),
+                d_head=arch_cfg.get('d_head', 128),
+                vocab_size=arch_cfg.get('vocab_size', 32000),
+                rope_theta=arch_cfg.get('rope_theta', 10000.0),
+                rope_scaling=arch_cfg.get('rope_scaling', 'dynamic'),
+                dropout=arch_cfg.get('dropout', 0.0),
+            )
+
+    if cfg is None:
+        cfg = ModelCfg()
+
     if 'model_state_dict' in checkpoint:
         state_dict = checkpoint['model_state_dict']
-        cfg = ModelCfg()  # TODO: Load from checkpoint if available
     else:
         state_dict = checkpoint
-        cfg = ModelCfg()
-    
+
     model = StudentLM(cfg)
     model.load_state_dict(state_dict)
     model.eval()
-    
+
     output_dir = Path(args.out)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Export prefill models
     if args.mode in ['prefill', 'both']:
         for T in args.enumerated_T:
             example_input = torch.zeros((1, T), dtype=torch.int32)
             prefill_path = output_dir / f"student_prefill_T{T}.pt"
-            export_prefill(model, example_input, prefill_path, args.enumerated_T)
-    
+            export_prefill(model, example_input,
+                           prefill_path, args.enumerated_T)
+
     # Export decode model
     if args.mode in ['decode', 'both']:
         decode_path = output_dir / "student_decode.pt"
-        export_decode(model, decode_path, cfg.n_layers, cfg.n_kv_heads, cfg.d_head)
-    
+        export_decode(model, decode_path, cfg.n_layers,
+                      cfg.n_kv_heads, cfg.d_head)
+
     print(f"[export_pytorch] ✅ Export complete: {output_dir}")
 
 
 if __name__ == '__main__':
     main()
-
-
-
-
-
-
-
-
