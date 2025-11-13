@@ -3,6 +3,7 @@ Unit tests for constrained JSON decoder.
 
 Tests the JSONConstrainedDecoder, JSONFSM, SchemaValidator, and TokenLexicon.
 """
+
 import pytest
 import json
 import numpy as np
@@ -97,8 +98,8 @@ class TestJSONFSM:
         fsm = JSONFSM()
 
         # Not inside string
-        assert fsm._inside_string('') is False
-        assert fsm._inside_string('{') is False
+        assert fsm._inside_string("") is False
+        assert fsm._inside_string("{") is False
         assert fsm._inside_string('{"name"') is False
 
         # Inside string
@@ -134,8 +135,7 @@ class TestJSONFSM:
     def test_step_chars_allowed_inside_string(self):
         """Test allowed characters inside string."""
         fsm = JSONFSM()
-        state = DecoderState(buffer='"test', stack=[], expect={
-                             "value"}, complete=False, error=None)
+        state = DecoderState(buffer='"test', stack=[], expect={"value"}, complete=False, error=None)
 
         allowed = fsm.step_chars_allowed(state)
 
@@ -145,8 +145,9 @@ class TestJSONFSM:
     def test_step_chars_allowed_complete(self):
         """Test allowed characters when complete."""
         fsm = JSONFSM()
-        state = DecoderState(buffer='{"name":"test"}', stack=[], expect={
-                             "value"}, complete=True, error=None)
+        state = DecoderState(
+            buffer='{"name":"test"}', stack=[], expect={"value"}, complete=True, error=None
+        )
 
         allowed = fsm.step_chars_allowed(state)
 
@@ -201,10 +202,7 @@ class TestSchemaValidator:
         schema = {
             "type": "object",
             "required": ["name"],
-            "properties": {
-                "name": {"type": "string"},
-                "age": {"type": "number"}
-            }
+            "properties": {"name": {"type": "string"}, "age": {"type": "number"}},
         }
         validator = SchemaValidator(schema)
 
@@ -219,10 +217,7 @@ class TestSchemaValidator:
         schema = {
             "type": "object",
             "required": ["name", "age"],
-            "properties": {
-                "name": {"type": "string"},
-                "age": {"type": "number"}
-            }
+            "properties": {"name": {"type": "string"}, "age": {"type": "number"}},
         }
         validator = SchemaValidator(schema)
 
@@ -234,12 +229,7 @@ class TestSchemaValidator:
 
     def test_validate_wrong_type_string(self):
         """Test validation with wrong string type."""
-        schema = {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string"}
-            }
-        }
+        schema = {"type": "object", "properties": {"name": {"type": "string"}}}
         validator = SchemaValidator(schema)
 
         obj = {"name": 123}  # Should be string
@@ -250,12 +240,7 @@ class TestSchemaValidator:
 
     def test_validate_wrong_type_number(self):
         """Test validation with wrong number type."""
-        schema = {
-            "type": "object",
-            "properties": {
-                "age": {"type": "number"}
-            }
-        }
+        schema = {"type": "object", "properties": {"age": {"type": "number"}}}
         validator = SchemaValidator(schema)
 
         obj = {"age": "25"}  # Should be number
@@ -266,12 +251,7 @@ class TestSchemaValidator:
 
     def test_validate_wrong_type_boolean(self):
         """Test validation with wrong boolean type."""
-        schema = {
-            "type": "object",
-            "properties": {
-                "active": {"type": "boolean"}
-            }
-        }
+        schema = {"type": "object", "properties": {"active": {"type": "boolean"}}}
         validator = SchemaValidator(schema)
 
         obj = {"active": "true"}  # Should be boolean
@@ -282,12 +262,7 @@ class TestSchemaValidator:
 
     def test_validate_wrong_type_object(self):
         """Test validation with wrong object type."""
-        schema = {
-            "type": "object",
-            "properties": {
-                "data": {"type": "object"}
-            }
-        }
+        schema = {"type": "object", "properties": {"data": {"type": "object"}}}
         validator = SchemaValidator(schema)
 
         obj = {"data": "not an object"}  # Should be object
@@ -298,12 +273,7 @@ class TestSchemaValidator:
 
     def test_validate_wrong_type_array(self):
         """Test validation with wrong array type."""
-        schema = {
-            "type": "object",
-            "properties": {
-                "items": {"type": "array"}
-            }
-        }
+        schema = {"type": "object", "properties": {"items": {"type": "array"}}}
         validator = SchemaValidator(schema)
 
         obj = {"items": "not an array"}  # Should be array
@@ -314,10 +284,7 @@ class TestSchemaValidator:
 
     def test_validate_not_object(self):
         """Test validation of non-object."""
-        schema = {
-            "type": "object",
-            "properties": {}
-        }
+        schema = {"type": "object", "properties": {}}
         validator = SchemaValidator(schema)
 
         obj = "not an object"
@@ -328,12 +295,7 @@ class TestSchemaValidator:
 
     def test_validate_extra_fields(self):
         """Test validation with extra fields not in schema."""
-        schema = {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string"}
-            }
-        }
+        schema = {"type": "object", "properties": {"name": {"type": "string"}}}
         validator = SchemaValidator(schema)
 
         obj = {"name": "test", "extra": "field"}  # Extra field
@@ -348,9 +310,7 @@ class TestSchemaValidator:
         schema1 = {
             "type": "object",
             "required": ["name"],
-            "properties": {
-                "name": {"type": "string"}
-            }
+            "properties": {"name": {"type": "string"}},
         }
         validator = SchemaValidator(schema1)
 
@@ -363,10 +323,7 @@ class TestSchemaValidator:
         schema2 = {
             "type": "object",
             "required": ["name", "age"],
-            "properties": {
-                "name": {"type": "string"},
-                "age": {"type": "number"}
-            }
+            "properties": {"name": {"type": "string"}, "age": {"type": "number"}},
         }
         validator.set_schema(schema2)
 
@@ -441,7 +398,7 @@ class TestTokenLexicon:
         lexicon = TokenLexicon(tokenizer)
 
         # Verify prefix map exists
-        assert hasattr(lexicon, 'by_first')
+        assert hasattr(lexicon, "by_first")
         assert isinstance(lexicon.by_first, dict)
 
         # Verify it contains expected keys
@@ -463,9 +420,7 @@ class TestJSONConstrainedDecoder:
         schema = {
             "type": "object",
             "required": ["name"],
-            "properties": {
-                "name": {"type": "string"}
-            }
+            "properties": {"name": {"type": "string"}},
         }
         tokenizer = MockTokenizer()
 
@@ -485,9 +440,7 @@ class TestJSONConstrainedDecoder:
         schema = {
             "type": "object",
             "required": ["name"],
-            "properties": {
-                "name": {"type": "string"}
-            }
+            "properties": {"name": {"type": "string"}},
         }
         tokenizer = MockTokenizer()
 
@@ -495,8 +448,7 @@ class TestJSONConstrainedDecoder:
         mock_registry = Mock()
         mock_registry.get = Mock(return_value=None)
 
-        decoder = JSONConstrainedDecoder(
-            schema=schema, tokenizer=tokenizer, registry=mock_registry)
+        decoder = JSONConstrainedDecoder(schema=schema, tokenizer=tokenizer, registry=mock_registry)
 
         assert decoder.registry == mock_registry
         assert decoder._last_applied_tool is None
@@ -536,8 +488,7 @@ class TestJSONConstrainedDecoder:
         decoder = JSONConstrainedDecoder(schema=schema, tokenizer=tokenizer)
 
         # State inside string
-        state = DecoderState(buffer='"test', stack=[], expect={
-                             "value"}, complete=False, error=None)
+        state = DecoderState(buffer='"test', stack=[], expect={"value"}, complete=False, error=None)
         mask = decoder.allowed_token_mask(state, (100,))
 
         # Should allow all tokens when inside string
@@ -578,20 +529,14 @@ class TestJSONConstrainedDecoder:
         schema = {
             "type": "object",
             "required": ["name"],
-            "properties": {
-                "name": {"type": "string"}
-            }
+            "properties": {"name": {"type": "string"}},
         }
         tokenizer = MockTokenizer()
         decoder = JSONConstrainedDecoder(schema=schema, tokenizer=tokenizer)
 
         # Create state with valid JSON
         state = DecoderState(
-            buffer='{"name":"test"}',
-            stack=[],
-            expect={"value"},
-            complete=True,
-            error=None
+            buffer='{"name":"test"}', stack=[], expect={"value"}, complete=True, error=None
         )
 
         obj = decoder.finalize(state)
@@ -607,11 +552,7 @@ class TestJSONConstrainedDecoder:
 
         # Create state with invalid JSON
         state = DecoderState(
-            buffer='{"invalid json"',
-            stack=[],
-            expect={"value"},
-            complete=False,
-            error=None
+            buffer='{"invalid json"', stack=[], expect={"value"}, complete=False, error=None
         )
 
         with pytest.raises(json.JSONDecodeError):
@@ -622,20 +563,14 @@ class TestJSONConstrainedDecoder:
         schema = {
             "type": "object",
             "required": ["name"],
-            "properties": {
-                "name": {"type": "string"}
-            }
+            "properties": {"name": {"type": "string"}},
         }
         tokenizer = MockTokenizer()
         decoder = JSONConstrainedDecoder(schema=schema, tokenizer=tokenizer)
 
         # Create state with JSON missing required field
         state = DecoderState(
-            buffer='{"age":25}',
-            stack=[],
-            expect={"value"},
-            complete=True,
-            error=None
+            buffer='{"age":25}', stack=[], expect={"value"}, complete=True, error=None
         )
 
         with pytest.raises(ValueError) as exc_info:
@@ -649,9 +584,7 @@ class TestJSONConstrainedDecoder:
         schema = {
             "type": "object",
             "required": ["name"],
-            "properties": {
-                "name": {"type": "string"}
-            }
+            "properties": {"name": {"type": "string"}},
         }
         tokenizer = MockTokenizer()
         decoder = JSONConstrainedDecoder(schema=schema, tokenizer=tokenizer)
@@ -679,8 +612,7 @@ class TestDecoderIntegration:
     """Integration tests for decoder with real tokenizer."""
 
     @pytest.mark.skipif(
-        "transformers" not in __import__("sys").modules,
-        reason="transformers not available"
+        "transformers" not in __import__("sys").modules, reason="transformers not available"
     )
     def test_with_real_tokenizer(self):
         """Test decoder with real transformers tokenizer."""
@@ -691,13 +623,10 @@ class TestDecoderIntegration:
             schema = {
                 "type": "object",
                 "required": ["name"],
-                "properties": {
-                    "name": {"type": "string"}
-                }
+                "properties": {"name": {"type": "string"}},
             }
 
-            decoder = JSONConstrainedDecoder(
-                schema=schema, tokenizer=tokenizer)
+            decoder = JSONConstrainedDecoder(schema=schema, tokenizer=tokenizer)
             state = decoder.start()
 
             # Encode a simple JSON string
@@ -721,10 +650,7 @@ class TestDecoderIntegration:
         base_schema = {
             "type": "object",
             "required": ["name", "arguments"],
-            "properties": {
-                "name": {"type": "string"},
-                "arguments": {"type": "object"}
-            }
+            "properties": {"name": {"type": "string"}, "arguments": {"type": "object"}},
         }
 
         tool_schema = {
@@ -735,11 +661,9 @@ class TestDecoderIntegration:
                 "arguments": {
                     "type": "object",
                     "required": ["q"],
-                    "properties": {
-                        "q": {"type": "string"}
-                    }
-                }
-            }
+                    "properties": {"q": {"type": "string"}},
+                },
+            },
         }
 
         tokenizer = MockTokenizer()
@@ -749,9 +673,7 @@ class TestDecoderIntegration:
         mock_registry.get = Mock(return_value=tool_schema)
 
         decoder = JSONConstrainedDecoder(
-            schema=base_schema,
-            tokenizer=tokenizer,
-            registry=mock_registry
+            schema=base_schema, tokenizer=tokenizer, registry=mock_registry
         )
 
         state = decoder.start()
@@ -763,11 +685,7 @@ class TestDecoderIntegration:
         # Token sequence: { "name" : "web.search" ...
         # We'll manually build buffer to simulate detection
         state = DecoderState(
-            buffer='{"name":"web.search"',
-            stack=[],
-            expect={"value"},
-            complete=False,
-            error=None
+            buffer='{"name":"web.search"', stack=[], expect={"value"}, complete=False, error=None
         )
 
         # Push a token to trigger schema switching check
@@ -784,16 +702,13 @@ class TestDecoderIntegration:
         base_schema = {
             "type": "object",
             "required": ["name"],
-            "properties": {"name": {"type": "string"}}
+            "properties": {"name": {"type": "string"}},
         }
 
         tool_schema = {
             "type": "object",
             "required": ["name", "age"],
-            "properties": {
-                "name": {"type": "string"},
-                "age": {"type": "number"}
-            }
+            "properties": {"name": {"type": "string"}, "age": {"type": "number"}},
         }
 
         tokenizer = MockTokenizer()
@@ -801,9 +716,7 @@ class TestDecoderIntegration:
         mock_registry.get = Mock(return_value=tool_schema)
 
         decoder = JSONConstrainedDecoder(
-            schema=base_schema,
-            tokenizer=tokenizer,
-            registry=mock_registry
+            schema=base_schema, tokenizer=tokenizer, registry=mock_registry
         )
 
         # Manually set schema (simulating switch)

@@ -55,7 +55,7 @@ class SwiGLU(nn.Module):
 
 class RotaryEmbedding(nn.Module):
     """RoPE: rotate Q/K with base theta. Implements static, linear, or dynamic scaling.
-       Export note: precompute cos/sin for enumerated T on exporter side if needed.
+    Export note: precompute cos/sin for enumerated T on exporter side if needed.
     """
 
     def __init__(self, d_head: int, theta: float = 10000.0, scaling: str = "dynamic"):
@@ -66,8 +66,9 @@ class RotaryEmbedding(nn.Module):
 
     def _rope_angles(self, t: int, device: torch.device) -> Tuple[torch.Tensor, torch.Tensor]:
         half = self.d_head // 2
-        inv_freq = 1.0 / (self.theta ** (torch.arange(0, half,
-                          device=device, dtype=torch.float32) / half))
+        inv_freq = 1.0 / (
+            self.theta ** (torch.arange(0, half, device=device, dtype=torch.float32) / half)
+        )
         # Positions 0..t-1
         pos = torch.arange(t, device=device, dtype=torch.float32)
         # Dynamic scaling: simple heuristic (can be replaced with NTK-aware scaling)
@@ -87,15 +88,17 @@ class RotaryEmbedding(nn.Module):
         # Interleave dims: (x1, x2) → rotate
 
         def rope(x: torch.Tensor) -> torch.Tensor:
-            x1, x2 = x[..., : dh//2], x[..., dh//2:]
+            x1, x2 = x[..., : dh // 2], x[..., dh // 2 :]
             cos_t = cos.unsqueeze(0).unsqueeze(0)  # [1,1,T, Dh/2]
             sin_t = sin.unsqueeze(0).unsqueeze(0)
-            xr = torch.cat([x1 * cos_t - x2 * sin_t, x2 *
-                           cos_t + x1 * sin_t], dim=-1)
+            xr = torch.cat([x1 * cos_t - x2 * sin_t, x2 * cos_t + x1 * sin_t], dim=-1)
             return xr
+
         return rope(q), rope(k)
 
-    def apply_single(self, q: torch.Tensor, k: torch.Tensor, pos: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def apply_single(
+        self, q: torch.Tensor, k: torch.Tensor, pos: int
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Apply RoPE for a single position (decode mode)."""
         # q,k: [B, H, 1, Dh]
         b, h, t, dh = q.shape
@@ -103,8 +106,9 @@ class RotaryEmbedding(nn.Module):
         device = q.device
 
         half = self.d_head // 2
-        inv_freq = 1.0 / (self.theta ** (torch.arange(0, half,
-                          device=device, dtype=torch.float32) / half))
+        inv_freq = 1.0 / (
+            self.theta ** (torch.arange(0, half, device=device, dtype=torch.float32) / half)
+        )
 
         # Dynamic scaling
         if self.scaling == "dynamic":
@@ -116,17 +120,25 @@ class RotaryEmbedding(nn.Module):
         sin = torch.sin(angle)  # [Dh/2]
 
         def rope(x: torch.Tensor) -> torch.Tensor:
-            x1, x2 = x[..., : dh//2], x[..., dh//2:]
+            x1, x2 = x[..., : dh // 2], x[..., dh // 2 :]
             cos_t = cos.unsqueeze(0).unsqueeze(0).unsqueeze(0)  # [1,1,1, Dh/2]
             sin_t = sin.unsqueeze(0).unsqueeze(0).unsqueeze(0)
-            xr = torch.cat([x1 * cos_t - x2 * sin_t, x2 *
-                           cos_t + x1 * sin_t], dim=-1)
+            xr = torch.cat([x1 * cos_t - x2 * sin_t, x2 * cos_t + x1 * sin_t], dim=-1)
             return xr
+
         return rope(q), rope(k)
 
 
 class MHA_GQA(nn.Module):
-    def __init__(self, d_model: int, n_heads: int, n_kv_heads: int, d_head: int, rope: RotaryEmbedding, dropout: float = 0.0):
+    def __init__(
+        self,
+        d_model: int,
+        n_heads: int,
+        n_kv_heads: int,
+        d_head: int,
+        rope: RotaryEmbedding,
+        dropout: float = 0.0,
+    ):
         super().__init__()
         assert n_heads % n_kv_heads == 0, "GQA requires head groups"
         self.d_model = d_model
@@ -144,12 +156,9 @@ class MHA_GQA(nn.Module):
 
     def forward(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         b, t, d = x.shape
-        q = self.wq(x).view(b, t, self.n_heads,
-                            self.d_head).transpose(1, 2)  # [B,H,T,Dh]
-        k = self.wk(x).view(b, t, self.n_kv_heads,
-                            self.d_head).transpose(1, 2)  # [B,Hk,T,Dh]
-        v = self.wv(x).view(b, t, self.n_kv_heads,
-                            self.d_head).transpose(1, 2)  # [B,Hk,T,Dh]
+        q = self.wq(x).view(b, t, self.n_heads, self.d_head).transpose(1, 2)  # [B,H,T,Dh]
+        k = self.wk(x).view(b, t, self.n_kv_heads, self.d_head).transpose(1, 2)  # [B,Hk,T,Dh]
+        v = self.wv(x).view(b, t, self.n_kv_heads, self.d_head).transpose(1, 2)  # [B,Hk,T,Dh]
 
         # RoPE on Q/K
         q, k = self.rope.apply(q, k)
@@ -169,18 +178,20 @@ class MHA_GQA(nn.Module):
             mask_dtype = attn_scores.dtype
             # attn_mask is [B, T] with 1s for real tokens, 0s for padding
             # Expand to [B, 1, 1, T] for broadcasting
-            additive_mask = (1.0 - attn_mask.to(mask_dtype)
-                             ).unsqueeze(1).unsqueeze(2) * -1e4
+            additive_mask = (1.0 - attn_mask.to(mask_dtype)).unsqueeze(1).unsqueeze(2) * -1e4
             attn_scores = attn_scores + additive_mask
         attn = F.softmax(attn_scores, dim=-1)
         attn = self.attn_dropout(attn)
         y = torch.matmul(attn, v)  # [B,H,T,Dh]
-        y = y.transpose(1, 2).contiguous().view(
-            b, t, self.n_heads * self.d_head)
+        y = y.transpose(1, 2).contiguous().view(b, t, self.n_heads * self.d_head)
         return self.wo(y)
 
-    def forward_decode(self, x: torch.Tensor, kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-                       pos: int = 0) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    def forward_decode(
+        self,
+        x: torch.Tensor,
+        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        pos: int = 0,
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """Decoder-only forward: single token with KV cache.
 
         Args:
@@ -195,12 +206,9 @@ class MHA_GQA(nn.Module):
         b, t, d = x.shape
         assert t == 1, "Decode mode expects single token"
 
-        q = self.wq(x).view(b, t, self.n_heads,
-                            self.d_head).transpose(1, 2)  # [B,H,1,Dh]
-        k_new = self.wk(x).view(b, t, self.n_kv_heads,
-                                self.d_head).transpose(1, 2)  # [B,Hk,1,Dh]
-        v_new = self.wv(x).view(b, t, self.n_kv_heads,
-                                self.d_head).transpose(1, 2)  # [B,Hk,1,Dh]
+        q = self.wq(x).view(b, t, self.n_heads, self.d_head).transpose(1, 2)  # [B,H,1,Dh]
+        k_new = self.wk(x).view(b, t, self.n_kv_heads, self.d_head).transpose(1, 2)  # [B,Hk,1,Dh]
+        v_new = self.wv(x).view(b, t, self.n_kv_heads, self.d_head).transpose(1, 2)  # [B,Hk,1,Dh]
 
         # RoPE on Q/K (single position)
         q_rope, k_rope = self.rope.apply_single(q, k_new, pos)
@@ -216,8 +224,7 @@ class MHA_GQA(nn.Module):
 
         # GQA: expand K,V across head groups
         if self.head_groups > 1:
-            k_expanded = k_cache.repeat_interleave(
-                self.head_groups, dim=1)  # [B,H,T+1,Dh]
+            k_expanded = k_cache.repeat_interleave(self.head_groups, dim=1)  # [B,H,T+1,Dh]
             v_expanded = v_cache.repeat_interleave(self.head_groups, dim=1)
         else:
             k_expanded = k_cache
@@ -225,13 +232,11 @@ class MHA_GQA(nn.Module):
 
         # Attention: q [B,H,1,Dh] @ k_expanded [B,H,T+1,Dh]^T -> [B,H,1,T+1]
         scale = 1.0 / math.sqrt(self.d_head)
-        attn_scores = torch.matmul(
-            q_rope, k_expanded.transpose(-2, -1)) * scale  # [B,H,1,T+1]
+        attn_scores = torch.matmul(q_rope, k_expanded.transpose(-2, -1)) * scale  # [B,H,1,T+1]
         attn = F.softmax(attn_scores, dim=-1)
         attn = self.attn_dropout(attn)
         y = torch.matmul(attn, v_expanded)  # [B,H,1,Dh]
-        y = y.transpose(1, 2).contiguous().view(
-            b, t, self.n_heads * self.d_head)
+        y = y.transpose(1, 2).contiguous().view(b, t, self.n_heads * self.d_head)
         return self.wo(y), (k_cache, v_cache)
 
 
@@ -239,10 +244,14 @@ class Block(nn.Module):
     def __init__(self, cfg: ModelCfg):
         super().__init__()
         self.norm1 = RMSNorm(cfg.d_model)
-        self.attn = MHA_GQA(cfg.d_model, cfg.n_heads, cfg.n_kv_heads, cfg.d_head,
-                            rope=RotaryEmbedding(
-                                cfg.d_head, cfg.rope_theta, cfg.rope_scaling),
-                            dropout=cfg.dropout)
+        self.attn = MHA_GQA(
+            cfg.d_model,
+            cfg.n_heads,
+            cfg.n_kv_heads,
+            cfg.d_head,
+            rope=RotaryEmbedding(cfg.d_head, cfg.rope_theta, cfg.rope_scaling),
+            dropout=cfg.dropout,
+        )
         self.norm2 = RMSNorm(cfg.d_model)
         self.mlp = SwiGLU(cfg.d_model, 4 * cfg.d_model)
 
@@ -251,8 +260,12 @@ class Block(nn.Module):
         x = x + self.mlp(self.norm2(x))
         return x
 
-    def forward_decode(self, x: torch.Tensor, kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-                       pos: int = 0) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    def forward_decode(
+        self,
+        x: torch.Tensor,
+        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        pos: int = 0,
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """Decoder-only forward for single token with KV cache."""
         x_normed = self.norm1(x)
         attn_out, kv_new = self.attn.forward_decode(x_normed, kv_cache, pos)
@@ -262,15 +275,18 @@ class Block(nn.Module):
 
 
 class StudentLM(nn.Module):
-    def __init__(self, cfg: Optional[ModelCfg] = None, use_self_evaluation: bool = False, use_halt_head: bool = False):
+    def __init__(
+        self,
+        cfg: Optional[ModelCfg] = None,
+        use_self_evaluation: bool = False,
+        use_halt_head: bool = False,
+    ):
         super().__init__()
         self.cfg = cfg or ModelCfg()
         self.embed = nn.Embedding(self.cfg.vocab_size, self.cfg.d_model)
-        self.blocks = nn.ModuleList([Block(self.cfg)
-                                    for _ in range(self.cfg.n_layers)])
+        self.blocks = nn.ModuleList([Block(self.cfg) for _ in range(self.cfg.n_layers)])
         self.norm_f = RMSNorm(self.cfg.d_model)
-        self.lm_head = nn.Linear(
-            self.cfg.d_model, self.cfg.vocab_size, bias=False)
+        self.lm_head = nn.Linear(self.cfg.d_model, self.cfg.vocab_size, bias=False)
 
         # Gradient checkpointing flag
         self.checkpointing = False
@@ -282,7 +298,7 @@ class StudentLM(nn.Module):
                 nn.Linear(self.cfg.d_model, self.cfg.d_model // 2),
                 nn.ReLU(),
                 nn.Linear(self.cfg.d_model // 2, 1),  # Single score
-                nn.Sigmoid()  # Output 0-1 confidence
+                nn.Sigmoid(),  # Output 0-1 confidence
             )
 
         # Halt head for learned halting (optional)
@@ -301,8 +317,14 @@ class StudentLM(nn.Module):
         attn_mask: Optional[torch.Tensor] = None,
         return_hidden_states: bool = False,
         return_eval_score: bool = False,
-        return_halt_logits: bool = False
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, List[torch.Tensor]], Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, List[torch.Tensor], torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
+        return_halt_logits: bool = False,
+    ) -> Union[
+        torch.Tensor,
+        Tuple[torch.Tensor, List[torch.Tensor]],
+        Tuple[torch.Tensor, torch.Tensor],
+        Tuple[torch.Tensor, List[torch.Tensor], torch.Tensor],
+        Tuple[torch.Tensor, torch.Tensor],
+    ]:
         """
         Forward pass with optional hidden states, evaluation score, and halt logits.
 
@@ -334,8 +356,7 @@ class StudentLM(nn.Module):
         # Use gradient checkpointing if enabled (trades compute for memory)
         if self.checkpointing:
             for blk in self.blocks:
-                x = torch.utils.checkpoint.checkpoint(
-                    blk, x, attn_mask, use_reentrant=False)
+                x = torch.utils.checkpoint.checkpoint(blk, x, attn_mask, use_reentrant=False)
                 if return_hidden_states:
                     hidden_states.append(x)
         else:
@@ -374,8 +395,13 @@ class StudentLM(nn.Module):
             return result[0]
         return tuple(result)
 
-    def forward_decode(self, input_ids: torch.Tensor, kv_caches: Optional[list] = None,
-                       pos: int = 0, return_halt_logits: bool = False) -> Union[Tuple[torch.Tensor, list], Tuple[torch.Tensor, list, torch.Tensor]]:
+    def forward_decode(
+        self,
+        input_ids: torch.Tensor,
+        kv_caches: Optional[list] = None,
+        pos: int = 0,
+        return_halt_logits: bool = False,
+    ) -> Union[Tuple[torch.Tensor, list], Tuple[torch.Tensor, list, torch.Tensor]]:
         """Decoder-only forward: single token with KV cache.
 
         Args:

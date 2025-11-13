@@ -82,8 +82,9 @@ def compute_heuristic_quality_score(
         r"failed",
         r"cannot",
     ]
-    error_count = sum(1 for pattern in error_patterns if re.search(
-        pattern, teacher_output, re.IGNORECASE))
+    error_count = sum(
+        1 for pattern in error_patterns if re.search(pattern, teacher_output, re.IGNORECASE)
+    )
     if error_count > 2:
         score -= 0.2
 
@@ -98,8 +99,9 @@ def compute_heuristic_quality_score(
             score += overlap * 0.15
 
             # Length similarity
-            length_ratio = min(len(teacher_output), len(
-                ground_truth)) / max(len(teacher_output), len(ground_truth))
+            length_ratio = min(len(teacher_output), len(ground_truth)) / max(
+                len(teacher_output), len(ground_truth)
+            )
             score += length_ratio * 0.05
 
     # Prompt relevance (if prompt provided)
@@ -109,8 +111,7 @@ def compute_heuristic_quality_score(
 
         # Check if output addresses prompt keywords
         if prompt_words:
-            keyword_coverage = len(
-                output_words & prompt_words) / len(prompt_words)
+            keyword_coverage = len(output_words & prompt_words) / len(prompt_words)
             score += keyword_coverage * 0.1
 
     return max(0.0, min(1.0, score))
@@ -129,7 +130,7 @@ def compute_json_validity_score(text: str) -> float:
         Score between 0.0 and 1.0 (1.0 = valid JSON, 0.0 = no JSON or invalid)
     """
     # Try to find JSON in text
-    json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+    json_pattern = r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}"
     matches = re.findall(json_pattern, text)
 
     if not matches:
@@ -162,7 +163,7 @@ def compute_code_block_score(text: str) -> float:
     Returns:
         Score between 0.0 and 1.0
     """
-    code_block_pattern = r'```(\w+)?\n(.*?)```'
+    code_block_pattern = r"```(\w+)?\n(.*?)```"
     matches = re.findall(code_block_pattern, text, re.DOTALL)
 
     if not matches:
@@ -177,7 +178,7 @@ def compute_code_block_score(text: str) -> float:
 
     # Check code block length (not too short, not too long)
     for _, code in matches:
-        lines = code.split('\n')
+        lines = code.split("\n")
         if 5 <= len(lines) <= 100:
             score += 0.1
         elif len(lines) < 2:
@@ -214,9 +215,7 @@ def compute_composite_quality_score(
     scores = {}
 
     # Heuristic score
-    scores["heuristic"] = compute_heuristic_quality_score(
-        teacher_output, ground_truth, prompt
-    )
+    scores["heuristic"] = compute_heuristic_quality_score(teacher_output, ground_truth, prompt)
 
     # JSON validity score
     scores["json_validity"] = compute_json_validity_score(teacher_output)
@@ -226,8 +225,7 @@ def compute_composite_quality_score(
 
     # Weighted average
     total_score = sum(
-        scores.get(metric, 0.0) * weights.get(metric, 0.0)
-        for metric in weights.keys()
+        scores.get(metric, 0.0) * weights.get(metric, 0.0) for metric in weights.keys()
     )
 
     total_weight = sum(weights.values())
@@ -256,23 +254,19 @@ def batch_compute_quality_scores(
     scores = []
 
     for i, output in enumerate(teacher_outputs):
-        ground_truth = ground_truths[i] if ground_truths and i < len(
-            ground_truths) else None
+        ground_truth = ground_truths[i] if ground_truths and i < len(ground_truths) else None
         prompt = prompts[i] if prompts and i < len(prompts) else None
 
         if method == "heuristic":
-            score = compute_heuristic_quality_score(
-                output, ground_truth, prompt)
+            score = compute_heuristic_quality_score(output, ground_truth, prompt)
         elif method == "composite":
-            score = compute_composite_quality_score(
-                output, ground_truth, prompt)
+            score = compute_composite_quality_score(output, ground_truth, prompt)
         elif method == "json_validity":
             score = compute_json_validity_score(output)
         elif method == "code_blocks":
             score = compute_code_block_score(output)
         else:
-            score = compute_heuristic_quality_score(
-                output, ground_truth, prompt)
+            score = compute_heuristic_quality_score(output, ground_truth, prompt)
 
         scores.append(score)
 
@@ -300,7 +294,5 @@ if __name__ == "__main__":
 
     # Test with ground truth
     ground_truth = "def fibonacci(n): return n if n <= 1 else fibonacci(n-1) + fibonacci(n-2)"
-    score_with_gt = compute_composite_quality_score(
-        test_output, ground_truth=ground_truth)
+    score_with_gt = compute_composite_quality_score(test_output, ground_truth=ground_truth)
     print(f"Quality score (with GT): {score_with_gt:.2f}")
-

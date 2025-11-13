@@ -42,6 +42,7 @@ See Also:
     - `conversion/export_pytorch.py` - Export implementation with bypass support
     - `conversion/convert_coreml.py` - CoreML conversion with bypass support
 """
+
 import sys
 import platform
 from typing import Tuple, Optional
@@ -77,10 +78,9 @@ def check_macos_version() -> Optional[str]:
 
     try:
         macos_version = platform.mac_ver()[0]
-        major = int(macos_version.split('.')[0])
+        major = int(macos_version.split(".")[0])
         if major < 13:
-            print(
-                f"WARNING: macOS {macos_version} detected. CoreML requires macOS 13+")
+            print(f"WARNING: macOS {macos_version} detected. CoreML requires macOS 13+")
         return macos_version
     except Exception:
         return None
@@ -97,17 +97,16 @@ def check_coremltools() -> str:
     """
     try:
         import coremltools as ct
+
         version = ct.__version__
-        major = int(version.split('.')[0])
+        major = int(version.split(".")[0])
         if major < 9:
             raise RuntimeError(
-                f"coremltools {version} detected. "
-                "This project requires coremltools >= 9.0"
+                f"coremltools {version} detected. This project requires coremltools >= 9.0"
             )
         return version
     except ImportError:
-        raise RuntimeError(
-            "coremltools not installed. Install with: pip install coremltools>=9.0")
+        raise RuntimeError("coremltools not installed. Install with: pip install coremltools>=9.0")
 
 
 def check_pytorch() -> str:
@@ -121,9 +120,10 @@ def check_pytorch() -> str:
     """
     try:
         import torch
+
         version = torch.__version__
         # Parse version: "2.3.0" -> (2, 3)
-        parts = version.split('.')
+        parts = version.split(".")
         major = int(parts[0])
         minor = int(parts[1]) if len(parts) > 1 else 0
         if major < 2 or (major == 2 and minor < 0):
@@ -134,8 +134,7 @@ def check_pytorch() -> str:
             )
         return version
     except ImportError:
-        raise RuntimeError(
-            "PyTorch not installed. Install with: pip install torch>=2.0")
+        raise RuntimeError("PyTorch not installed. Install with: pip install torch>=2.0")
 
 
 def check_transformers() -> str:
@@ -149,9 +148,10 @@ def check_transformers() -> str:
     """
     try:
         import transformers
+
         version = transformers.__version__
         # Parse version: "4.43.0" -> (4, 43)
-        parts = version.split('.')
+        parts = version.split(".")
         major = int(parts[0])
         minor = int(parts[1]) if len(parts) > 1 else 0
         if major < 4 or (major == 4 and minor < 43):
@@ -163,7 +163,8 @@ def check_transformers() -> str:
         return version
     except ImportError:
         raise RuntimeError(
-            "transformers not installed. Install with: pip install transformers>=4.43")
+            "transformers not installed. Install with: pip install transformers>=4.43"
+        )
 
 
 def check_accelerate() -> str:
@@ -177,9 +178,10 @@ def check_accelerate() -> str:
     """
     try:
         import accelerate
+
         version = accelerate.__version__
         # Parse version: "0.33.0" -> (0, 33)
-        parts = version.split('.')
+        parts = version.split(".")
         major = int(parts[0])
         minor = int(parts[1]) if len(parts) > 1 else 0
         if major < 0 or (major == 0 and minor < 33):
@@ -190,8 +192,7 @@ def check_accelerate() -> str:
             )
         return version
     except ImportError:
-        raise RuntimeError(
-            "accelerate not installed. Install with: pip install accelerate>=0.33")
+        raise RuntimeError("accelerate not installed. Install with: pip install accelerate>=0.33")
 
 
 def check_onnxruntime(required: bool = False) -> Optional[str]:
@@ -208,6 +209,7 @@ def check_onnxruntime(required: bool = False) -> Optional[str]:
     """
     try:
         import onnxruntime as ort
+
         return ort.__version__
     except ImportError:
         if required:
@@ -293,11 +295,10 @@ def check_all(skip_ort: bool = False) -> dict:
 
 if __name__ == "__main__":
     import argparse
+
     ap = argparse.ArgumentParser()
-    ap.add_argument("--skip-ort", action="store_true",
-                    help="Skip onnxruntime check")
-    ap.add_argument("--verbose", action="store_true",
-                    help="Print all versions")
+    ap.add_argument("--skip-ort", action="store_true", help="Skip onnxruntime check")
+    ap.add_argument("--verbose", action="store_true", help="Print all versions")
     args = ap.parse_args()
 
     try:

@@ -4,6 +4,7 @@ Quick API test to verify connectivity and basic functionality.
 Usage:
     python -m scripts.test_api_once
 """
+
 import os
 import sys
 from pathlib import Path
@@ -18,15 +19,13 @@ def main():
         env_file = Path(".env.local")
         if env_file.exists():
             try:
-                with open(env_file, 'r') as f:
+                with open(env_file, "r") as f:
                     for line in f:
                         if line.startswith("MOONSHOT_API_KEY="):
-                            api_key = line.split(
-                                "=", 1)[1].strip().strip('"\'')
+                            api_key = line.split("=", 1)[1].strip().strip("\"'")
                             break
                         if line.startswith("KIMI_API_KEY="):
-                            api_key = line.split(
-                                "=", 1)[1].strip().strip('"\'')
+                            api_key = line.split("=", 1)[1].strip().strip("\"'")
                             break
             except Exception as e:
                 print(f"[test_api_once] ERROR: Failed to load .env.local: {e}")
@@ -47,7 +46,7 @@ def main():
         endpoint,
         api_key=api_key,
         max_retries=2,  # Reduced for testing - avoids long waits on rate limits
-        retry_backoff_factor=2.0  # Exponential backoff: tier_delay * 2^retry_count
+        retry_backoff_factor=2.0,  # Exponential backoff: tier_delay * 2^retry_count
     )
 
     # Single API call that tests everything:
@@ -55,7 +54,9 @@ def main():
     # 2. Authentication (if auth fails, we get 401/403)
     # 3. Extract tier/rate limit info from response headers
     # 4. Get actual sample response
-    print("\n[test_api_once] Making single API call (combines health check, tier detection, and sample test)...")
+    print(
+        "\n[test_api_once] Making single API call (combines health check, tier detection, and sample test)..."
+    )
     print("  (Using tier-aware backoff: starts at tier delay, then exponential)")
     print("  (Limited to 2 retries for quick testing)")
     test_prompt = "What is 2+2? Answer briefly."
@@ -72,9 +73,8 @@ def main():
 
         # Extract tier info from the last response (if available)
         # The client stores tier info after successful requests
-        tier = client.get_tier() if hasattr(client, 'get_tier') else None
-        tier_limits = client.get_tier_limits() if hasattr(
-            client, 'get_tier_limits') else None
+        tier = client.get_tier() if hasattr(client, "get_tier") else None
+        tier_limits = client.get_tier_limits() if hasattr(client, "get_tier_limits") else None
 
         # Display results
         print("\n[test_api_once] ✅ API Test Results:")
@@ -97,7 +97,8 @@ def main():
                 print(f"    Concurrency: {tier_limits.concurrency}")
                 print(f"    Recommended delay: {tier_limits.delay}s")
                 print(
-                    f"    Backoff strategy: Tier-aware (starts at {tier_limits.delay}s, then exponential)")
+                    f"    Backoff strategy: Tier-aware (starts at {tier_limits.delay}s, then exponential)"
+                )
             else:
                 print("  ⚠️ Tier info: Not available (using defaults)")
 
@@ -117,27 +118,28 @@ def main():
             return 0
         else:
             # Error case - still try to extract tier info if available
-            error_msg = results[0].get(
-                "error", "Unknown error") if results else "No response"
+            error_msg = results[0].get("error", "Unknown error") if results else "No response"
             print("\n[test_api_once] ❌ API Test Failed:")
             print(f"  Error: {error_msg}")
 
             # Try to get tier info (might have been set from response headers)
-            tier = client.get_tier() if hasattr(client, 'get_tier') else None
-            tier_limits = client.get_tier_limits() if hasattr(
-                client, 'get_tier_limits') else None
+            tier = client.get_tier() if hasattr(client, "get_tier") else None
+            tier_limits = client.get_tier_limits() if hasattr(client, "get_tier_limits") else None
 
             if tier and tier_limits:
                 print(f"\n  Detected Tier: {tier.value}")
                 print(f"  Recommended delay: {tier_limits.delay}s")
-                if "rate limit" in error_msg.lower() or "429" in error_msg or "Max retries" in error_msg:
+                if (
+                    "rate limit" in error_msg.lower()
+                    or "429" in error_msg
+                    or "Max retries" in error_msg
+                ):
                     base_delay = tier_limits.delay
-                    backoff_sequence = [
-                        base_delay * (2 ** i) for i in range(6)]
+                    backoff_sequence = [base_delay * (2**i) for i in range(6)]
+                    print(f"\n  💡 Tip: Wait {base_delay}s between requests on {tier.value} tier")
                     print(
-                        f"\n  💡 Tip: Wait {base_delay}s between requests on {tier.value} tier")
-                    print(
-                        f"  💡 Tier-aware backoff sequence: {', '.join([f'{d:.1f}s' for d in backoff_sequence])}")
+                        f"  💡 Tier-aware backoff sequence: {', '.join([f'{d:.1f}s' for d in backoff_sequence])}"
+                    )
 
             print("\n[test_api_once] Debug info:")
             print(f"  Results: {results}")
@@ -148,9 +150,10 @@ def main():
     except Exception as e:
         print(f"  ❌ Sample failed with exception: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

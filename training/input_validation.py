@@ -3,6 +3,7 @@ Input validation and sanitization utilities.
 
 Provides data validation, sanitization, and security checks for training data.
 """
+
 import re
 from typing import Any, Dict, List, Optional, Union
 from pathlib import Path
@@ -10,6 +11,7 @@ from pathlib import Path
 
 class ValidationError(Exception):
     """Raised when input validation fails."""
+
     pass
 
 
@@ -18,14 +20,14 @@ class InputValidator:
 
     # Security patterns to detect
     SUSPICIOUS_PATTERNS = [
-        r'<\s*script[^>]*>.*?</\s*script\s*>',  # Script tags
-        r'javascript:',                         # JavaScript URLs
-        r'data:',                              # Data URLs
-        r'vbscript:',                          # VBScript
-        r'on\w+\s*=',                          # Event handlers
-        r'<iframe[^>]*>.*?</iframe>',          # Iframes
-        r'<object[^>]*>.*?</object>',          # Object/embed tags
-        r'<embed[^>]*>',                       # Embed tags
+        r"<\s*script[^>]*>.*?</\s*script\s*>",  # Script tags
+        r"javascript:",  # JavaScript URLs
+        r"data:",  # Data URLs
+        r"vbscript:",  # VBScript
+        r"on\w+\s*=",  # Event handlers
+        r"<iframe[^>]*>.*?</iframe>",  # Iframes
+        r"<object[^>]*>.*?</object>",  # Object/embed tags
+        r"<embed[^>]*>",  # Embed tags
     ]
 
     # Maximum lengths for various inputs
@@ -41,8 +43,9 @@ class InputValidator:
             strict_mode: If True, raise errors on validation failures
         """
         self.strict_mode = strict_mode
-        self.compiled_patterns = [re.compile(p, re.IGNORECASE | re.DOTALL)
-                                  for p in self.SUSPICIOUS_PATTERNS]
+        self.compiled_patterns = [
+            re.compile(p, re.IGNORECASE | re.DOTALL) for p in self.SUSPICIOUS_PATTERNS
+        ]
 
     def validate_text_input(self, text: str, field_name: str = "text") -> str:
         """Validate and sanitize text input.
@@ -66,14 +69,15 @@ class InputValidator:
                 return str(text)
 
         # Check length
-        if len(text) > getattr(self, f'MAX_{field_name.upper()}_LENGTH', self.MAX_PROMPT_LENGTH):
+        if len(text) > getattr(self, f"MAX_{field_name.upper()}_LENGTH", self.MAX_PROMPT_LENGTH):
             error_msg = f"{field_name} too long: {len(text)} characters"
             if self.strict_mode:
                 raise ValidationError(error_msg)
             else:
                 print(f"WARNING: {error_msg}")
-                text = text[:getattr(
-                    self, f'MAX_{field_name.upper()}_LENGTH', self.MAX_PROMPT_LENGTH)]
+                text = text[
+                    : getattr(self, f"MAX_{field_name.upper()}_LENGTH", self.MAX_PROMPT_LENGTH)
+                ]
 
         # Check for suspicious patterns
         for pattern in self.compiled_patterns:
@@ -86,9 +90,13 @@ class InputValidator:
 
         return text
 
-    def validate_numeric_input(self, value: Any, field_name: str,
-                               min_val: Optional[float] = None,
-                               max_val: Optional[float] = None) -> Union[int, float]:
+    def validate_numeric_input(
+        self,
+        value: Any,
+        field_name: str,
+        min_val: Optional[float] = None,
+        max_val: Optional[float] = None,
+    ) -> Union[int, float]:
         """Validate numeric input.
 
         Args:
@@ -104,19 +112,15 @@ class InputValidator:
             ValidationError: If validation fails
         """
         try:
-            numeric_value = float(value) if not isinstance(
-                value, (int, float)) else value
+            numeric_value = float(value) if not isinstance(value, (int, float)) else value
         except (ValueError, TypeError):
-            raise ValidationError(
-                f"{field_name} must be numeric, got {type(value)}")
+            raise ValidationError(f"{field_name} must be numeric, got {type(value)}")
 
         if min_val is not None and numeric_value < min_val:
-            raise ValidationError(
-                f"{field_name} must be >= {min_val}, got {numeric_value}")
+            raise ValidationError(f"{field_name} must be >= {min_val}, got {numeric_value}")
 
         if max_val is not None and numeric_value > max_val:
-            raise ValidationError(
-                f"{field_name} must be <= {max_val}, got {numeric_value}")
+            raise ValidationError(f"{field_name} must be <= {max_val}, got {numeric_value}")
 
         return numeric_value
 
@@ -138,22 +142,18 @@ class InputValidator:
         required_fields = ["name", "arguments"]
         for field in required_fields:
             if field not in tool_call:
-                raise ValidationError(
-                    f"Tool call missing required field: {field}")
+                raise ValidationError(f"Tool call missing required field: {field}")
 
         # Validate name
         name = self.validate_text_input(tool_call["name"], "tool_name")
-        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$', name):
+        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$", name):
             raise ValidationError(f"Invalid tool name format: {name}")
 
         # Validate arguments
         if not isinstance(tool_call["arguments"], dict):
             raise ValidationError("Tool arguments must be a dictionary")
 
-        return {
-            "name": name,
-            "arguments": tool_call["arguments"]
-        }
+        return {"name": name, "arguments": tool_call["arguments"]}
 
     def validate_training_example(self, example: Dict[str, Any]) -> Dict[str, Any]:
         """Validate a complete training example.
@@ -174,13 +174,13 @@ class InputValidator:
 
         # Validate prompt
         if "prompt" in example:
-            validated["prompt"] = self.validate_text_input(
-                example["prompt"], "prompt")
+            validated["prompt"] = self.validate_text_input(example["prompt"], "prompt")
 
         # Validate teacher_text
         if "teacher_text" in example:
             validated["teacher_text"] = self.validate_text_input(
-                example["teacher_text"], "teacher_text")
+                example["teacher_text"], "teacher_text"
+            )
 
         # Validate cot_steps
         if "cot_steps" in example:
@@ -192,8 +192,7 @@ class InputValidator:
 
         # Validate answer
         if "answer" in example:
-            validated["answer"] = self.validate_text_input(
-                example["answer"], "answer")
+            validated["answer"] = self.validate_text_input(example["answer"], "answer")
 
         # Validate metadata
         if "metadata" in example:
@@ -220,8 +219,11 @@ class InputValidator:
 
         # Validate tool_count
         if "tool_count" in metadata:
-            validated["tool_count"] = int(self.validate_numeric_input(
-                metadata["tool_count"], "tool_count", min_val=0, max_val=self.MAX_TOOL_COUNT))
+            validated["tool_count"] = int(
+                self.validate_numeric_input(
+                    metadata["tool_count"], "tool_count", min_val=0, max_val=self.MAX_TOOL_COUNT
+                )
+            )
 
         # Validate intermediate_sizes
         if "intermediate_sizes" in metadata:
@@ -229,8 +231,7 @@ class InputValidator:
                 raise ValidationError("intermediate_sizes must be a list")
 
             validated["intermediate_sizes"] = [
-                int(self.validate_numeric_input(
-                    size, "intermediate_size", min_val=0))
+                int(self.validate_numeric_input(size, "intermediate_size", min_val=0))
                 for size in metadata["intermediate_sizes"]
             ]
 
@@ -266,14 +267,14 @@ class InputValidator:
         for field in tensor_fields:
             if field in batch:
                 tensor = batch[field]
-                if not hasattr(tensor, 'shape'):
+                if not hasattr(tensor, "shape"):
                     raise ValidationError(f"{field} must be a tensor")
 
                 # Check for NaN/Inf values
-                if hasattr(tensor, 'isnan') and tensor.isnan().any():
+                if hasattr(tensor, "isnan") and tensor.isnan().any():
                     raise ValidationError(f"{field} contains NaN values")
 
-                if hasattr(tensor, 'isinf') and tensor.isinf().any():
+                if hasattr(tensor, "isinf") and tensor.isinf().any():
                     raise ValidationError(f"{field} contains infinite values")
 
                 validated[field] = tensor
@@ -290,7 +291,7 @@ class InputValidator:
             Sanitized JSON string
         """
         # Remove any null bytes
-        json_str = json_str.replace('\x00', '')
+        json_str = json_str.replace("\x00", "")
 
         # Limit length
         if len(json_str) > 1000000:  # 1MB limit
@@ -320,7 +321,7 @@ class InputValidator:
             raise ValidationError(f"Invalid path: {file_path}")
 
         # Check file extension (basic security)
-        dangerous_extensions = {'.exe', '.bat', '.cmd', '.scr', '.pif', '.com'}
+        dangerous_extensions = {".exe", ".bat", ".cmd", ".scr", ".pif", ".com"}
         if path.suffix.lower() in dangerous_extensions:
             raise ValidationError(f"Dangerous file extension: {path.suffix}")
 
@@ -332,7 +333,8 @@ class InputValidator:
             size_mb = path.stat().st_size / 1024 / 1024
             if size_mb > self.MAX_FILE_SIZE_MB:
                 raise ValidationError(
-                    f"File too large: {size_mb:.1f}MB > {self.MAX_FILE_SIZE_MB}MB")
+                    f"File too large: {size_mb:.1f}MB > {self.MAX_FILE_SIZE_MB}MB"
+                )
 
         return path
 
@@ -405,18 +407,16 @@ if __name__ == "__main__":
 
     # Test numeric validation
     try:
-        valid_num = validator.validate_numeric_input(
-            42, "test_num", min_val=0, max_val=100)
+        valid_num = validator.validate_numeric_input(42, "test_num", min_val=0, max_val=100)
         print(f"✅ Numeric validation passed: {valid_num}")
     except ValidationError as e:
         print(f"❌ Numeric validation failed: {e}")
 
     # Test tool call validation
     try:
-        valid_tool = validator.validate_tool_call({
-            "name": "test_tool",
-            "arguments": {"param": "value"}
-        })
+        valid_tool = validator.validate_tool_call(
+            {"name": "test_tool", "arguments": {"param": "value"}}
+        )
         print(f"✅ Tool call validation passed: {valid_tool}")
     except ValidationError as e:
         print(f"❌ Tool call validation failed: {e}")

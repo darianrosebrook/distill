@@ -3,6 +3,7 @@ Unit tests for prompt caching optimization.
 
 Tests prompt cache functionality for M-series Apple Silicon optimization.
 """
+
 import pytest
 import numpy as np
 from unittest.mock import Mock
@@ -127,12 +128,10 @@ class TestPromptCache:
         prompt_hash = cache._hash_prompt(prompt_text)
 
         # Use pre-computed hash
-        state1, _ = cache.get_or_compute(
-            prompt_text, compute_fn, prompt_hash=prompt_hash)
+        state1, _ = cache.get_or_compute(prompt_text, compute_fn, prompt_hash=prompt_hash)
 
         # Second call with same hash
-        state2, was_cached = cache.get_or_compute(
-            prompt_text, compute_fn, prompt_hash=prompt_hash)
+        state2, was_cached = cache.get_or_compute(prompt_text, compute_fn, prompt_hash=prompt_hash)
 
         assert was_cached
         assert np.array_equal(state1["kv_cache"], state2["kv_cache"])
@@ -211,8 +210,7 @@ class TestPromptCacheIntegration:
         # Verify state matches
         assert np.array_equal(state1["kv_cache_k"], state2["kv_cache_k"])
         assert np.array_equal(state1["kv_cache_v"], state2["kv_cache_v"])
-        assert np.array_equal(
-            state1["attention_mask"], state2["attention_mask"])
+        assert np.array_equal(state1["attention_mask"], state2["attention_mask"])
 
         # Verify deep copy (modifying one shouldn't affect the other)
         state1["kv_cache_k"][0, 0, 0] = 999.0

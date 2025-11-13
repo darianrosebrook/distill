@@ -38,16 +38,16 @@ def caws_structure_score(text: str) -> float:
     header_score = header_count / len(headers) if len(headers) > 0 else 0.0
 
     # Check for code blocks (bonus for structured content)
-    has_code = bool(re.search(r'```', text))
+    has_code = bool(re.search(r"```", text))
     code_bonus = 0.5 if has_code else 0.0
 
     # Check for structured content indicators
     # JSON-like structures
-    has_json = bool(re.search(r'\{[^{}]*\}', text))
+    has_json = bool(re.search(r"\{[^{}]*\}", text))
     # Lists (bullet or numbered)
-    has_lists = bool(re.search(r'^[\s]*[-*]|\d+\.', text, re.MULTILINE))
+    has_lists = bool(re.search(r"^[\s]*[-*]|\d+\.", text, re.MULTILINE))
     # Markdown headers
-    has_markdown = bool(re.search(r'^#+\s', text, re.MULTILINE))
+    has_markdown = bool(re.search(r"^#+\s", text, re.MULTILINE))
 
     structure_bonus = 0.0
     if has_json:
@@ -70,10 +70,10 @@ def caws_structure_score(text: str) -> float:
 
     # Weighted combination
     total_score = (
-        header_score * 0.4 +  # Headers are most important
-        code_bonus * 0.2 +  # Code blocks indicate structure
-        structure_bonus * 0.2 +  # Other structured content
-        field_score * 0.2  # Content completeness
+        header_score * 0.4  # Headers are most important
+        + code_bonus * 0.2  # Code blocks indicate structure
+        + structure_bonus * 0.2  # Other structured content
+        + field_score * 0.2  # Content completeness
     )
 
     return min(1.0, total_score)
@@ -106,10 +106,10 @@ def extract_caws_structure_elements(text: str) -> Dict[str, bool]:
         "has_working_spec": "working spec" in text_lower,
         "has_invariants": "invariants" in text_lower,
         "has_acceptance": "acceptance" in text_lower,
-        "has_code_blocks": bool(re.search(r'```', text)),
-        "has_json": bool(re.search(r'\{[^{}]*\}', text)),
-        "has_lists": bool(re.search(r'^[\s]*[-*]|\d+\.', text, re.MULTILINE)),
-        "has_markdown": bool(re.search(r'^#+\s', text, re.MULTILINE)),
+        "has_code_blocks": bool(re.search(r"```", text)),
+        "has_json": bool(re.search(r"\{[^{}]*\}", text)),
+        "has_lists": bool(re.search(r"^[\s]*[-*]|\d+\.", text, re.MULTILINE)),
+        "has_markdown": bool(re.search(r"^#+\s", text, re.MULTILINE)),
     }
 
 

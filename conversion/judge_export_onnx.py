@@ -26,7 +26,7 @@ def load_judge_config(config_path: str) -> ModelCfg:
     if not config_file.exists():
         raise FileNotFoundError(f"Judge config not found: {config_path}")
 
-    with open(config_file, 'r', encoding='utf-8') as f:
+    with open(config_file, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f) or {}
 
     arch_cfg = cfg.get("arch", {})
@@ -56,18 +56,19 @@ def main(config: str = "conversion/shape_sets.json", judge_config: str = "config
         judge_config: Path to judge model config YAML
     """
     # Load judge configuration from YAML - required for correct architecture
-        judge_cfg = load_judge_config(judge_config)
-        print(f"[judge_export_onnx] Loaded judge config from: {judge_config}")
-        print(
+    judge_cfg = load_judge_config(judge_config)
+    print(f"[judge_export_onnx] Loaded judge config from: {judge_config}")
+    print(
         f"[judge_export_onnx] Model config: d_model={judge_cfg.d_model}, n_layers={judge_cfg.n_layers}, "
         f"n_heads={judge_cfg.n_heads}, n_kv_heads={judge_cfg.n_kv_heads}, "
-        f"d_head={judge_cfg.d_head}, vocab_size={judge_cfg.vocab_size}")
+        f"d_head={judge_cfg.d_head}, vocab_size={judge_cfg.vocab_size}"
+    )
 
     # Judge uses short enumerated shapes: 512, 1024, 2048
     # (Judge reads summaries/claims, not full transcripts)
     # Try to get from config, fallback to defaults
     try:
-        with open(config, 'r') as f:
+        with open(config, "r") as f:
             shape_data = json.load(f)
             judge_seqs = shape_data.get("judge_sequences", [512, 1024, 2048])
     except Exception:

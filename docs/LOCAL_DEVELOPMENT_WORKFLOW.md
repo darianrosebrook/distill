@@ -157,12 +157,12 @@ make toy-e2e-multi
 
 This compiles and validates shapes T64, T128, and T256.
 
-### Magic 8 Ball Showcase 🪄
+### 8-ball Showcase 🪄
 
-For a fun demonstration of the complete pipeline, try the **Magic 8 Ball** end-to-end test:
+For a fun demonstration of the complete pipeline, try the **8-ball** end-to-end test:
 
 ```bash
-# Complete Magic 8 Ball pipeline (dataset → training → export → CoreML → verification)
+# Complete 8-ball pipeline (dataset → training → export → CoreML → verification)
 make 8-ball
 ```
 

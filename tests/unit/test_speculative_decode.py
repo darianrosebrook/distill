@@ -3,12 +3,14 @@ Unit tests for speculative decoding optimization.
 
 Tests drafter + worker verification for M-series Apple Silicon optimization.
 """
+
 import pytest
 import numpy as np
 from unittest.mock import Mock
 
 try:
     from coreml.runtime.speculative_decode import SpeculativeDecoder
+
     SPECULATIVE_DECODE_AVAILABLE = True
 except ImportError:
     SPECULATIVE_DECODE_AVAILABLE = False
@@ -36,24 +38,32 @@ class TestSpeculativeDecoder:
         worker_adapter.prepare_state = Mock(return_value={})
 
         # Mock first_step
-        drafter_adapter.first_step = Mock(return_value=(
-            np.random.randn(32000),  # logits
-            {}  # state
-        ))
-        worker_adapter.first_step = Mock(return_value=(
-            np.random.randn(32000),  # logits
-            {}  # state
-        ))
+        drafter_adapter.first_step = Mock(
+            return_value=(
+                np.random.randn(32000),  # logits
+                {},  # state
+            )
+        )
+        worker_adapter.first_step = Mock(
+            return_value=(
+                np.random.randn(32000),  # logits
+                {},  # state
+            )
+        )
 
         # Mock next_step
-        drafter_adapter.next_step = Mock(return_value=(
-            np.random.randn(32000),  # logits
-            {}  # state
-        ))
-        worker_adapter.next_step = Mock(return_value=(
-            np.random.randn(32000),  # logits
-            {}  # state
-        ))
+        drafter_adapter.next_step = Mock(
+            return_value=(
+                np.random.randn(32000),  # logits
+                {},  # state
+            )
+        )
+        worker_adapter.next_step = Mock(
+            return_value=(
+                np.random.randn(32000),  # logits
+                {},  # state
+            )
+        )
 
         return drafter_adapter, worker_adapter
 
@@ -85,14 +95,10 @@ class TestSpeculativeDecoder:
             logits[100] = 10.0  # High probability for token 100
             return logits
 
-        drafter_adapter.first_step = Mock(
-            return_value=(make_accepting_logits(), {}))
-        worker_adapter.first_step = Mock(
-            return_value=(make_accepting_logits(), {}))
-        drafter_adapter.next_step = Mock(
-            return_value=(make_accepting_logits(), {}))
-        worker_adapter.next_step = Mock(
-            return_value=(make_accepting_logits(), {}))
+        drafter_adapter.first_step = Mock(return_value=(make_accepting_logits(), {}))
+        worker_adapter.first_step = Mock(return_value=(make_accepting_logits(), {}))
+        drafter_adapter.next_step = Mock(return_value=(make_accepting_logits(), {}))
+        worker_adapter.next_step = Mock(return_value=(make_accepting_logits(), {}))
 
         decoder = SpeculativeDecoder(
             drafter_model=drafter_model,
@@ -151,8 +157,7 @@ class TestSpeculativeDecoder:
             logits[100] = 10.0  # High probability
             return logits
 
-        worker_adapter.next_step = Mock(
-            return_value=(make_accepting_logits(), {}))
+        worker_adapter.next_step = Mock(return_value=(make_accepting_logits(), {}))
 
         decoder = SpeculativeDecoder(
             drafter_model=drafter_model,
@@ -166,8 +171,7 @@ class TestSpeculativeDecoder:
         input_ids = np.array([1, 2, 3])
         worker_state = {}
 
-        accepted = decoder._verify_tokens(
-            draft_tokens, input_ids, worker_state)
+        accepted = decoder._verify_tokens(draft_tokens, input_ids, worker_state)
 
         # Should accept at least some tokens
         assert len(accepted) >= 0
@@ -184,8 +188,7 @@ class TestSpeculativeDecoder:
             logits[100] = -10.0  # Low probability
             return logits
 
-        worker_adapter.next_step = Mock(
-            return_value=(make_rejecting_logits(), {}))
+        worker_adapter.next_step = Mock(return_value=(make_rejecting_logits(), {}))
 
         decoder = SpeculativeDecoder(
             drafter_model=drafter_model,
@@ -199,8 +202,7 @@ class TestSpeculativeDecoder:
         input_ids = np.array([1, 2, 3])
         worker_state = {}
 
-        accepted = decoder._verify_tokens(
-            draft_tokens, input_ids, worker_state)
+        accepted = decoder._verify_tokens(draft_tokens, input_ids, worker_state)
 
         # May reject tokens if probability is too low
         assert len(accepted) <= len(draft_tokens)

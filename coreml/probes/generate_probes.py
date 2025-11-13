@@ -4,6 +4,7 @@ Generate PyTorch and CoreML probes for parity comparison.
 Usage:
   python -m coreml.probes.generate_probes --pt-model models/toy_block.pt --ml-model coreml/artifacts/toy_block/model.mlpackage --out coreml/probes/toy_block
 """
+
 import argparse
 from pathlib import Path
 
@@ -25,55 +26,57 @@ def generate_pytorch_probes(model_path: str, example_input: torch.Tensor, output
 
     # Try to load as regular PyTorch model first (supports hooks)
     try:
-        checkpoint = torch.load(model_path, map_location='cpu')
-        if 'model_state_dict' in checkpoint:
+        checkpoint = torch.load(model_path, map_location="cpu")
+        if "model_state_dict" in checkpoint:
             # Checkpoint format - need model architecture
             # Try to infer from checkpoint config
             from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
 
             cfg = None
-            if 'config' in checkpoint:
-                config_data = checkpoint['config']
-                arch_cfg = config_data.get('arch', {})
+            if "config" in checkpoint:
+                config_data = checkpoint["config"]
+                arch_cfg = config_data.get("arch", {})
                 cfg = ModelCfg(
-                    d_model=arch_cfg.get('d_model', 4096),
-                    n_layers=arch_cfg.get('n_layers', 32),
-                    n_heads=arch_cfg.get('n_heads', 32),
-                    n_kv_heads=arch_cfg.get('n_kv_heads', 8),
-                    d_head=arch_cfg.get('d_head', 128),
-                    vocab_size=arch_cfg.get('vocab_size', 32000),
+                    d_model=arch_cfg.get("d_model", 4096),
+                    n_layers=arch_cfg.get("n_layers", 32),
+                    n_heads=arch_cfg.get("n_heads", 32),
+                    n_kv_heads=arch_cfg.get("n_kv_heads", 8),
+                    d_head=arch_cfg.get("d_head", 128),
+                    vocab_size=arch_cfg.get("vocab_size", 32000),
                 )
             else:
                 # Use defaults if config not available
                 cfg = ModelCfg()
 
             model = StudentLM(cfg)
-            model.load_state_dict(checkpoint['model_state_dict'])
+            model.load_state_dict(checkpoint["model_state_dict"])
             model.eval()
             print("[generate_probes] Loaded as regular PyTorch model (supports hooks)")
-        elif isinstance(checkpoint, dict) and any(k.startswith('blocks.') or k.startswith('embed') for k in checkpoint.keys()):
+        elif isinstance(checkpoint, dict) and any(
+            k.startswith("blocks.") or k.startswith("embed") for k in checkpoint.keys()
+        ):
             # State dict format - try to load with default config
             from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
+
             cfg = ModelCfg()
             model = StudentLM(cfg)
             model.load_state_dict(checkpoint)
             model.eval()
             print(
-                "[generate_probes] Loaded as regular PyTorch model from state dict (supports hooks)")
+                "[generate_probes] Loaded as regular PyTorch model from state dict (supports hooks)"
+            )
         else:
             raise ValueError("Unknown checkpoint format")
     except Exception as e:
         # Fall back to TorchScript
-        print(
-            f"[generate_probes] Could not load as regular PyTorch model: {e}")
+        print(f"[generate_probes] Could not load as regular PyTorch model: {e}")
         print("[generate_probes] Falling back to TorchScript (hooks not supported)")
         try:
             model = torch.jit.load(model_path)
             model.eval()
             is_torchscript = True
         except Exception as e2:
-            raise RuntimeError(
-                f"Failed to load model as PyTorch or TorchScript: {e2}")
+            raise RuntimeError(f"Failed to load model as PyTorch or TorchScript: {e2}")
 
     probe = Probe()
 
@@ -82,8 +85,7 @@ def generate_pytorch_probes(model_path: str, example_input: torch.Tensor, output
         with torch.no_grad():
             output = model(example_input)
         probe.data["output"] = output.detach().float().cpu().numpy()
-        print(
-            "[generate_probes] TorchScript model: saved final output only (hooks not supported)")
+        print("[generate_probes] TorchScript model: saved final output only (hooks not supported)")
     else:
         # Regular PyTorch model - attach hooks for intermediate layer extraction
         try:
@@ -101,7 +103,8 @@ def generate_pytorch_probes(model_path: str, example_input: torch.Tensor, output
                 probe.data["output"] = output.detach().float().cpu().numpy()
 
             print(
-                f"[generate_probes] Captured {len(probe.data)} probe points: {list(probe.data.keys())}")
+                f"[generate_probes] Captured {len(probe.data)} probe points: {list(probe.data.keys())}"
+            )
 
             # Clean up hooks (after data is captured)
             for hook in probe.hooks:
@@ -150,20 +153,18 @@ def generate_coreml_probes(mlpackage_path: str, example_input: np.ndarray, outpu
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--pt-model', required=True,
-                    help='PyTorch TorchScript model path')
-    ap.add_argument('--ml-model', required=True, help='CoreML mlpackage path')
-    ap.add_argument('--out', required=True, help='Output directory for probes')
-    ap.add_argument('--seq', type=int, default=128, help='Sequence length')
-    ap.add_argument('--dmodel', type=int, default=64, help='Model dimension')
+    ap.add_argument("--pt-model", required=True, help="PyTorch TorchScript model path")
+    ap.add_argument("--ml-model", required=True, help="CoreML mlpackage path")
+    ap.add_argument("--out", required=True, help="Output directory for probes")
+    ap.add_argument("--seq", type=int, default=128, help="Sequence length")
+    ap.add_argument("--dmodel", type=int, default=64, help="Model dimension")
     args = ap.parse_args()
 
     output_dir = Path(args.out)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Generate example input
-    example_input = torch.randn(
-        (1, args.seq, args.dmodel), dtype=torch.float32)
+    example_input = torch.randn((1, args.seq, args.dmodel), dtype=torch.float32)
     example_input_np = example_input.numpy()
 
     # Generate PyTorch probes
@@ -177,5 +178,5 @@ def main():
     print(f"[generate_probes] ✅ Probe generation complete: {output_dir}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

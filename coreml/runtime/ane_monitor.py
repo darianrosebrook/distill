@@ -6,6 +6,7 @@ Uses Instruments.app (if available) or wall-clock sampling (fallback).
 
 Reference: docs/M_SERIES_ADVANCED_OPTIMIZATIONS.md Phase 9
 """
+
 from __future__ import annotations
 import time
 import subprocess
@@ -15,6 +16,7 @@ import numpy as np
 
 try:
     from coremltools.models import MLModel
+
     COREML_AVAILABLE = True
 except ImportError:
     MLModel = None
@@ -181,7 +183,7 @@ class ANEResidencyMonitor:
 
         variance = np.var(timings_array)
         # Coefficient of variation
-        cv = variance / (median_time ** 2) if median_time > 0 else 0
+        cv = variance / (median_time**2) if median_time > 0 else 0
 
         # Estimate based on timing characteristics
         # This is a simplified heuristic - production would use more sophisticated analysis
@@ -267,9 +269,15 @@ class ANEResidencyMonitor:
         regression_pct = regression / baseline_ane if baseline_ane > 0 else 0.0
 
         if regression_pct <= max_regression_pct:
-            return True, f"ANE residency regression {regression_pct:.1%} within limit ({max_regression_pct:.1%})"
+            return (
+                True,
+                f"ANE residency regression {regression_pct:.1%} within limit ({max_regression_pct:.1%})",
+            )
         else:
-            return False, f"ANE residency regression {regression_pct:.1%} exceeds limit ({max_regression_pct:.1%})"
+            return (
+                False,
+                f"ANE residency regression {regression_pct:.1%} exceeds limit ({max_regression_pct:.1%})",
+            )
 
     def get_model_ops_info(self) -> Dict[str, Any]:
         """
@@ -295,20 +303,30 @@ class ANEResidencyMonitor:
                         ops.append(b.type)
             else:
                 # Fallback for neuralNetwork
-                layer_names = [layer.WhichOneof("layer")
-                               for layer in spec.neuralNetwork.layers]
+                layer_names = [layer.WhichOneof("layer") for layer in spec.neuralNetwork.layers]
                 ops.extend(filter(None, layer_names))
 
             op_counts = Counter(ops)
 
             # Identify ANE-friendly operations
             ane_friendly_ops = [
-                "matmul", "conv", "add", "mul", "relu", "gelu", "silu",
-                "layernorm", "softmax", "attention", "gather", "scatter",
+                "matmul",
+                "conv",
+                "add",
+                "mul",
+                "relu",
+                "gelu",
+                "silu",
+                "layernorm",
+                "softmax",
+                "attention",
+                "gather",
+                "scatter",
             ]
 
             ane_friendly_count = sum(
-                count for op, count in op_counts.items()
+                count
+                for op, count in op_counts.items()
                 if any(ane_op in op.lower() for ane_op in ane_friendly_ops)
             )
 
@@ -348,6 +366,7 @@ def measure_model_residency(
     def inference_fn():
         # Run inference on a random prompt
         import random
+
         prompt = random.choice(prompts)
         state = adapter.prepare_state(prompt)
         logits, _ = adapter.first_step(model, prompt, state)

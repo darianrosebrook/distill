@@ -3,6 +3,7 @@ Unit tests for optimized KV cache.
 
 Tests ANE-friendly layout and unified memory optimization for M-series Apple Silicon.
 """
+
 import pytest
 import numpy as np
 
@@ -12,6 +13,7 @@ try:
         GroupedQueryKVCache,
         create_kv_cache_for_model,
     )
+
     KV_CACHE_AVAILABLE = True
 except ImportError:
     KV_CACHE_AVAILABLE = False
@@ -102,8 +104,7 @@ class TestOptimizedKVCache:
 
     def test_get_size_mb(self):
         """Test getting cache size."""
-        cache = OptimizedKVCache(
-            n_heads=32, head_dim=128, max_seq_len=4096, precision="fp16")
+        cache = OptimizedKVCache(n_heads=32, head_dim=128, max_seq_len=4096, precision="fp16")
 
         size_mb = cache.get_size_mb()
 
@@ -152,10 +153,8 @@ class TestGroupedQueryKVCache:
 
     def test_gqa_reduction(self):
         """Test that GQA reduces cache size."""
-        standard_cache = OptimizedKVCache(
-            n_heads=32, head_dim=128, max_seq_len=4096)
-        gqa_cache = GroupedQueryKVCache(
-            n_heads=32, n_kv_heads=8, head_dim=128, max_seq_len=4096)
+        standard_cache = OptimizedKVCache(n_heads=32, head_dim=128, max_seq_len=4096)
+        gqa_cache = GroupedQueryKVCache(n_heads=32, n_kv_heads=8, head_dim=128, max_seq_len=4096)
 
         standard_size = standard_cache.get_size_mb()
         gqa_size = gqa_cache.get_size_mb()
@@ -165,8 +164,7 @@ class TestGroupedQueryKVCache:
 
     def test_stats(self):
         """Test GQA statistics."""
-        cache = GroupedQueryKVCache(
-            n_heads=32, n_kv_heads=8, head_dim=128, max_seq_len=4096)
+        cache = GroupedQueryKVCache(n_heads=32, n_kv_heads=8, head_dim=128, max_seq_len=4096)
 
         stats = cache.stats()
 

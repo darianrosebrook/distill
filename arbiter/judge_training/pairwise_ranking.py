@@ -28,6 +28,7 @@ app = typer.Typer()
 @dataclass
 class PairwiseExample:
     """Pairwise comparison example for judge training."""
+
     prompt: str
     output_a: str
     output_b: str
@@ -45,8 +46,9 @@ class PairwiseRankingLoss(nn.Module):
         self.temperature = temperature
         self.margin = margin
 
-    def forward(self, scores_a: torch.Tensor, scores_b: torch.Tensor,
-                preference: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, scores_a: torch.Tensor, scores_b: torch.Tensor, preference: torch.Tensor
+    ) -> torch.Tensor:
         """Compute pairwise ranking loss.
 
         Args:
@@ -69,9 +71,9 @@ class PairwiseRankingLoss(nn.Module):
         # For preference=-1 (tie): minimize |score_a - score_b|
         loss = torch.zeros_like(preference, dtype=torch.float32)
 
-        mask_a = (preference == 0)
-        mask_b = (preference == 1)
-        mask_tie = (preference == -1)
+        mask_a = preference == 0
+        mask_b = preference == 1
+        mask_tie = preference == -1
 
         if mask_a.any():
             # A preferred: score_a should be > score_b + margin
@@ -125,7 +127,7 @@ def main(config: str = typer.Argument(...)):
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config}")
 
-    with open(config_path, 'r', encoding='utf-8') as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f) or {}
 
     # Extract configuration
@@ -167,46 +169,38 @@ def main(config: str = typer.Argument(...)):
 
     # Create model
     device = torch.device(
-        "cuda" if torch.cuda.is_available()
-        else "mps" if torch.backends.mps.is_available()
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
         else "cpu"
     )
     print(f"[pairwise_ranking] Device: {device}")
 
     model = MultiTaskJudge(jc.hf_name, num_clauses=len(jc.clauses))
     model.to(device)
-    print(
-        f"[pairwise_ranking] Model: {jc.hf_name}, clauses: {len(jc.clauses)}")
+    print(f"[pairwise_ranking] Model: {jc.hf_name}, clauses: {len(jc.clauses)}")
 
     # Create data loaders
     batch_size = train_cfg.get("batch_size", 8)
-    train_dl = DataLoader(train_ds, batch_size=batch_size,
-                          shuffle=True, num_workers=2)
-    val_dl = DataLoader(val_ds, batch_size=batch_size,
-                        shuffle=False, num_workers=2)
+    train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=2)
+    val_dl = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=2)
 
     # Setup optimizer
     lr = train_cfg.get("lr", 1e-5)
     weight_decay = train_cfg.get("weight_decay", 0.01)
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=lr,
-        weight_decay=weight_decay
-    )
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
 
     # Setup learning rate schedule
     total_steps = train_cfg.get("total_steps", 10000)
     warmup_steps = train_cfg.get("warmup_steps", 500)
     scheduler = get_linear_schedule_with_warmup(
-        optimizer,
-        num_warmup_steps=warmup_steps,
-        num_training_steps=total_steps
+        optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps
     )
 
     # Setup loss functions
     ranking_loss_fn = PairwiseRankingLoss(
-        temperature=train_cfg.get("temperature", 1.0),
-        margin=train_cfg.get("margin", 0.2)
+        temperature=train_cfg.get("temperature", 1.0), margin=train_cfg.get("margin", 0.2)
     )
     clause_loss_fn = ClauseLabelingLoss()
     clause_weight = train_cfg.get("clause_loss_weight", 0.5)
@@ -286,25 +280,27 @@ def main(config: str = typer.Argument(...)):
             # Validation
             if global_step % val_every == 0:
                 val_metrics = evaluate(
-                    model, val_dl, device, ranking_loss_fn, clause_loss_fn, clause_weight)
+                    model, val_dl, device, ranking_loss_fn, clause_loss_fn, clause_weight
+                )
                 print(json.dumps({"step": global_step, "val": val_metrics}))
                 model.train()
 
             # Checkpointing
             if global_step % save_every == 0:
-                checkpoint_path = os.path.join(
-                    out_dir, f"judge_step_{global_step}.pt")
-                torch.save({
-                    "step": global_step,
-                    "model_state_dict": model.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
-                    "scheduler_state_dict": scheduler.state_dict(),
-                    "hf_name": jc.hf_name,
-                    "clauses": jc.clauses,
-                    "config": cfg,
-                }, checkpoint_path)
-                print(
-                    f"[pairwise_ranking] Saved checkpoint: {checkpoint_path}")
+                checkpoint_path = os.path.join(out_dir, f"judge_step_{global_step}.pt")
+                torch.save(
+                    {
+                        "step": global_step,
+                        "model_state_dict": model.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict(),
+                        "scheduler_state_dict": scheduler.state_dict(),
+                        "hf_name": jc.hf_name,
+                        "clauses": jc.clauses,
+                        "config": cfg,
+                    },
+                    checkpoint_path,
+                )
+                print(f"[pairwise_ranking] Saved checkpoint: {checkpoint_path}")
 
             if global_step >= total_steps:
                 break
@@ -314,17 +310,19 @@ def main(config: str = typer.Argument(...)):
 
     # Final checkpoint
     final_path = os.path.join(out_dir, "judge.pt")
-    torch.save({
-        "step": global_step,
-        "model_state_dict": model.state_dict(),
-        "optimizer_state_dict": optimizer.state_dict(),
-        "scheduler_state_dict": scheduler.state_dict(),
-        "hf_name": jc.hf_name,
-        "clauses": jc.clauses,
-        "config": cfg,
-    }, final_path)
-    print(
-        f"[pairwise_ranking] Training complete. Saved final model: {final_path}")
+    torch.save(
+        {
+            "step": global_step,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "scheduler_state_dict": scheduler.state_dict(),
+            "hf_name": jc.hf_name,
+            "clauses": jc.clauses,
+            "config": cfg,
+        },
+        final_path,
+    )
+    print(f"[pairwise_ranking] Training complete. Saved final model: {final_path}")
 
 
 @torch.no_grad()
@@ -378,7 +376,7 @@ def evaluate(
 
         # Compute pairwise accuracy (ignoring ties)
         winners = torch.where(sa > sb, 1, -1)
-        mask = (target != 0)
+        mask = target != 0
         correct += ((winners == target.to(winners.dtype)) & mask).sum().item()
         total += mask.sum().item()
 

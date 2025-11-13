@@ -58,264 +58,249 @@ class HiddenTodoAnalyzer:
 
         # Language-specific comment patterns
         self.language_patterns = {
-            'rust': {
-                'extensions': ['.rs'],
-                'single_line': r'^\s*//',
-                'multi_line_start': r'^\s*/\*',
-                'multi_line_end': r'\*/',
+            "rust": {
+                "extensions": [".rs"],
+                "single_line": r"^\s*//",
+                "multi_line_start": r"^\s*/\*",
+                "multi_line_end": r"\*/",
             },
-            'javascript': {
-                'extensions': ['.js', '.mjs', '.cjs'],
-                'single_line': r'^\s*//',
-                'multi_line_start': r'^\s*/\*',
-                'multi_line_end': r'\*/',
+            "javascript": {
+                "extensions": [".js", ".mjs", ".cjs"],
+                "single_line": r"^\s*//",
+                "multi_line_start": r"^\s*/\*",
+                "multi_line_end": r"\*/",
             },
-            'typescript': {
-                'extensions': ['.ts', '.tsx', '.mts', '.cts'],
-                'single_line': r'^\s*//',
-                'multi_line_start': r'^\s*/\*',
-                'multi_line_end': r'\*/',
+            "typescript": {
+                "extensions": [".ts", ".tsx", ".mts", ".cts"],
+                "single_line": r"^\s*//",
+                "multi_line_start": r"^\s*/\*",
+                "multi_line_end": r"\*/",
             },
-            'python': {
-                'extensions': ['.py', '.pyi'],
-                'single_line': r'^\s*#',
-                'multi_line_start': r'^\s*"""',
-                'multi_line_end': r'"""',
+            "python": {
+                "extensions": [".py", ".pyi"],
+                "single_line": r"^\s*#",
+                "multi_line_start": r'^\s*"""',
+                "multi_line_end": r'"""',
             },
-            'go': {
-                'extensions': ['.go'],
-                'single_line': r'^\s*//',
-                'multi_line_start': r'^\s*/\*',
-                'multi_line_end': r'\*/',
+            "go": {
+                "extensions": [".go"],
+                "single_line": r"^\s*//",
+                "multi_line_start": r"^\s*/\*",
+                "multi_line_end": r"\*/",
             },
-            'java': {
-                'extensions': ['.java'],
-                'single_line': r'^\s*//',
-                'multi_line_start': r'^\s*/\*',
-                'multi_line_end': r'\*/',
+            "java": {
+                "extensions": [".java"],
+                "single_line": r"^\s*//",
+                "multi_line_start": r"^\s*/\*",
+                "multi_line_end": r"\*/",
             },
-            'csharp': {
-                'extensions': ['.cs'],
-                'single_line': r'^\s*//',
-                'multi_line_start': r'^\s*/\*',
-                'multi_line_end': r'\*/',
+            "csharp": {
+                "extensions": [".cs"],
+                "single_line": r"^\s*//",
+                "multi_line_start": r"^\s*/\*",
+                "multi_line_end": r"\*/",
             },
-            'cpp': {
-                'extensions': ['.cpp', '.cc', '.cxx', '.c++', '.hpp', '.h', '.hxx'],
-                'single_line': r'^\s*//',
-                'multi_line_start': r'^\s*/\*',
-                'multi_line_end': r'\*/',
+            "cpp": {
+                "extensions": [".cpp", ".cc", ".cxx", ".c++", ".hpp", ".h", ".hxx"],
+                "single_line": r"^\s*//",
+                "multi_line_start": r"^\s*/\*",
+                "multi_line_end": r"\*/",
             },
-            'c': {
-                'extensions': ['.c'],
-                'single_line': r'^\s*//',
-                'multi_line_start': r'^\s*/\*',
-                'multi_line_end': r'\*/',
+            "c": {
+                "extensions": [".c"],
+                "single_line": r"^\s*//",
+                "multi_line_start": r"^\s*/\*",
+                "multi_line_end": r"\*/",
             },
-            'php': {
-                'extensions': ['.php'],
-                'single_line': r'^\s*//',
-                'multi_line_start': r'^\s*/\*',
-                'multi_line_end': r'\*/',
+            "php": {
+                "extensions": [".php"],
+                "single_line": r"^\s*//",
+                "multi_line_start": r"^\s*/\*",
+                "multi_line_end": r"\*/",
             },
-            'ruby': {
-                'extensions': ['.rb'],
-                'single_line': r'^\s*#',
-                'multi_line_start': r'^\s*=begin',
-                'multi_line_end': r'=end',
+            "ruby": {
+                "extensions": [".rb"],
+                "single_line": r"^\s*#",
+                "multi_line_start": r"^\s*=begin",
+                "multi_line_end": r"=end",
             },
-            'shell': {
-                'extensions': ['.sh', '.bash', '.zsh', '.fish'],
-                'single_line': r'^\s*#',
-                'multi_line_start': None,
-                'multi_line_end': None,
+            "shell": {
+                "extensions": [".sh", ".bash", ".zsh", ".fish"],
+                "single_line": r"^\s*#",
+                "multi_line_start": None,
+                "multi_line_end": None,
             },
-            'yaml': {
-                'extensions': ['.yaml', '.yml'],
-                'single_line': r'^\s*#',
-                'multi_line_start': None,
-                'multi_line_end': None,
+            "yaml": {
+                "extensions": [".yaml", ".yml"],
+                "single_line": r"^\s*#",
+                "multi_line_start": None,
+                "multi_line_end": None,
             },
-            'json': {
-                'extensions': ['.json'],
-                'single_line': None,
-                'multi_line_start': None,
-                'multi_line_end': None,
+            "json": {
+                "extensions": [".json"],
+                "single_line": None,
+                "multi_line_start": None,
+                "multi_line_end": None,
             },
-            'markdown': {
-                'extensions': ['.md', '.markdown'],
-                'single_line': r'^\s*<!--',
-                'multi_line_start': r'^\s*<!--',
-                'multi_line_end': r'-->',
+            "markdown": {
+                "extensions": [".md", ".markdown"],
+                "single_line": r"^\s*<!--",
+                "multi_line_start": r"^\s*<!--",
+                "multi_line_end": r"-->",
             },
         }
 
         # Comprehensive list of file patterns to ignore
         self.ignored_file_patterns = [
             # Test files
-            r'\btest\b',
-            r'\btests\b',
-            r'_test\.',
-            r'_tests\.',
-            r'\.test\.',
-            r'\.spec\.',
-            r'\.specs\.',
-
+            r"\btest\b",
+            r"\btests\b",
+            r"_test\.",
+            r"_tests\.",
+            r"\.test\.",
+            r"\.spec\.",
+            r"\.specs\.",
             # Build artifacts and generated files
-            r'\btarget\b',
-            r'\bbuild\b',
-            r'\bout\b',
-            r'\bdist\b',
-            r'\bbin\b',
-            r'\.next\b',
-            r'generated\.',
-            r'bindgen\.',
-            r'private\.',
-            r'mime_types_generated\.',
-            r'named_entities\.',
-            r'ascii_case_insensitive_html_attributes\.',
-
+            r"\btarget\b",
+            r"\bbuild\b",
+            r"\bout\b",
+            r"\bdist\b",
+            r"\bbin\b",
+            r"\.next\b",
+            r"generated\.",
+            r"bindgen\.",
+            r"private\.",
+            r"mime_types_generated\.",
+            r"named_entities\.",
+            r"ascii_case_insensitive_html_attributes\.",
             # Package management and dependencies
-            r'\bnode_modules\b',
-            r'package-lock\.json$',
-            r'package\.json$',
-            r'yarn\.lock$',
-            r'pnpm-lock\.yaml$',
-            r'\bvenv\b',
-            r'\bpip\b',
-            r'requirements\.txt$',
-            r'Pipfile$',
-            r'Pipfile\.lock$',
-            r'poetry\.lock$',
-            r'Cargo\.lock$',
-            r'Cargo\.toml$',
-
+            r"\bnode_modules\b",
+            r"package-lock\.json$",
+            r"package\.json$",
+            r"yarn\.lock$",
+            r"pnpm-lock\.yaml$",
+            r"\bvenv\b",
+            r"\bpip\b",
+            r"requirements\.txt$",
+            r"Pipfile$",
+            r"Pipfile\.lock$",
+            r"poetry\.lock$",
+            r"Cargo\.lock$",
+            r"Cargo\.toml$",
             # External libraries and frameworks
-            r'libtorch-cpu',
-            r'libtorch\b',
-            r'\.venv-whisper\b',
-            r'whisper_conversion_env',
-            r'\bsite-packages\b',
-            r'lib/python\d+\.\d+/site-packages',
-            r'whisperkit\b',
-            r'\.build\b',
-
+            r"libtorch-cpu",
+            r"libtorch\b",
+            r"\.venv-whisper\b",
+            r"whisper_conversion_env",
+            r"\bsite-packages\b",
+            r"lib/python\d+\.\d+/site-packages",
+            r"whisperkit\b",
+            r"\.build\b",
             # Model and data directories
-            r'models\b',
-            r'\bmodels/',
-            r'temp\.rs$',
-            r'todo_analyzer\.',
-
+            r"models\b",
+            r"\bmodels/",
+            r"temp\.rs$",
+            r"todo_analyzer\.",
             # Version control and IDE
-            r'\.git\b',
-            r'\.github\b',
-            r'\.vscode\b',
-            r'\.idea\b',
-            r'\.DS_Store$',
-            r'\.DS_Store\?$',
-            r'\._',
-            r'\.Spotlight-V100$',
-
+            r"\.git\b",
+            r"\.github\b",
+            r"\.vscode\b",
+            r"\.idea\b",
+            r"\.DS_Store$",
+            r"\.DS_Store\?$",
+            r"\._",
+            r"\.Spotlight-V100$",
             # Documentation and examples
-            r'\bdocs\b',
-            r'\bexamples\b',
-            r'\bdoc\b',
-            r'\bexample\b',
-
+            r"\bdocs\b",
+            r"\bexamples\b",
+            r"\bdoc\b",
+            r"\bexample\b",
             # Temporary and cache files
-            r'\bcache\b',
-            r'\btmp\b',
-            r'\btemp\b',
-            r'\.tmp$',
-            r'\.temp$',
-            r'\.cache$',
-
+            r"\bcache\b",
+            r"\btmp\b",
+            r"\btemp\b",
+            r"\.tmp$",
+            r"\.temp$",
+            r"\.cache$",
             # Coverage and analysis reports
-            r'\bhtmlcov\b',
-            r'\bcoverage\b',
-            r'\.coverage$',
-            r'coverage\.xml$',
-            r'lcov\.info$',
-
+            r"\bhtmlcov\b",
+            r"\bcoverage\b",
+            r"\.coverage$",
+            r"coverage\.xml$",
+            r"lcov\.info$",
             # OS-specific files
-            r'Thumbs\.db$',
-            r'desktop\.ini$',
-            r'\.fseventsd$',
-            r'\.Trashes$',
-
+            r"Thumbs\.db$",
+            r"desktop\.ini$",
+            r"\.fseventsd$",
+            r"\.Trashes$",
             # Language-specific build artifacts
-            r'\.rlib$',
-            r'\.rmeta$',
-            r'\.d$',
-            r'\.pdb$',
-            r'\.o$',
-            r'\.obj$',
-            r'\.exe$',
-            r'\.dll$',
-            r'\.so$',
-            r'\.dylib$',
-            r'\.pyc$',
-            r'\.pyo$',
-            r'__pycache__',
-            r'\.class$',
-            r'\.jar$',
-            r'\.war$',
-            r'\.ear$',
-
+            r"\.rlib$",
+            r"\.rmeta$",
+            r"\.d$",
+            r"\.pdb$",
+            r"\.o$",
+            r"\.obj$",
+            r"\.exe$",
+            r"\.dll$",
+            r"\.so$",
+            r"\.dylib$",
+            r"\.pyc$",
+            r"\.pyo$",
+            r"__pycache__",
+            r"\.class$",
+            r"\.jar$",
+            r"\.war$",
+            r"\.ear$",
             # Web assets
-            r'\.min\.js$',
-            r'\.min\.css$',
-            r'\.bundle\.js$',
-            r'\.chunk\.js$',
-            r'\.map$',
-
+            r"\.min\.js$",
+            r"\.min\.css$",
+            r"\.bundle\.js$",
+            r"\.chunk\.js$",
+            r"\.map$",
             # Configuration files (often generated)
-            r'\.env\.local$',
-            r'\.env\.production$',
-            r'\.env\.development$',
-            r'config\.local\.',
-            r'config\.prod\.',
-            r'config\.dev\.',
-
+            r"\.env\.local$",
+            r"\.env\.production$",
+            r"\.env\.development$",
+            r"config\.local\.",
+            r"config\.prod\.",
+            r"config\.dev\.",
             # Logs and reports
-            r'\blogs\b',
-            r'\.log$',
-            r'\breports\b',
-            r'\bartifacts\b',
-            r'\btemp\b',
-
+            r"\blogs\b",
+            r"\.log$",
+            r"\breports\b",
+            r"\bartifacts\b",
+            r"\btemp\b",
             # IDE and editor files
-            r'\.swp$',
-            r'\.swo$',
-            r'~$',
-            r'\.bak$',
-            r'\.backup$',
-
+            r"\.swp$",
+            r"\.swo$",
+            r"~$",
+            r"\.bak$",
+            r"\.backup$",
             # Additional exclusions from user's search
-            r'\.gitignore$',
-            r'\.json$',
-            r'\.md$',
+            r"\.gitignore$",
+            r"\.json$",
+            r"\.md$",
         ]
 
         # Explicit TODO patterns (highest priority) - more restrictive
         self.explicit_todo_patterns = {
-            'explicit_todos': [
-                r'\bTODO\b.*?:',
-                r'\bPLACEHOLDER\b.*?:',
+            "explicit_todos": [
+                r"\bTODO\b.*?:",
+                r"\bPLACEHOLDER\b.*?:",
                 # Catches inline comments like "# PLACEHOLDER" without colon
-                r'#\s*PLACEHOLDER\b(?!\s*:)',
+                r"#\s*PLACEHOLDER\b(?!\s*:)",
                 # Catches standalone PLACEHOLDER (fallback)
-                r'\bPLACEHOLDER\b',
-                r'\bFIXME\b.*?:',
-                r'\bHACK\b.*?:',
-                r'\bXXX\b.*?:',
-                r'\bTEMP\b.*?:.*?(implement|fix|replace|complete|add)',
-                r'\bTEMPORARY\b.*?:.*?(implement|fix|replace|complete|add)',
+                r"\bPLACEHOLDER\b",
+                r"\bFIXME\b.*?:",
+                r"\bHACK\b.*?:",
+                r"\bXXX\b.*?:",
+                r"\bTEMP\b.*?:.*?(implement|fix|replace|complete|add)",
+                r"\bTEMPORARY\b.*?:.*?(implement|fix|replace|complete|add)",
                 # User's VSCode search patterns
-                r'\bTODO\b(?!(_|\.|anal|\sanal|s))',
-                r'\bin\s+a\s+real\b(?!(_|\.|anal|\sanal|s))',
-                r'\bsimplified\b(?!(_|\.|anal|\sanal|s))',
-                r'\bfor\s+now\b(?!(_|\.|anal|\sanal|s))',
+                r"\bTODO\b(?!(_|\.|anal|\sanal|s))",
+                r"\bin\s+a\s+real\b(?!(_|\.|anal|\sanal|s))",
+                r"\bsimplified\b(?!(_|\.|anal|\sanal|s))",
+                r"\bfor\s+now\b(?!(_|\.|anal|\sanal|s))",
             ]
         }
 
@@ -323,262 +308,250 @@ class HiddenTodoAnalyzer:
         self.high_confidence_patterns = {
             # NOTE: These are pattern definitions for detecting incomplete implementations,
             # not actual incomplete implementations themselves.
-            'incomplete_implementation': [
-                r'\bnot\s+yet\s+implemented\b',
-                r'\bmissing\s+implementation\b',
-                r'\bincomplete\s+implementation\b',
-                r'\bpartial\s+implementation\b',
-                r'\bunimplemented\b',
-                r'\bnot\s+done\b',
-                r'\bpending\s+implementation\b',
-                r'\bto\s+be\s+implemented\b',
-                r'\bwill\s+be\s+implemented\b',
+            "incomplete_implementation": [
+                r"\bnot\s+yet\s+implemented\b",
+                r"\bmissing\s+implementation\b",
+                r"\bincomplete\s+implementation\b",
+                r"\bpartial\s+implementation\b",
+                r"\bunimplemented\b",
+                r"\bnot\s+done\b",
+                r"\bpending\s+implementation\b",
+                r"\bto\s+be\s+implemented\b",
+                r"\bwill\s+be\s+implemented\b",
             ],
-
-            'placeholder_code': [
-                r'\bplaceholder\s+code\b',
-                r'\bplaceholder\s+implementation\b',
-                r'\bplaceholder\s+function\b',
-                r'\bplaceholder\s+value\b',
-                r'\bstub\s+implementation\b',
-                r'\bstub\s+function\b',
-                r'\bdummy\s+implementation\b',
-                r'\bfake\s+implementation\b',
-                r'\bexample\s+implementation\b',
-                r'\bdemo\s+implementation\b',
-                r'\bsample\s+implementation\b',
-                r'\btemplate\s+implementation\b',
-                r'\bstub\s+implementation\s+for\b',
-                r'\bsimplified\s+.*?\s+calculation\b',
-                r'\bsimplified\s+.*?\s+implementation\b',
-                r'\bfor\s+now\b.*?(just|simply|only)\s+(concatenate|return|use)',
-                r'\bin\s+practice\b.*?(would|should|will)\s+(intelligently|properly|correctly)',
+            "placeholder_code": [
+                r"\bplaceholder\s+code\b",
+                r"\bplaceholder\s+implementation\b",
+                r"\bplaceholder\s+function\b",
+                r"\bplaceholder\s+value\b",
+                r"\bstub\s+implementation\b",
+                r"\bstub\s+function\b",
+                r"\bdummy\s+implementation\b",
+                r"\bfake\s+implementation\b",
+                r"\bexample\s+implementation\b",
+                r"\bdemo\s+implementation\b",
+                r"\bsample\s+implementation\b",
+                r"\btemplate\s+implementation\b",
+                r"\bstub\s+implementation\s+for\b",
+                r"\bsimplified\s+.*?\s+calculation\b",
+                r"\bsimplified\s+.*?\s+implementation\b",
+                r"\bfor\s+now\b.*?(just|simply|only)\s+(concatenate|return|use)",
+                r"\bin\s+practice\b.*?(would|should|will)\s+(intelligently|properly|correctly)",
             ],
-
-            'temporary_solutions': [
-                r'\btemporary\s+solution\b',
-                r'\btemporary\s+fix\b',
-                r'\btemporary\s+workaround\b',
-                r'\bquick\s+fix\b',
-                r'\bquick\s+hack\b',
-                r'\bworkaround\b',
-                r'\bhack\b.*?(fix|solution)',
-                r'\bpatch\b.*?(fix|solution)',
-                r'\bbypass\b.*?(fix|solution)',
+            "temporary_solutions": [
+                r"\btemporary\s+solution\b",
+                r"\btemporary\s+fix\b",
+                r"\btemporary\s+workaround\b",
+                r"\bquick\s+fix\b",
+                r"\bquick\s+hack\b",
+                r"\bworkaround\b",
+                r"\bhack\b.*?(fix|solution)",
+                r"\bpatch\b.*?(fix|solution)",
+                r"\bbypass\b.*?(fix|solution)",
             ],
-
-            'hardcoded_values': [
-                r'\bhardcoded\s+value\b',
-                r'\bhard-coded\s+value\b',
-                r'\bmagic\s+number\b',
-                r'\bmagic\s+string\b',
-                r'\bconstant\s+value\b.*?(replace|change|make\s+configurable)',
-                r'\bdefault\s+value\b.*?(replace|change|make\s+configurable)',
-                r'\bhardcoded\s+return\s+value\b',
-                r'\bhardcoded\s+result\b',
-                r'\bhardcoded\s+efficiency\b',
-                r'\bhardcoded\s+percentage\b',
+            "hardcoded_values": [
+                r"\bhardcoded\s+value\b",
+                r"\bhard-coded\s+value\b",
+                r"\bmagic\s+number\b",
+                r"\bmagic\s+string\b",
+                r"\bconstant\s+value\b.*?(replace|change|make\s+configurable)",
+                r"\bdefault\s+value\b.*?(replace|change|make\s+configurable)",
+                r"\bhardcoded\s+return\s+value\b",
+                r"\bhardcoded\s+result\b",
+                r"\bhardcoded\s+efficiency\b",
+                r"\bhardcoded\s+percentage\b",
             ],
-
-            'future_improvements': [
-                r'\bin\s+production\b.*?(implement|add|fix)',
-                r'\bin\s+a\s+real\s+implementation\b',
-                r'\beventually\b.*?(implement|add|fix)',
-                r'\blater\b.*?(implement|add|fix)',
-                r'\bshould\s+be\b.*?(implemented|added|fixed)',
-                r'\bwould\s+be\b.*?(implemented|added|fixed)',
-                r'\bcould\s+be\b.*?(implemented|added|fixed)',
-                r'\bwill\s+be\b.*?(implemented|added|fixed)',
-                r'\bin\s+practice\b.*?(would|should|will)\s+(analyze|merge|intelligently)',
-                r'\bin\s+practice\b.*?(this\s+would|this\s+should|this\s+will)',
-                r'\bfor\s+now\b.*?(just|simply|only)',
+            "future_improvements": [
+                r"\bin\s+production\b.*?(implement|add|fix)",
+                r"\bin\s+a\s+real\s+implementation\b",
+                r"\beventually\b.*?(implement|add|fix)",
+                r"\blater\b.*?(implement|add|fix)",
+                r"\bshould\s+be\b.*?(implemented|added|fixed)",
+                r"\bwould\s+be\b.*?(implemented|added|fixed)",
+                r"\bcould\s+be\b.*?(implemented|added|fixed)",
+                r"\bwill\s+be\b.*?(implemented|added|fixed)",
+                r"\bin\s+practice\b.*?(would|should|will)\s+(analyze|merge|intelligently)",
+                r"\bin\s+practice\b.*?(this\s+would|this\s+should|this\s+will)",
+                r"\bfor\s+now\b.*?(just|simply|only)",
             ],
         }
 
         # Medium-confidence patterns (context-dependent)
         self.medium_confidence_patterns = {
-            'basic_implementations': [
-                r'\bbasic\s+implementation\b.*?(improve|enhance|replace)',
-                r'\bsimple\s+implementation\b.*?(improve|enhance|replace)',
-                r'\bminimal\s+implementation\b.*?(improve|enhance|replace)',
-                r'\bnaive\s+implementation\b.*?(improve|enhance|replace)',
-                r'\brough\s+implementation\b.*?(improve|enhance|replace)',
-                r'\bcrude\s+implementation\b.*?(improve|enhance|replace)',
+            "basic_implementations": [
+                r"\bbasic\s+implementation\b.*?(improve|enhance|replace)",
+                r"\bsimple\s+implementation\b.*?(improve|enhance|replace)",
+                r"\bminimal\s+implementation\b.*?(improve|enhance|replace)",
+                r"\bnaive\s+implementation\b.*?(improve|enhance|replace)",
+                r"\brough\s+implementation\b.*?(improve|enhance|replace)",
+                r"\bcrude\s+implementation\b.*?(improve|enhance|replace)",
             ],
         }
 
         # Patterns to exclude (legitimate technical terms and documentation)
         self.exclusion_patterns = [
             # Performance and optimization terms
-            r'\bperformance\s+monitoring\b',
-            r'\bperformance\s+optimization\b',
-            r'\bperformance\s+analysis\b',
-            r'\bperformance\s+benchmark\b',
-            r'\boptimize\s+for\s+performance\b',
-            r'\boptimization\s+strategy\b',
-            r'\befficient\s+implementation\b',
-
+            r"\bperformance\s+monitoring\b",
+            r"\bperformance\s+optimization\b",
+            r"\bperformance\s+analysis\b",
+            r"\bperformance\s+benchmark\b",
+            r"\boptimize\s+for\s+performance\b",
+            r"\boptimization\s+strategy\b",
+            r"\befficient\s+implementation\b",
             # Simulation and testing terms
-            r'\bsimulation\s+environment\b',
-            r'\bsimulate\s+network\s+conditions\b',
-            r'\bsimulate\s+.*?(behavior|response|data)\b',
-            r'\bsimulation\s+.*?(mode|environment)\b',
-
+            r"\bsimulation\s+environment\b",
+            r"\bsimulate\s+network\s+conditions\b",
+            r"\bsimulate\s+.*?(behavior|response|data)\b",
+            r"\bsimulation\s+.*?(mode|environment)\b",
             # Fallback and error handling
-            r'\bfallback\s+mechanism\b',
-            r'\bfallback\s+strategy\b',
-            r'\bfallback\s+to\b.*?(method|function|implementation)',
-
+            r"\bfallback\s+mechanism\b",
+            r"\bfallback\s+strategy\b",
+            r"\bfallback\s+to\b.*?(method|function|implementation)",
             # Authentication and security
-            r'\bbasic\s+authentication\b',
-            r'\bbasic\s+configuration\b',
-            r'\bsimple\s+interface\b',
-            r'\bsimple\s+api\b',
-
+            r"\bbasic\s+authentication\b",
+            r"\bbasic\s+configuration\b",
+            r"\bsimple\s+interface\b",
+            r"\bsimple\s+api\b",
             # Mock and testing
-            r'\bmock\s+object\b',
-            r'\bmock\s+service\b',
-            r'\bmock\s+data\b',
-            r'\bmock\s+response\b',
-
+            r"\bmock\s+object\b",
+            r"\bmock\s+service\b",
+            r"\bmock\s+data\b",
+            r"\bmock\s+response\b",
             # Documentation patterns
-            r'\bcurrent\s+implementation\b.*?(uses|provides|supports)',
-            r'\bthis\s+implementation\b.*?(uses|provides|supports)',
-            r'\bthe\s+implementation\b.*?(uses|provides|supports)',
-            r'\bimplementation\s+uses\b',
-            r'\bimplementation\s+provides\b',
-            r'\bimplementation\s+supports\b',
-
+            r"\bcurrent\s+implementation\b.*?(uses|provides|supports)",
+            r"\bthis\s+implementation\b.*?(uses|provides|supports)",
+            r"\bthe\s+implementation\b.*?(uses|provides|supports)",
+            r"\bimplementation\s+uses\b",
+            r"\bimplementation\s+provides\b",
+            r"\bimplementation\s+supports\b",
             # Architecture and design documentation
-            r'\barchitecture\s+note\b',
-            r'\bdesign\s+note\b',
-            r'\bpattern\s+note\b',
-            r'\bdependency\s+injection\b',
-            r'\bresource\s+management\b',
-
+            r"\barchitecture\s+note\b",
+            r"\bdesign\s+note\b",
+            r"\bpattern\s+note\b",
+            r"\bdependency\s+injection\b",
+            r"\bresource\s+management\b",
             # Console and logging
-            r'console\.(log|warn|error|info)',
-            r'\blogging\s+implementation\b',
-
+            r"console\.(log|warn|error|info)",
+            r"\blogging\s+implementation\b",
             # TODO system documentation (false positives when documenting TODO system itself)
-            r'\btodo\s+template\s+system\b',
-            r'\btodo\s+template\b',
-            r'\btodo\s+instance\b',
-            r'\btodo\s+step\b',
-            r'\btodo\s+integration\b',
-            r'\btodo\s+system\b',
-            r'\btodotemplate\b',
-            r'\btodoinstance\b',
-            r'\btodostep\b',
-            r'\btodointegration\b',
-            r'\btodotemplatesystem\b',
-            r'\btodoprogress\b',
-            r'\btododependency\b',
-            r'\btodoqualityenforcer\b',
-            r'\btodoworkflowhooks\b',
-            r'\btodostatus\b',
-            r'\btodopriority\b',
-            r'\btodosteptype\b',
+            r"\btodo\s+template\s+system\b",
+            r"\btodo\s+template\b",
+            r"\btodo\s+instance\b",
+            r"\btodo\s+step\b",
+            r"\btodo\s+integration\b",
+            r"\btodo\s+system\b",
+            r"\btodotemplate\b",
+            r"\btodoinstance\b",
+            r"\btodostep\b",
+            r"\btodointegration\b",
+            r"\btodotemplatesystem\b",
+            r"\btodoprogress\b",
+            r"\btododependency\b",
+            r"\btodoqualityenforcer\b",
+            r"\btodoworkflowhooks\b",
+            r"\btodostatus\b",
+            r"\btodopriority\b",
+            r"\btodosteptype\b",
             # Rust doc comment patterns when mentioning TODO system types
-            r'^\s*//[!]/.*\btodo\b.*(template|instance|step|integration|system)\b',
-            r'^\s*///.*\btodo\b.*(template|instance|step|integration|system)\b',
+            r"^\s*//[!]/.*\btodo\b.*(template|instance|step|integration|system)\b",
+            r"^\s*///.*\btodo\b.*(template|instance|step|integration|system)\b",
         ]
 
         # Engineering-grade TODO template patterns (for suggestions)
         self.engineering_grade_patterns = {
-            'completion_checklist': [
-                r'COMPLETION CHECKLIST:',
-                r'COMPLETION CRITERIA:',
-                r'CHECKLIST:',
-                r'\[ \]',
-                r'\[x\]',
+            "completion_checklist": [
+                r"COMPLETION CHECKLIST:",
+                r"COMPLETION CRITERIA:",
+                r"CHECKLIST:",
+                r"\[ \]",
+                r"\[x\]",
             ],
-            'acceptance_criteria': [
-                r'ACCEPTANCE CRITERIA:',
-                r'ACCEPTANCE:',
-                r'CRITERIA:',
-                r'REQUIREMENTS:',
+            "acceptance_criteria": [
+                r"ACCEPTANCE CRITERIA:",
+                r"ACCEPTANCE:",
+                r"CRITERIA:",
+                r"REQUIREMENTS:",
             ],
-            'dependencies': [
-                r'DEPENDENCIES:',
-                r'DEPENDS ON:',
-                r'REQUIRES:',
-                r'BLOCKED BY:',
+            "dependencies": [
+                r"DEPENDENCIES:",
+                r"DEPENDS ON:",
+                r"REQUIRES:",
+                r"BLOCKED BY:",
             ],
-            'governance': [
-                r'CAWS TIER:',
-                r'TIER:',
-                r'PRIORITY:',
-                r'BLOCKING:',
-                r'ESTIMATED EFFORT:',
-                r'EFFORT:',
-                r'GOVERNANCE:',
+            "governance": [
+                r"CAWS TIER:",
+                r"TIER:",
+                r"PRIORITY:",
+                r"BLOCKING:",
+                r"ESTIMATED EFFORT:",
+                r"EFFORT:",
+                r"GOVERNANCE:",
             ],
-            'structured_format': [
-                r'// TODO:.*?\n.*?//\s*COMPLETION',
-                r'// TODO:.*?\n.*?//\s*ACCEPTANCE',
-                r'// TODO:.*?\n.*?//\s*DEPENDENCIES',
-            ]
+            "structured_format": [
+                r"// TODO:.*?\n.*?//\s*COMPLETION",
+                r"// TODO:.*?\n.*?//\s*ACCEPTANCE",
+                r"// TODO:.*?\n.*?//\s*DEPENDENCIES",
+            ],
         }
 
         # Patterns that suggest a TODO needs engineering-grade format
         self.needs_engineering_format_patterns = {
-            'vague_todos': [
-                r'\bTODO\b.*?(implement|add|fix|complete|do)\b.*?$',
-                r'\bFIXME\b.*?(implement|add|fix|complete|do)\b.*?$',
-                r'\bHACK\b.*?(implement|add|fix|complete|do)\b.*?$',
+            "vague_todos": [
+                r"\bTODO\b.*?(implement|add|fix|complete|do)\b.*?$",
+                r"\bFIXME\b.*?(implement|add|fix|complete|do)\b.*?$",
+                r"\bHACK\b.*?(implement|add|fix|complete|do)\b.*?$",
             ],
-            'missing_structure': [
-                r'\bTODO\b.*?(?!.*COMPLETION CHECKLIST)(?!.*ACCEPTANCE CRITERIA)(?!.*DEPENDENCIES).*$',
-                r'\bFIXME\b.*?(?!.*COMPLETION CHECKLIST)(?!.*ACCEPTANCE CRITERIA)(?!.*DEPENDENCIES).*$',
+            "missing_structure": [
+                r"\bTODO\b.*?(?!.*COMPLETION CHECKLIST)(?!.*ACCEPTANCE CRITERIA)(?!.*DEPENDENCIES).*$",
+                r"\bFIXME\b.*?(?!.*COMPLETION CHECKLIST)(?!.*ACCEPTANCE CRITERIA)(?!.*DEPENDENCIES).*$",
             ],
-            'single_line_todos': [
-                r'^\s*//\s*TODO\b.*?$',
-                r'^\s*#\s*TODO\b.*?$',
+            "single_line_todos": [
+                r"^\s*//\s*TODO\b.*?$",
+                r"^\s*#\s*TODO\b.*?$",
             ],
-            'business_critical': [
-                r'\bTODO\b.*?(auth|security|payment|billing|database|persist|save|store)\b',
-                r'\bTODO\b.*?(critical|important|essential|required|must)\b',
-                r'\bFIXME\b.*?(auth|security|payment|billing|database|persist|save|store)\b',
-            ]
+            "business_critical": [
+                r"\bTODO\b.*?(auth|security|payment|billing|database|persist|save|store)\b",
+                r"\bTODO\b.*?(critical|important|essential|required|must)\b",
+                r"\bFIXME\b.*?(auth|security|payment|billing|database|persist|save|store)\b",
+            ],
         }
 
         # Context clues that suggest documentation rather than TODO
         self.documentation_indicators = [
-            r'@param',
-            r'@return',
-            r'@throws',
-            r'@author',
-            r'@date',
-            r'@version',
-            r'@description',
-            r'@example',
-            r'@see',
-            r'@since',
-            r'@deprecated',
-            r'\*\s*\*\s*\*',  # JSDoc comment blocks
-            r'^\s*/\*\*',     # Start of JSDoc
-            r'^\s*# ',        # Markdown headers
-            r'^\s*## ',       # Markdown subheaders
-            r'^\s*### ',      # Markdown sub-subheaders
+            r"@param",
+            r"@return",
+            r"@throws",
+            r"@author",
+            r"@date",
+            r"@version",
+            r"@description",
+            r"@example",
+            r"@see",
+            r"@since",
+            r"@deprecated",
+            r"\*\s*\*\s*\*",  # JSDoc comment blocks
+            r"^\s*/\*\*",  # Start of JSDoc
+            r"^\s*# ",  # Markdown headers
+            r"^\s*## ",  # Markdown subheaders
+            r"^\s*### ",  # Markdown sub-subheaders
         ]
 
         # Context clues that suggest actual TODO
         self.todo_indicators = [
-            r'\btodo\b',
-            r'\bfixme\b',
-            r'\bhack\b',
-            r'\bneed\s+to\b',
-            r'\bshould\s+be\b',
-            r'\bmust\s+be\b',
-            r'\bhas\s+to\b',
-            r'\brequired\s+to\b',
-            r'\bmissing\b',
-            r'\bincomplete\b',
-            r'\bpartial\b',
-            r'\bunfinished\b',
-            r'\bwork\s+in\s+progress\b',
-            r'\bwip\b',
+            r"\btodo\b",
+            r"\bfixme\b",
+            r"\bhack\b",
+            r"\bneed\s+to\b",
+            r"\bshould\s+be\b",
+            r"\bmust\s+be\b",
+            r"\bhas\s+to\b",
+            r"\brequired\s+to\b",
+            r"\bmissing\b",
+            r"\bincomplete\b",
+            r"\bpartial\b",
+            r"\bunfinished\b",
+            r"\bwork\s+in\s+progress\b",
+            r"\bwip\b",
         ]
 
         self.results = defaultdict(list)
@@ -587,24 +560,28 @@ class HiddenTodoAnalyzer:
 
         # Heuristic code stub patterns keyed by language
         self.code_stub_patterns = {
-            'python': {
-                'function_stub': re.compile(r'^\s*def\s+\w+\(.*\):'),
-                'pass_stmt': re.compile(r'^\s*pass\s*$'),
-                'ellipsis_stmt': re.compile(r'^\s*\.\.\.\s*$'),
-                'raise_not_impl': re.compile(r'^\s*raise\s+NotImplementedError'),
-                'return_not_impl': re.compile(r'^\s*return\s+(None|NotImplemented)\s*$'),
+            "python": {
+                "function_stub": re.compile(r"^\s*def\s+\w+\(.*\):"),
+                "pass_stmt": re.compile(r"^\s*pass\s*$"),
+                "ellipsis_stmt": re.compile(r"^\s*\.\.\.\s*$"),
+                "raise_not_impl": re.compile(r"^\s*raise\s+NotImplementedError"),
+                "return_not_impl": re.compile(r"^\s*return\s+(None|NotImplemented)\s*$"),
             },
-            'javascript': {
-                'function_stub': re.compile(r'^\s*(async\s+)?function\s+\w+\(.*\)\s*{'),
-                'arrow_stub': re.compile(r'^\s*const\s+\w+\s*=\s*\(.*\)\s*=>\s*{'),
-                'throw_not_impl': re.compile(r"^\s*throw\s+new\s+Error\((\"|')(TODO|Not\s+Implemented)"),
-                'return_todo': re.compile(r"^\s*return\s+(null|undefined);\s*//\s*TODO"),
+            "javascript": {
+                "function_stub": re.compile(r"^\s*(async\s+)?function\s+\w+\(.*\)\s*{"),
+                "arrow_stub": re.compile(r"^\s*const\s+\w+\s*=\s*\(.*\)\s*=>\s*{"),
+                "throw_not_impl": re.compile(
+                    r"^\s*throw\s+new\s+Error\((\"|')(TODO|Not\s+Implemented)"
+                ),
+                "return_todo": re.compile(r"^\s*return\s+(null|undefined);\s*//\s*TODO"),
             },
-            'typescript': {
-                'function_stub': re.compile(r'^\s*(async\s+)?function\s+\w+\(.*\)\s*{'),
-                'arrow_stub': re.compile(r'^\s*const\s+\w+\s*=\s*\(.*\)\s*=>\s*{'),
-                'throw_not_impl': re.compile(r"^\s*throw\s+new\s+Error\((\"|')(TODO|Not\s+Implemented)"),
-                'return_todo': re.compile(r"^\s*return\s+(null|undefined);\s*//\s*TODO"),
+            "typescript": {
+                "function_stub": re.compile(r"^\s*(async\s+)?function\s+\w+\(.*\)\s*{"),
+                "arrow_stub": re.compile(r"^\s*const\s+\w+\s*=\s*\(.*\)\s*=>\s*{"),
+                "throw_not_impl": re.compile(
+                    r"^\s*throw\s+new\s+Error\((\"|')(TODO|Not\s+Implemented)"
+                ),
+                "return_todo": re.compile(r"^\s*return\s+(null|undefined);\s*//\s*TODO"),
             },
         }
 
@@ -624,7 +601,7 @@ class HiddenTodoAnalyzer:
         suffix = file_path.suffix.lower()
 
         for language, config in self.language_patterns.items():
-            if suffix in config['extensions']:
+            if suffix in config["extensions"]:
                 return language
 
         return None
@@ -644,25 +621,25 @@ class HiddenTodoAnalyzer:
 
         # Check for Rust doc comments (//! and ///) that mention TODO system types
         todo_system_types = [
-            r'todo\s+template',
-            r'todo\s+instance',
-            r'todo\s+step',
-            r'todo\s+integration',
-            r'todo\s+system',
-            r'todotemplate',
-            r'todoinstance',
-            r'todostep',
-            r'todointegration',
-            r'todotemplatesystem',
-            r'todoprogress',
-            r'tododependency',
+            r"todo\s+template",
+            r"todo\s+instance",
+            r"todo\s+step",
+            r"todo\s+integration",
+            r"todo\s+system",
+            r"todotemplate",
+            r"todoinstance",
+            r"todostep",
+            r"todointegration",
+            r"todotemplatesystem",
+            r"todoprogress",
+            r"tododependency",
         ]
 
         # If comment mentions TODO system types and appears to be documentation, exclude it
         if any(re.search(pattern, comment, re.IGNORECASE) for pattern in todo_system_types):
             # Check if it's describing the system rather than a TODO item
             # If it contains "TODO:" followed by a colon, it's likely a real TODO
-            if not re.search(r'\bTODO\s*:\s*', comment, re.IGNORECASE):
+            if not re.search(r"\bTODO\s*:\s*", comment, re.IGNORECASE):
                 return True
 
         return False
@@ -695,8 +672,7 @@ class HiddenTodoAnalyzer:
             score -= 0.2
 
         # Check if comment starts with common documentation words
-        doc_starters = ['note:', 'current', 'this',
-                        'the', 'implementation', 'method', 'function']
+        doc_starters = ["note:", "current", "this", "the", "implementation", "method", "function"]
         if any(comment.lower().startswith(starter) for starter in doc_starters):
             score -= 0.2
 
@@ -708,15 +684,15 @@ class HiddenTodoAnalyzer:
         """Check if a file appears to be generated code."""
         path_str = str(file_path)
         generated_indicators = [
-            r'\.next\b',
-            r'generated',
-            r'build/',
-            r'dist/',
-            r'target/',
-            r'node_modules',
-            r'\.min\.',
-            r'\.bundle\.',
-            r'\.chunk\.',
+            r"\.next\b",
+            r"generated",
+            r"build/",
+            r"dist/",
+            r"target/",
+            r"node_modules",
+            r"\.min\.",
+            r"\.bundle\.",
+            r"\.chunk\.",
         ]
 
         for indicator in generated_indicators:
@@ -734,7 +710,7 @@ class HiddenTodoAnalyzer:
         comments = []
 
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
 
             in_multiline = False
@@ -749,24 +725,22 @@ class HiddenTodoAnalyzer:
                     continue
 
                 # Handle multi-line comments / docstrings
-                start_pattern = config['multi_line_start']
-                end_pattern = config['multi_line_end']
+                start_pattern = config["multi_line_start"]
+                end_pattern = config["multi_line_end"]
                 if start_pattern and end_pattern:
                     if not in_multiline:
                         start_match = re.search(start_pattern, original_line)
                         if start_match:
                             in_multiline = True
                             multiline_content = []
-                            after_start = original_line[start_match.end():]
-                            end_match_inline = re.search(
-                                end_pattern, after_start)
+                            after_start = original_line[start_match.end() :]
+                            end_match_inline = re.search(end_pattern, after_start)
 
                             if end_match_inline:
-                                body = after_start[:end_match_inline.start()].strip(
-                                )
+                                body = after_start[: end_match_inline.start()].strip()
                                 if body:
                                     multiline_content.append(body)
-                                combined = ' '.join(multiline_content).strip()
+                                combined = " ".join(multiline_content).strip()
                                 if combined:
                                     comments.append((line_num, combined))
                                 in_multiline = False
@@ -779,11 +753,10 @@ class HiddenTodoAnalyzer:
                     else:
                         end_match = re.search(end_pattern, original_line)
                         if end_match:
-                            before_end = original_line[:end_match.start()].strip(
-                            )
+                            before_end = original_line[: end_match.start()].strip()
                             if before_end:
                                 multiline_content.append(before_end)
-                            combined = ' '.join(multiline_content).strip()
+                            combined = " ".join(multiline_content).strip()
                             if combined:
                                 comments.append((line_num, combined))
                             in_multiline = False
@@ -796,15 +769,29 @@ class HiddenTodoAnalyzer:
                             continue
 
                 # Extract single-line comments (only if not in multi-line mode)
-                if not in_multiline and config['single_line'] and re.search(config['single_line'], line):
+                if (
+                    not in_multiline
+                    and config["single_line"]
+                    and re.search(config["single_line"], line)
+                ):
                     # Remove comment prefix
-                    if language in ['rust', 'javascript', 'typescript', 'go', 'java', 'csharp', 'cpp', 'c', 'php']:
-                        comment = re.sub(r'^\s*//\s*', '', line)
-                    elif language in ['python', 'ruby', 'shell', 'yaml']:
-                        comment = re.sub(r'^\s*#\s*', '', line)
-                    elif language == 'markdown':
-                        comment = re.sub(r'^\s*<!--\s*', '', line)
-                        comment = re.sub(r'\s*-->$', '', comment)
+                    if language in [
+                        "rust",
+                        "javascript",
+                        "typescript",
+                        "go",
+                        "java",
+                        "csharp",
+                        "cpp",
+                        "c",
+                        "php",
+                    ]:
+                        comment = re.sub(r"^\s*//\s*", "", line)
+                    elif language in ["python", "ruby", "shell", "yaml"]:
+                        comment = re.sub(r"^\s*#\s*", "", line)
+                    elif language == "markdown":
+                        comment = re.sub(r"^\s*<!--\s*", "", line)
+                        comment = re.sub(r"\s*-->$", "", comment)
 
                     if comment:
                         comments.append((line_num, comment))
@@ -824,25 +811,27 @@ class HiddenTodoAnalyzer:
             return []
 
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
         except Exception as e:
             print(f"Error reading {file_path}: {e}")
             return []
 
-        if language == 'python':
+        if language == "python":
             stubs = self._detect_python_code_stubs(lines, patterns)
-        elif language in ('javascript', 'typescript'):
+        elif language in ("javascript", "typescript"):
             stubs = self._detect_js_code_stubs(lines, patterns)
         else:
             stubs = []
 
         for stub in stubs:
-            self.pattern_stats[stub['reason']] += 1
+            self.pattern_stats[stub["reason"]] += 1
 
         return stubs
 
-    def _detect_python_code_stubs(self, lines: List[str], patterns: Dict[str, re.Pattern]) -> List[Dict[str, Any]]:
+    def _detect_python_code_stubs(
+        self, lines: List[str], patterns: Dict[str, re.Pattern]
+    ) -> List[Dict[str, Any]]:
         stubs: List[Dict[str, Any]] = []
 
         for idx, raw_line in enumerate(lines, 1):
@@ -850,36 +839,41 @@ class HiddenTodoAnalyzer:
             if not stripped:
                 continue
 
-            if patterns['function_stub'].match(raw_line):
-                stub_entry = self._scan_python_function_body(
-                    lines, idx, patterns)
+            if patterns["function_stub"].match(raw_line):
+                stub_entry = self._scan_python_function_body(lines, idx, patterns)
                 if stub_entry:
                     stubs.append(stub_entry)
                 continue
 
-            if patterns['raise_not_impl'].search(raw_line):
-                stubs.append({
-                    'line': idx,
-                    'reason': 'python_raise_not_implemented',
-                    'snippet': stripped,
-                    'confidence': 0.95,
-                    'context_score': 0.2,
-                })
+            if patterns["raise_not_impl"].search(raw_line):
+                stubs.append(
+                    {
+                        "line": idx,
+                        "reason": "python_raise_not_implemented",
+                        "snippet": stripped,
+                        "confidence": 0.95,
+                        "context_score": 0.2,
+                    }
+                )
                 continue
 
-            if patterns['ellipsis_stmt'].match(raw_line):
-                stubs.append({
-                    'line': idx,
-                    'reason': 'python_ellipsis_stub',
-                    'snippet': stripped,
-                    'confidence': 0.85,
-                    'context_score': 0.15,
-                })
+            if patterns["ellipsis_stmt"].match(raw_line):
+                stubs.append(
+                    {
+                        "line": idx,
+                        "reason": "python_ellipsis_stub",
+                        "snippet": stripped,
+                        "confidence": 0.85,
+                        "context_score": 0.15,
+                    }
+                )
                 continue
 
         return stubs
 
-    def _scan_python_function_body(self, lines: List[str], start_index: int, patterns: Dict[str, re.Pattern]) -> Optional[Dict[str, Any]]:
+    def _scan_python_function_body(
+        self, lines: List[str], start_index: int, patterns: Dict[str, re.Pattern]
+    ) -> Optional[Dict[str, Any]]:
         """Inspect the first meaningful statement in a Python function for stub markers."""
         func_line = lines[start_index - 1]
         func_indent = len(func_line) - len(func_line.lstrip())
@@ -888,47 +882,47 @@ class HiddenTodoAnalyzer:
             raw_line = lines[idx - 1]
             stripped = raw_line.strip()
 
-            if not stripped or stripped.startswith('#'):
+            if not stripped or stripped.startswith("#"):
                 continue
 
             current_indent = len(raw_line) - len(raw_line.lstrip())
             if current_indent <= func_indent:
                 break
 
-            if patterns['pass_stmt'].match(raw_line):
+            if patterns["pass_stmt"].match(raw_line):
                 return {
-                    'line': idx,
-                    'reason': 'python_pass_stub',
-                    'snippet': stripped,
-                    'confidence': 0.82,
-                    'context_score': 0.1,
+                    "line": idx,
+                    "reason": "python_pass_stub",
+                    "snippet": stripped,
+                    "confidence": 0.82,
+                    "context_score": 0.1,
                 }
 
-            if patterns['ellipsis_stmt'].match(raw_line):
+            if patterns["ellipsis_stmt"].match(raw_line):
                 return {
-                    'line': idx,
-                    'reason': 'python_ellipsis_stub',
-                    'snippet': stripped,
-                    'confidence': 0.82,
-                    'context_score': 0.1,
+                    "line": idx,
+                    "reason": "python_ellipsis_stub",
+                    "snippet": stripped,
+                    "confidence": 0.82,
+                    "context_score": 0.1,
                 }
 
-            if patterns['raise_not_impl'].search(raw_line):
+            if patterns["raise_not_impl"].search(raw_line):
                 return {
-                    'line': idx,
-                    'reason': 'python_raise_not_implemented',
-                    'snippet': stripped,
-                    'confidence': 0.95,
-                    'context_score': 0.25,
+                    "line": idx,
+                    "reason": "python_raise_not_implemented",
+                    "snippet": stripped,
+                    "confidence": 0.95,
+                    "context_score": 0.25,
                 }
 
-            if patterns['return_not_impl'].match(raw_line):
+            if patterns["return_not_impl"].match(raw_line):
                 return {
-                    'line': idx,
-                    'reason': 'python_return_placeholder',
-                    'snippet': stripped,
-                    'confidence': 0.8,
-                    'context_score': 0.1,
+                    "line": idx,
+                    "reason": "python_return_placeholder",
+                    "snippet": stripped,
+                    "confidence": 0.8,
+                    "context_score": 0.1,
                 }
 
             # First substantive line is real implementation
@@ -936,7 +930,9 @@ class HiddenTodoAnalyzer:
 
         return None
 
-    def _detect_js_code_stubs(self, lines: List[str], patterns: Dict[str, re.Pattern]) -> List[Dict[str, Any]]:
+    def _detect_js_code_stubs(
+        self, lines: List[str], patterns: Dict[str, re.Pattern]
+    ) -> List[Dict[str, Any]]:
         stubs: List[Dict[str, Any]] = []
         len(lines)
 
@@ -945,68 +941,74 @@ class HiddenTodoAnalyzer:
             if not stripped:
                 continue
 
-            if patterns['throw_not_impl'].search(stripped):
-                stubs.append({
-                    'line': idx,
-                    'reason': 'js_throw_not_implemented',
-                    'snippet': stripped,
-                    'confidence': 0.9,
-                    'context_score': 0.2,
-                })
+            if patterns["throw_not_impl"].search(stripped):
+                stubs.append(
+                    {
+                        "line": idx,
+                        "reason": "js_throw_not_implemented",
+                        "snippet": stripped,
+                        "confidence": 0.9,
+                        "context_score": 0.2,
+                    }
+                )
                 continue
 
-            if patterns['return_todo'].search(stripped):
-                stubs.append({
-                    'line': idx,
-                    'reason': 'js_return_todo',
-                    'snippet': stripped,
-                    'confidence': 0.82,
-                    'context_score': 0.1,
-                })
+            if patterns["return_todo"].search(stripped):
+                stubs.append(
+                    {
+                        "line": idx,
+                        "reason": "js_return_todo",
+                        "snippet": stripped,
+                        "confidence": 0.82,
+                        "context_score": 0.1,
+                    }
+                )
                 continue
 
-            if patterns['function_stub'].match(raw_line) or patterns['arrow_stub'].match(raw_line):
+            if patterns["function_stub"].match(raw_line) or patterns["arrow_stub"].match(raw_line):
                 stub_entry = self._scan_js_function_body(lines, idx, patterns)
                 if stub_entry:
                     stubs.append(stub_entry)
 
         return stubs
 
-    def _scan_js_function_body(self, lines: List[str], start_index: int, patterns: Dict[str, re.Pattern]) -> Optional[Dict[str, Any]]:
+    def _scan_js_function_body(
+        self, lines: List[str], start_index: int, patterns: Dict[str, re.Pattern]
+    ) -> Optional[Dict[str, Any]]:
         """Inspect the first executable statement in a JS/TS function body."""
         opening_line = lines[start_index - 1]
-        initial_brace_count = opening_line.count('{') - opening_line.count('}')
+        initial_brace_count = opening_line.count("{") - opening_line.count("}")
         brace_depth = max(initial_brace_count, 0)
 
         for idx in range(start_index + 1, len(lines) + 1):
             raw_line = lines[idx - 1]
             stripped = raw_line.strip()
 
-            brace_depth += raw_line.count('{')
-            brace_depth -= raw_line.count('}')
+            brace_depth += raw_line.count("{")
+            brace_depth -= raw_line.count("}")
 
-            if not stripped or stripped.startswith('//') or stripped.startswith('/*'):
+            if not stripped or stripped.startswith("//") or stripped.startswith("/*"):
                 continue
 
             if brace_depth < 0:
                 break
 
-            if patterns['throw_not_impl'].search(stripped):
+            if patterns["throw_not_impl"].search(stripped):
                 return {
-                    'line': idx,
-                    'reason': 'js_throw_not_implemented',
-                    'snippet': stripped,
-                    'confidence': 0.9,
-                    'context_score': 0.2,
+                    "line": idx,
+                    "reason": "js_throw_not_implemented",
+                    "snippet": stripped,
+                    "confidence": 0.9,
+                    "context_score": 0.2,
                 }
 
-            if patterns['return_todo'].search(stripped):
+            if patterns["return_todo"].search(stripped):
                 return {
-                    'line': idx,
-                    'reason': 'js_return_todo',
-                    'snippet': stripped,
-                    'confidence': 0.82,
-                    'context_score': 0.1,
+                    "line": idx,
+                    "reason": "js_return_todo",
+                    "snippet": stripped,
+                    "confidence": 0.82,
+                    "context_score": 0.1,
                 }
 
             if brace_depth <= 0:
@@ -1032,18 +1034,16 @@ class HiddenTodoAnalyzer:
             return {}
 
         # Calculate context score
-        context_score = self.calculate_context_score(
-            comment, line_num, file_path)
+        context_score = self.calculate_context_score(comment, line_num, file_path)
 
         # Check explicit TODO patterns (highest confidence)
-        for pattern in self.explicit_todo_patterns['explicit_todos']:
+        for pattern in self.explicit_todo_patterns["explicit_todos"]:
             if re.search(pattern, comment, re.IGNORECASE):
-                matches['explicit_todos'].append(pattern)
+                matches["explicit_todos"].append(pattern)
                 # Adjust confidence based on context
                 base_confidence = 1.0
-                adjusted_confidence = min(
-                    1.0, max(0.1, base_confidence + context_score * 0.3))
-                confidence_scores.append(('explicit', adjusted_confidence))
+                adjusted_confidence = min(1.0, max(0.1, base_confidence + context_score * 0.3))
+                confidence_scores.append(("explicit", adjusted_confidence))
                 self.pattern_stats[pattern] += 1
 
         # Check high-confidence patterns
@@ -1053,8 +1053,7 @@ class HiddenTodoAnalyzer:
                     matches[category].append(pattern)
                     # Adjust confidence based on context
                     base_confidence = 0.9
-                    adjusted_confidence = min(
-                        1.0, max(0.1, base_confidence + context_score * 0.2))
+                    adjusted_confidence = min(1.0, max(0.1, base_confidence + context_score * 0.2))
                     confidence_scores.append((category, adjusted_confidence))
                     self.pattern_stats[pattern] += 1
 
@@ -1065,8 +1064,7 @@ class HiddenTodoAnalyzer:
                     matches[category].append(pattern)
                     # Adjust confidence based on context
                     base_confidence = 0.6
-                    adjusted_confidence = min(
-                        1.0, max(0.1, base_confidence + context_score * 0.1))
+                    adjusted_confidence = min(1.0, max(0.1, base_confidence + context_score * 0.1))
                     confidence_scores.append((category, adjusted_confidence))
                     self.pattern_stats[pattern] += 1
 
@@ -1077,29 +1075,31 @@ class HiddenTodoAnalyzer:
         overall_confidence = max(score for _, score in confidence_scores)
 
         return {
-            'matches': matches,
-            'confidence_score': overall_confidence,
-            'confidence_breakdown': confidence_scores,
-            'context_score': context_score
+            "matches": matches,
+            "confidence_score": overall_confidence,
+            "confidence_breakdown": confidence_scores,
+            "context_score": context_score,
         }
 
-    def analyze_engineering_grade_suggestions(self, comment: str, line_num: int, file_path: Path) -> Dict[str, Any]:
+    def analyze_engineering_grade_suggestions(
+        self, comment: str, line_num: int, file_path: Path
+    ) -> Dict[str, Any]:
         """Analyze a TODO comment to suggest engineering-grade format improvements."""
         normalized = comment.strip()
         if not normalized:
             return {}
 
         # Only analyze explicit TODOs
-        if not re.search(r'\b(TODO|FIXME|HACK)\b', normalized, re.IGNORECASE):
+        if not re.search(r"\b(TODO|FIXME|HACK)\b", normalized, re.IGNORECASE):
             return {}
 
         suggestions = {
-            'needs_engineering_format': False,
-            'missing_elements': [],
-            'suggested_tier': None,
-            'priority_level': 'Medium',
-            'template_suggestion': None,
-            'confidence': 0.0
+            "needs_engineering_format": False,
+            "missing_elements": [],
+            "suggested_tier": None,
+            "priority_level": "Medium",
+            "template_suggestion": None,
+            "confidence": 0.0,
         }
 
         # Check if already has engineering-grade structure
@@ -1113,55 +1113,75 @@ class HiddenTodoAnalyzer:
                 break
 
         if not has_structure:
-            suggestions['needs_engineering_format'] = True
-            suggestions['confidence'] = 0.8
+            suggestions["needs_engineering_format"] = True
+            suggestions["confidence"] = 0.8
 
             # Check what's missing
             missing_elements = []
 
             # Check for completion checklist
-            if not any(re.search(pattern, normalized, re.IGNORECASE) for pattern in self.engineering_grade_patterns['completion_checklist']):
-                missing_elements.append('completion_checklist')
+            if not any(
+                re.search(pattern, normalized, re.IGNORECASE)
+                for pattern in self.engineering_grade_patterns["completion_checklist"]
+            ):
+                missing_elements.append("completion_checklist")
 
             # Check for acceptance criteria
-            if not any(re.search(pattern, normalized, re.IGNORECASE) for pattern in self.engineering_grade_patterns['acceptance_criteria']):
-                missing_elements.append('acceptance_criteria')
+            if not any(
+                re.search(pattern, normalized, re.IGNORECASE)
+                for pattern in self.engineering_grade_patterns["acceptance_criteria"]
+            ):
+                missing_elements.append("acceptance_criteria")
 
             # Check for dependencies
-            if not any(re.search(pattern, normalized, re.IGNORECASE) for pattern in self.engineering_grade_patterns['dependencies']):
-                missing_elements.append('dependencies')
+            if not any(
+                re.search(pattern, normalized, re.IGNORECASE)
+                for pattern in self.engineering_grade_patterns["dependencies"]
+            ):
+                missing_elements.append("dependencies")
 
             # Check for governance info
-            if not any(re.search(pattern, normalized, re.IGNORECASE) for pattern in self.engineering_grade_patterns['governance']):
-                missing_elements.append('governance')
+            if not any(
+                re.search(pattern, normalized, re.IGNORECASE)
+                for pattern in self.engineering_grade_patterns["governance"]
+            ):
+                missing_elements.append("governance")
 
-            suggestions['missing_elements'] = missing_elements
+            suggestions["missing_elements"] = missing_elements
 
             # Determine suggested CAWS tier based on content
-            if any(re.search(pattern, normalized, re.IGNORECASE) for pattern in self.needs_engineering_format_patterns['business_critical']):
-                suggestions['suggested_tier'] = 1
-                suggestions['priority_level'] = 'Critical'
-                suggestions['confidence'] = 0.9
-            elif any(re.search(pattern, normalized, re.IGNORECASE) for pattern in self.needs_engineering_format_patterns['vague_todos']):
-                suggestions['suggested_tier'] = 2
-                suggestions['priority_level'] = 'High'
-                suggestions['confidence'] = 0.7
+            if any(
+                re.search(pattern, normalized, re.IGNORECASE)
+                for pattern in self.needs_engineering_format_patterns["business_critical"]
+            ):
+                suggestions["suggested_tier"] = 1
+                suggestions["priority_level"] = "Critical"
+                suggestions["confidence"] = 0.9
+            elif any(
+                re.search(pattern, normalized, re.IGNORECASE)
+                for pattern in self.needs_engineering_format_patterns["vague_todos"]
+            ):
+                suggestions["suggested_tier"] = 2
+                suggestions["priority_level"] = "High"
+                suggestions["confidence"] = 0.7
             else:
-                suggestions['suggested_tier'] = 3
-                suggestions['priority_level'] = 'Medium'
-                suggestions['confidence'] = 0.6
+                suggestions["suggested_tier"] = 3
+                suggestions["priority_level"] = "Medium"
+                suggestions["confidence"] = 0.6
 
             # Generate template suggestion
-            suggestions['template_suggestion'] = self._generate_template_suggestion(
-                normalized, suggestions, file_path)
+            suggestions["template_suggestion"] = self._generate_template_suggestion(
+                normalized, suggestions, file_path
+            )
 
         return suggestions
 
-    def _generate_template_suggestion(self, todo_text: str, suggestions: Dict[str, Any], file_path: Path) -> str:
+    def _generate_template_suggestion(
+        self, todo_text: str, suggestions: Dict[str, Any], file_path: Path
+    ) -> str:
         """Generate a suggested engineering-grade TODO template based on the original TODO."""
         # Extract the main TODO description
-        todo_match = re.search(
-            r'\b(TODO|FIXME|HACK)\b[:\s]*(.*?)$', todo_text, re.IGNORECASE)
+        todo_match = re.search(r"\b(TODO|FIXME|HACK)\b[:\s]*(.*?)$", todo_text, re.IGNORECASE)
         if not todo_match:
             return ""
 
@@ -1170,15 +1190,15 @@ class HiddenTodoAnalyzer:
 
         # Determine language-specific comment prefix
         language = self.detect_language(file_path)
-        if language in ['rust', 'javascript', 'typescript', 'go', 'java', 'csharp', 'cpp', 'c']:
+        if language in ["rust", "javascript", "typescript", "go", "java", "csharp", "cpp", "c"]:
             comment_prefix = "//"
-        elif language in ['python', 'ruby', 'shell', 'yaml']:
+        elif language in ["python", "ruby", "shell", "yaml"]:
             comment_prefix = "#"
         else:
             comment_prefix = "//"
 
-        tier = suggestions.get('suggested_tier', 2)
-        priority = suggestions.get('priority_level', 'Medium')
+        tier = suggestions.get("suggested_tier", 2)
+        priority = suggestions.get("priority_level", "Medium")
 
         template = f"""{comment_prefix} {todo_type}: {description}
 {comment_prefix}       <One-sentence context & why this exists>
@@ -1235,52 +1255,52 @@ class HiddenTodoAnalyzer:
             relative_path = str(file_path)
 
         file_analysis = {
-            'file_path': relative_path,
-            'language': language,
-            'total_comments': len(comments),
-            'total_lines': self._count_file_lines(file_path),
-            'comment_lines': len(comments),
-            'hidden_todos': defaultdict(list),
-            'all_comments': []
+            "file_path": relative_path,
+            "language": language,
+            "total_comments": len(comments),
+            "total_lines": self._count_file_lines(file_path),
+            "comment_lines": len(comments),
+            "hidden_todos": defaultdict(list),
+            "all_comments": [],
         }
 
         for line_num, comment in comments:
             analysis = self.analyze_comment(comment, line_num, file_path)
             engineering_suggestions = self.analyze_engineering_grade_suggestions(
-                comment, line_num, file_path)
+                comment, line_num, file_path
+            )
 
-            if analysis and analysis['matches']:
+            if analysis and analysis["matches"]:
                 todo_data = {
-                    'comment': comment,
-                    'matches': analysis['matches'],
-                    'confidence_score': analysis['confidence_score'],
-                    'confidence_breakdown': analysis['confidence_breakdown'],
-                    'context_score': analysis['context_score']
+                    "comment": comment,
+                    "matches": analysis["matches"],
+                    "confidence_score": analysis["confidence_score"],
+                    "confidence_breakdown": analysis["confidence_breakdown"],
+                    "context_score": analysis["context_score"],
                 }
 
                 # Add engineering-grade suggestions if available
-                if engineering_suggestions and engineering_suggestions.get('needs_engineering_format'):
-                    todo_data['engineering_suggestions'] = engineering_suggestions
+                if engineering_suggestions and engineering_suggestions.get(
+                    "needs_engineering_format"
+                ):
+                    todo_data["engineering_suggestions"] = engineering_suggestions
 
-                file_analysis['hidden_todos'][line_num] = todo_data
+                file_analysis["hidden_todos"][line_num] = todo_data
 
             # Store all comments for analysis
-            file_analysis['all_comments'].append({
-                'line': line_num,
-                'comment': comment
-            })
+            file_analysis["all_comments"].append({"line": line_num, "comment": comment})
 
         # Detect stub implementations in code bodies
         for stub in self.detect_code_stubs(file_path, language):
-            line_num = stub['line']
-            reason = stub['reason']
-            snippet = stub['snippet']
-            confidence = stub['confidence']
-            context = stub.get('context_score', 0.0)
+            line_num = stub["line"]
+            reason = stub["reason"]
+            snippet = stub["snippet"]
+            confidence = stub["confidence"]
+            context = stub.get("context_score", 0.0)
 
             # Attempt to merge with nearby comment within 3 lines above
             nearby_comment_line = None
-            for existing_line in sorted(file_analysis['hidden_todos'].keys()):
+            for existing_line in sorted(file_analysis["hidden_todos"].keys()):
                 if existing_line == line_num:
                     nearby_comment_line = existing_line
                     break
@@ -1289,41 +1309,39 @@ class HiddenTodoAnalyzer:
 
             target_line = nearby_comment_line if nearby_comment_line is not None else line_num
 
-            if target_line in file_analysis['hidden_todos']:
-                entry = file_analysis['hidden_todos'][target_line]
-                entry['matches'].setdefault('code_stubs', []).append(reason)
-                entry['confidence_score'] = max(
-                    entry['confidence_score'], confidence)
-                entry['confidence_breakdown'].append(('code_stub', confidence))
-                entry['context_score'] = max(entry['context_score'], context)
+            if target_line in file_analysis["hidden_todos"]:
+                entry = file_analysis["hidden_todos"][target_line]
+                entry["matches"].setdefault("code_stubs", []).append(reason)
+                entry["confidence_score"] = max(entry["confidence_score"], confidence)
+                entry["confidence_breakdown"].append(("code_stub", confidence))
+                entry["context_score"] = max(entry["context_score"], context)
                 if target_line != line_num:
-                    related = entry.setdefault('related_stub_lines', [])
+                    related = entry.setdefault("related_stub_lines", [])
                     if line_num not in related:
                         related.append(line_num)
             else:
-                file_analysis['hidden_todos'][target_line] = {
-                    'comment': snippet,
-                    'matches': defaultdict(list, {'code_stubs': [reason]}),
-                    'confidence_score': confidence,
-                    'confidence_breakdown': [('code_stub', confidence)],
-                    'context_score': context,
+                file_analysis["hidden_todos"][target_line] = {
+                    "comment": snippet,
+                    "matches": defaultdict(list, {"code_stubs": [reason]}),
+                    "confidence_score": confidence,
+                    "confidence_breakdown": [("code_stub", confidence)],
+                    "context_score": context,
                 }
-                file_analysis['all_comments'].append({
-                    'line': line_num,
-                    'comment': snippet
-                })
+                file_analysis["all_comments"].append({"line": line_num, "comment": snippet})
 
         return file_analysis
 
     def _count_file_lines(self, file_path: Path) -> int:
         """Count total lines in a file."""
         try:
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 return sum(1 for _ in f)
         except Exception:
             return 0
 
-    def analyze_directory(self, languages: Optional[List[str]] = None, min_confidence: float = 0.6) -> Dict:
+    def analyze_directory(
+        self, languages: Optional[List[str]] = None, min_confidence: float = 0.6
+    ) -> Dict:
         """Analyze all files in the directory for hidden TODO patterns with improved accuracy."""
         print(f"Analyzing files with improved patterns in: {self.root_dir}")
         print(f"Minimum confidence threshold: {min_confidence}")
@@ -1333,12 +1351,11 @@ class HiddenTodoAnalyzer:
         for language, config in self.language_patterns.items():
             if languages and language not in languages:
                 continue
-            for ext in config['extensions']:
-                all_files.extend(self.root_dir.rglob(f'*{ext}'))
+            for ext in config["extensions"]:
+                all_files.extend(self.root_dir.rglob(f"*{ext}"))
 
         # Filter out ignored files
-        non_ignored_files = [
-            f for f in all_files if not self.should_ignore_file(f)]
+        non_ignored_files = [f for f in all_files if not self.should_ignore_file(f)]
 
         print(f"Found {len(all_files)} total files")
         print(f"Found {len(non_ignored_files)} non-ignored files")
@@ -1358,74 +1375,73 @@ class HiddenTodoAnalyzer:
         self.pattern_stats = defaultdict(int)
 
         all_results = {
-            'summary': {
-                'total_files': len(all_files),
-                'non_ignored_files': len(non_ignored_files),
-                'ignored_files': len(all_files) - len(non_ignored_files),
-                'language_counts': dict(language_counts),
-                'files_with_hidden_todos': 0,
-                'total_hidden_todos': 0,
-                'high_confidence_todos': 0,
-                'medium_confidence_todos': 0,
-                'low_confidence_todos': 0,
-                'code_stub_todos': 0,
-                'pattern_counts': {},
-                'min_confidence_threshold': min_confidence,
+            "summary": {
+                "total_files": len(all_files),
+                "non_ignored_files": len(non_ignored_files),
+                "ignored_files": len(all_files) - len(non_ignored_files),
+                "language_counts": dict(language_counts),
+                "files_with_hidden_todos": 0,
+                "total_hidden_todos": 0,
+                "high_confidence_todos": 0,
+                "medium_confidence_todos": 0,
+                "low_confidence_todos": 0,
+                "code_stub_todos": 0,
+                "pattern_counts": {},
+                "min_confidence_threshold": min_confidence,
             },
-            'files': {},
-            'patterns': defaultdict(list)
+            "files": {},
+            "patterns": defaultdict(list),
         }
 
         for file_path in non_ignored_files:
             print(f"Analyzing: {file_path.relative_to(self.root_dir)}")
             file_analysis = self.analyze_file(file_path)
 
-            if file_analysis and file_analysis['hidden_todos']:
+            if file_analysis and file_analysis["hidden_todos"]:
                 # Filter by confidence threshold
                 filtered_todos = {}
-                for line_num, data in file_analysis['hidden_todos'].items():
-                    if data['confidence_score'] >= min_confidence:
+                for line_num, data in file_analysis["hidden_todos"].items():
+                    if data["confidence_score"] >= min_confidence:
                         filtered_todos[line_num] = data
 
                         # Count by confidence level
-                        if data['confidence_score'] >= 0.9:
-                            all_results['summary']['high_confidence_todos'] += 1
-                        elif data['confidence_score'] >= 0.6:
-                            all_results['summary']['medium_confidence_todos'] += 1
+                        if data["confidence_score"] >= 0.9:
+                            all_results["summary"]["high_confidence_todos"] += 1
+                        elif data["confidence_score"] >= 0.6:
+                            all_results["summary"]["medium_confidence_todos"] += 1
                         else:
-                            all_results['summary']['low_confidence_todos'] += 1
+                            all_results["summary"]["low_confidence_todos"] += 1
 
                 if filtered_todos:
-                    file_analysis['hidden_todos'] = filtered_todos
-                    all_results['files'][file_analysis['file_path']
-                                         ] = file_analysis
-                    all_results['summary']['files_with_hidden_todos'] += 1
-                    all_results['summary']['total_hidden_todos'] += len(
-                        filtered_todos)
+                    file_analysis["hidden_todos"] = filtered_todos
+                    all_results["files"][file_analysis["file_path"]] = file_analysis
+                    all_results["summary"]["files_with_hidden_todos"] += 1
+                    all_results["summary"]["total_hidden_todos"] += len(filtered_todos)
 
                     # Group by patterns
                     for line_num, data in filtered_todos.items():
-                        for category, patterns in data['matches'].items():
-                            all_results['patterns'][category].append({
-                                'file': file_analysis['file_path'],
-                                'language': file_analysis['language'],
-                                'line': line_num,
-                                'comment': data['comment'],
-                                'patterns': patterns,
-                                'confidence_score': data['confidence_score'],
-                                'context_score': data['context_score']
-                            })
-                            if category == 'code_stubs':
-                                all_results['summary']['code_stub_todos'] += 1
+                        for category, patterns in data["matches"].items():
+                            all_results["patterns"][category].append(
+                                {
+                                    "file": file_analysis["file_path"],
+                                    "language": file_analysis["language"],
+                                    "line": line_num,
+                                    "comment": data["comment"],
+                                    "patterns": patterns,
+                                    "confidence_score": data["confidence_score"],
+                                    "context_score": data["context_score"],
+                                }
+                            )
+                            if category == "code_stubs":
+                                all_results["summary"]["code_stub_todos"] += 1
 
-        all_results['summary']['pattern_counts'] = dict(self.pattern_stats)
+        all_results["summary"]["pattern_counts"] = dict(self.pattern_stats)
 
         return all_results
 
     def analyze_files(self, file_paths: List[str], min_confidence: float = 0.7) -> Dict:
         """Analyze specific files for hidden TODO patterns."""
-        print(
-            f"Analyzing {len(file_paths)} specific files with improved patterns")
+        print(f"Analyzing {len(file_paths)} specific files with improved patterns")
         print(f"Minimum confidence threshold: {min_confidence}")
 
         # Convert string paths to Path objects and filter valid files
@@ -1435,28 +1451,27 @@ class HiddenTodoAnalyzer:
             if path.exists() and path.is_file():
                 valid_files.append(path)
             else:
-                print(
-                    f"Warning: File not found or not accessible: {file_path}")
+                print(f"Warning: File not found or not accessible: {file_path}")
 
         if not valid_files:
             print("No valid files to analyze")
             return {
-                'summary': {
-                    'total_files': 0,
-                    'non_ignored_files': 0,
-                    'ignored_files': 0,
-                    'language_counts': {},
-                    'files_with_hidden_todos': 0,
-                    'total_hidden_todos': 0,
-                    'high_confidence_todos': 0,
-                    'medium_confidence_todos': 0,
-                    'low_confidence_todos': 0,
-                    'code_stub_todos': 0,
-                    'pattern_counts': {},
-                    'min_confidence_threshold': min_confidence,
+                "summary": {
+                    "total_files": 0,
+                    "non_ignored_files": 0,
+                    "ignored_files": 0,
+                    "language_counts": {},
+                    "files_with_hidden_todos": 0,
+                    "total_hidden_todos": 0,
+                    "high_confidence_todos": 0,
+                    "medium_confidence_todos": 0,
+                    "low_confidence_todos": 0,
+                    "code_stub_todos": 0,
+                    "pattern_counts": {},
+                    "min_confidence_threshold": min_confidence,
                 },
-                'files': {},
-                'patterns': defaultdict(list)
+                "files": {},
+                "patterns": defaultdict(list),
             }
 
         # Reset pattern statistics for this run
@@ -1475,78 +1490,80 @@ class HiddenTodoAnalyzer:
                     non_ignored_files.append(file_path)
 
         all_results = {
-            'summary': {
-                'total_files': len(valid_files),
-                'non_ignored_files': len(non_ignored_files),
-                'ignored_files': len(valid_files) - len(non_ignored_files),
-                'language_counts': dict(language_counts),
-                'files_with_hidden_todos': 0,
-                'total_hidden_todos': 0,
-                'high_confidence_todos': 0,
-                'medium_confidence_todos': 0,
-                'low_confidence_todos': 0,
-                'code_stub_todos': 0,
-                'pattern_counts': {},
-                'min_confidence_threshold': min_confidence,
+            "summary": {
+                "total_files": len(valid_files),
+                "non_ignored_files": len(non_ignored_files),
+                "ignored_files": len(valid_files) - len(non_ignored_files),
+                "language_counts": dict(language_counts),
+                "files_with_hidden_todos": 0,
+                "total_hidden_todos": 0,
+                "high_confidence_todos": 0,
+                "medium_confidence_todos": 0,
+                "low_confidence_todos": 0,
+                "code_stub_todos": 0,
+                "pattern_counts": {},
+                "min_confidence_threshold": min_confidence,
             },
-            'files': {},
-            'patterns': defaultdict(list)
+            "files": {},
+            "patterns": defaultdict(list),
         }
 
         for file_path in non_ignored_files:
             print(f"Analyzing: {file_path}")
             file_analysis = self.analyze_file(file_path)
 
-            if file_analysis and file_analysis['hidden_todos']:
+            if file_analysis and file_analysis["hidden_todos"]:
                 # Filter by confidence threshold
                 filtered_todos = {}
-                for line_num, data in file_analysis['hidden_todos'].items():
-                    if data['confidence_score'] >= min_confidence:
+                for line_num, data in file_analysis["hidden_todos"].items():
+                    if data["confidence_score"] >= min_confidence:
                         filtered_todos[line_num] = data
 
                         # Count by confidence level
-                        if data['confidence_score'] >= 0.9:
-                            all_results['summary']['high_confidence_todos'] += 1
-                        elif data['confidence_score'] >= 0.6:
-                            all_results['summary']['medium_confidence_todos'] += 1
+                        if data["confidence_score"] >= 0.9:
+                            all_results["summary"]["high_confidence_todos"] += 1
+                        elif data["confidence_score"] >= 0.6:
+                            all_results["summary"]["medium_confidence_todos"] += 1
                         else:
-                            all_results['summary']['low_confidence_todos'] += 1
+                            all_results["summary"]["low_confidence_todos"] += 1
 
                         # Count patterns
-                        for pattern in data.get('matches', []):
+                        for pattern in data.get("matches", []):
                             self.pattern_stats[pattern] += 1
 
                 if filtered_todos:
-                    all_results['summary']['files_with_hidden_todos'] += 1
-                    all_results['summary']['total_hidden_todos'] += len(
-                        filtered_todos)
-                    all_results['files'][str(file_path)] = {
-                        'language': file_analysis['language'],
-                        'hidden_todos': filtered_todos,
-                        'total_lines': file_analysis['total_lines'],
-                        'comment_lines': file_analysis['comment_lines']
+                    all_results["summary"]["files_with_hidden_todos"] += 1
+                    all_results["summary"]["total_hidden_todos"] += len(filtered_todos)
+                    all_results["files"][str(file_path)] = {
+                        "language": file_analysis["language"],
+                        "hidden_todos": filtered_todos,
+                        "total_lines": file_analysis["total_lines"],
+                        "comment_lines": file_analysis["comment_lines"],
                     }
 
                     # Add to patterns
                     for line_num, data in filtered_todos.items():
-                        for pattern in data.get('matches', []):
-                            all_results['patterns'][pattern].append({
-                                'file': str(file_path),
-                                'language': file_analysis['language'],
-                                'line': line_num,
-                                'comment': data['comment'],
-                                'patterns': [pattern],
-                                'confidence_score': data['confidence_score'],
-                                'context_score': data.get('context_score', 0.0)
-                            })
+                        for pattern in data.get("matches", []):
+                            all_results["patterns"][pattern].append(
+                                {
+                                    "file": str(file_path),
+                                    "language": file_analysis["language"],
+                                    "line": line_num,
+                                    "comment": data["comment"],
+                                    "patterns": [pattern],
+                                    "confidence_score": data["confidence_score"],
+                                    "context_score": data.get("context_score", 0.0),
+                                }
+                            )
 
         # Finalize pattern counts
-        all_results['summary']['pattern_counts'] = dict(self.pattern_stats)
+        all_results["summary"]["pattern_counts"] = dict(self.pattern_stats)
 
         return all_results
 
-    def analyze_staged_files_with_dependencies(self, min_confidence: float = 0.7,
-                                               dependency_resolution: bool = True) -> Dict:
+    def analyze_staged_files_with_dependencies(
+        self, min_confidence: float = 0.7, dependency_resolution: bool = True
+    ) -> Dict:
         """
         Analyze staged files for hidden TODOs with dependency resolution.
 
@@ -1560,32 +1577,36 @@ class HiddenTodoAnalyzer:
 
         try:
             # Get staged files
-            result = subprocess.run(['git', 'diff', '--cached', '--name-only'],
-                                    capture_output=True, text=True, check=True)
-            staged_files = [f.strip()
-                            for f in result.stdout.split('\n') if f.strip()]
+            result = subprocess.run(
+                ["git", "diff", "--cached", "--name-only"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            staged_files = [f.strip() for f in result.stdout.split("\n") if f.strip()]
 
             # Filter for supported file types
             supported_extensions = set()
             for lang_config in self.language_patterns.values():
-                supported_extensions.update(lang_config['extensions'])
+                supported_extensions.update(lang_config["extensions"])
 
-            staged_files = [f for f in staged_files
-                            if any(f.endswith(ext) for ext in supported_extensions)]
+            staged_files = [
+                f for f in staged_files if any(f.endswith(ext) for ext in supported_extensions)
+            ]
 
             if not staged_files:
                 return {
-                    'summary': {
-                        'staged_files': 0,
-                        'analyzed_files': 0,
-                        'total_hidden_todos': 0,
-                        'blocking_todos': 0,
-                        'non_blocking_todos': 0,
-                        'dependency_resolution_enabled': dependency_resolution
+                    "summary": {
+                        "staged_files": 0,
+                        "analyzed_files": 0,
+                        "total_hidden_todos": 0,
+                        "blocking_todos": 0,
+                        "non_blocking_todos": 0,
+                        "dependency_resolution_enabled": dependency_resolution,
                     },
-                    'files': {},
-                    'dependencies': {},
-                    'blocking_analysis': {}
+                    "files": {},
+                    "dependencies": {},
+                    "blocking_analysis": {},
                 }
 
             print(f"📁 Found {len(staged_files)} staged files to analyze")
@@ -1595,34 +1616,34 @@ class HiddenTodoAnalyzer:
 
             # Add dependency resolution if enabled
             if dependency_resolution:
-                dependency_info = self._resolve_todo_dependencies(
-                    analysis_results)
-                analysis_results['dependencies'] = dependency_info
-                analysis_results['blocking_analysis'] = self._analyze_blocking_todos(
-                    analysis_results, dependency_info)
+                dependency_info = self._resolve_todo_dependencies(analysis_results)
+                analysis_results["dependencies"] = dependency_info
+                analysis_results["blocking_analysis"] = self._analyze_blocking_todos(
+                    analysis_results, dependency_info
+                )
 
             # Update summary with staged file info
-            analysis_results['summary']['staged_files'] = len(staged_files)
-            analysis_results['summary']['analyzed_files'] = len(staged_files)
-            analysis_results['summary']['dependency_resolution_enabled'] = dependency_resolution
+            analysis_results["summary"]["staged_files"] = len(staged_files)
+            analysis_results["summary"]["analyzed_files"] = len(staged_files)
+            analysis_results["summary"]["dependency_resolution_enabled"] = dependency_resolution
 
             return analysis_results
 
         except subprocess.CalledProcessError as e:
             print(f"Error getting staged files: {e}")
             return {
-                'summary': {
-                    'staged_files': 0,
-                    'analyzed_files': 0,
-                    'total_hidden_todos': 0,
-                    'blocking_todos': 0,
-                    'non_blocking_todos': 0,
-                    'dependency_resolution_enabled': False,
-                    'error': str(e)
+                "summary": {
+                    "staged_files": 0,
+                    "analyzed_files": 0,
+                    "total_hidden_todos": 0,
+                    "blocking_todos": 0,
+                    "non_blocking_todos": 0,
+                    "dependency_resolution_enabled": False,
+                    "error": str(e),
                 },
-                'files': {},
-                'dependencies': {},
-                'blocking_analysis': {}
+                "files": {},
+                "dependencies": {},
+                "blocking_analysis": {},
             }
 
     def _resolve_todo_dependencies(self, analysis_results: Dict) -> Dict:
@@ -1633,13 +1654,12 @@ class HiddenTodoAnalyzer:
         """
         dependencies = {}
 
-        for file_path, file_data in analysis_results['files'].items():
+        for file_path, file_data in analysis_results["files"].items():
             file_deps = {}
 
-            for line_num, todo_data in file_data['hidden_todos'].items():
-                todo_text = todo_data['comment']
-                todo_deps = self._extract_dependencies_from_todo(
-                    todo_text, file_path)
+            for line_num, todo_data in file_data["hidden_todos"].items():
+                todo_text = todo_data["comment"]
+                todo_deps = self._extract_dependencies_from_todo(todo_text, file_path)
                 file_deps[line_num] = todo_deps
 
             if file_deps:
@@ -1658,54 +1678,53 @@ class HiddenTodoAnalyzer:
         - Required/Optional dependencies
         """
         dependencies = {
-            'blocking': False,
-            'caws_tier': None,
-            'required_deps': [],
-            'optional_deps': [],
-            'estimated_effort': None,
-            'priority': 'Medium'
+            "blocking": False,
+            "caws_tier": None,
+            "required_deps": [],
+            "optional_deps": [],
+            "estimated_effort": None,
+            "priority": "Medium",
         }
 
         # Look for DEPENDENCIES section
-        deps_match = re.search(
-            r'DEPENDENCIES:\s*\n((?:- .*\n?)*)', todo_text, re.MULTILINE)
+        deps_match = re.search(r"DEPENDENCIES:\s*\n((?:- .*\n?)*)", todo_text, re.MULTILINE)
         if deps_match:
             deps_text = deps_match.group(1)
-            for line in deps_text.split('\n'):
+            for line in deps_text.split("\n"):
                 line = line.strip()
-                if line.startswith('- '):
+                if line.startswith("- "):
                     dep_text = line[2:].strip()
-                    if '(Required)' in dep_text:
-                        dependencies['required_deps'].append(
-                            dep_text.replace('(Required)', '').strip())
-                    elif '(Optional)' in dep_text:
-                        dependencies['optional_deps'].append(
-                            dep_text.replace('(Optional)', '').strip())
+                    if "(Required)" in dep_text:
+                        dependencies["required_deps"].append(
+                            dep_text.replace("(Required)", "").strip()
+                        )
+                    elif "(Optional)" in dep_text:
+                        dependencies["optional_deps"].append(
+                            dep_text.replace("(Optional)", "").strip()
+                        )
                     else:
                         # Default to required if not specified
-                        dependencies['required_deps'].append(dep_text)
+                        dependencies["required_deps"].append(dep_text)
 
         # Look for BLOCKING status
-        blocking_match = re.search(r'BLOCKING:\s*{Yes|No}', todo_text)
+        blocking_match = re.search(r"BLOCKING:\s*{Yes|No}", todo_text)
         if blocking_match:
-            dependencies['blocking'] = 'Yes' in blocking_match.group(0)
+            dependencies["blocking"] = "Yes" in blocking_match.group(0)
 
         # Look for CAWS Tier
-        tier_match = re.search(r'CAWS Tier:\s*(\d+)', todo_text)
+        tier_match = re.search(r"CAWS Tier:\s*(\d+)", todo_text)
         if tier_match:
-            dependencies['caws_tier'] = int(tier_match.group(1))
+            dependencies["caws_tier"] = int(tier_match.group(1))
 
         # Look for PRIORITY
-        priority_match = re.search(
-            r'PRIORITY:\s*{Critical|High|Medium|Low}', todo_text)
+        priority_match = re.search(r"PRIORITY:\s*{Critical|High|Medium|Low}", todo_text)
         if priority_match:
-            dependencies['priority'] = priority_match.group(0).split(':')[
-                1].strip()
+            dependencies["priority"] = priority_match.group(0).split(":")[1].strip()
 
         # Look for ESTIMATED EFFORT
-        effort_match = re.search(r'ESTIMATED EFFORT:\s*([^\\n]+)', todo_text)
+        effort_match = re.search(r"ESTIMATED EFFORT:\s*([^\\n]+)", todo_text)
         if effort_match:
-            dependencies['estimated_effort'] = effort_match.group(1).strip()
+            dependencies["estimated_effort"] = effort_match.group(1).strip()
 
         return dependencies
 
@@ -1714,51 +1733,48 @@ class HiddenTodoAnalyzer:
         Analyze which TODOs are blocking based on dependency resolution.
         """
         blocking_analysis = {
-            'blocking_todos': [],
-            'non_blocking_todos': [],
-            'critical_blockers': [],
-            'dependency_summary': {
-                'total_required_deps': 0,
-                'resolved_deps': 0,
-                'unresolved_deps': 0
-            }
+            "blocking_todos": [],
+            "non_blocking_todos": [],
+            "critical_blockers": [],
+            "dependency_summary": {
+                "total_required_deps": 0,
+                "resolved_deps": 0,
+                "unresolved_deps": 0,
+            },
         }
 
-        for file_path, file_data in analysis_results['files'].items():
+        for file_path, file_data in analysis_results["files"].items():
             file_deps = dependency_info.get(file_path, {})
 
-            for line_num, todo_data in file_data['hidden_todos'].items():
+            for line_num, todo_data in file_data["hidden_todos"].items():
                 todo_deps = file_deps.get(line_num, {})
 
                 # Determine if TODO is blocking
                 is_blocking = self._is_todo_blocking(todo_deps, file_path)
 
                 todo_info = {
-                    'file': file_path,
-                    'line': line_num,
-                    'text': todo_data['comment'],
-                    'confidence': todo_data['confidence_score'],
-                    'dependencies': todo_deps,
-                    'blocking': is_blocking
+                    "file": file_path,
+                    "line": line_num,
+                    "text": todo_data["comment"],
+                    "confidence": todo_data["confidence_score"],
+                    "dependencies": todo_deps,
+                    "blocking": is_blocking,
                 }
 
                 if is_blocking:
-                    blocking_analysis['blocking_todos'].append(todo_info)
+                    blocking_analysis["blocking_todos"].append(todo_info)
 
                     # Check if it's critical
-                    if todo_deps.get('priority') == 'Critical' or todo_deps.get('caws_tier') == 1:
-                        blocking_analysis['critical_blockers'].append(
-                            todo_info)
+                    if todo_deps.get("priority") == "Critical" or todo_deps.get("caws_tier") == 1:
+                        blocking_analysis["critical_blockers"].append(todo_info)
                 else:
-                    blocking_analysis['non_blocking_todos'].append(todo_info)
+                    blocking_analysis["non_blocking_todos"].append(todo_info)
 
                 # Update dependency summary
-                required_deps = todo_deps.get('required_deps', [])
-                blocking_analysis['dependency_summary']['total_required_deps'] += len(
-                    required_deps)
+                required_deps = todo_deps.get("required_deps", [])
+                blocking_analysis["dependency_summary"]["total_required_deps"] += len(required_deps)
                 # For now, assume all dependencies are unresolved (would need actual resolution logic)
-                blocking_analysis['dependency_summary']['unresolved_deps'] += len(
-                    required_deps)
+                blocking_analysis["dependency_summary"]["unresolved_deps"] += len(required_deps)
 
         return blocking_analysis
 
@@ -1767,18 +1783,18 @@ class HiddenTodoAnalyzer:
         Determine if a TODO is blocking based on its dependencies and context.
         """
         # Explicit blocking flag
-        if todo_deps.get('blocking', False):
+        if todo_deps.get("blocking", False):
             return True
 
         # High priority or critical tier
-        if todo_deps.get('priority') in ['Critical', 'High']:
+        if todo_deps.get("priority") in ["Critical", "High"]:
             return True
 
-        if todo_deps.get('caws_tier') == 1:
+        if todo_deps.get("caws_tier") == 1:
             return True
 
         # Has required dependencies (simplified check)
-        if todo_deps.get('required_deps'):
+        if todo_deps.get("required_deps"):
             return True
 
         return False
@@ -1791,144 +1807,162 @@ class HiddenTodoAnalyzer:
         report.append("")
 
         # Summary
-        summary = results['summary']
+        summary = results["summary"]
         report.append("## Summary")
         report.append(f"- Total files: {summary['total_files']}")
         report.append(f"- Non-ignored files: {summary['non_ignored_files']}")
         report.append(f"- Ignored files: {summary['ignored_files']}")
-        report.append(
-            f"- Files with hidden TODOs: {summary['files_with_hidden_todos']}")
-        report.append(
-            f"- Total hidden TODOs found: {summary['total_hidden_todos']}")
-        report.append(
-            f"- Code stub detections: {summary.get('code_stub_todos', 0)}")
-        report.append(
-            f"- High confidence TODOs (≥0.9): {summary['high_confidence_todos']}")
-        report.append(
-            f"- Medium confidence TODOs (≥0.6): {summary['medium_confidence_todos']}")
-        report.append(
-            f"- Low confidence TODOs (<0.6): {summary['low_confidence_todos']}")
-        report.append(
-            f"- Minimum confidence threshold: {summary['min_confidence_threshold']}")
+        report.append(f"- Files with hidden TODOs: {summary['files_with_hidden_todos']}")
+        report.append(f"- Total hidden TODOs found: {summary['total_hidden_todos']}")
+        report.append(f"- Code stub detections: {summary.get('code_stub_todos', 0)}")
+        report.append(f"- High confidence TODOs (≥0.9): {summary['high_confidence_todos']}")
+        report.append(f"- Medium confidence TODOs (≥0.6): {summary['medium_confidence_todos']}")
+        report.append(f"- Low confidence TODOs (<0.6): {summary['low_confidence_todos']}")
+        report.append(f"- Minimum confidence threshold: {summary['min_confidence_threshold']}")
         report.append("")
 
         # Language breakdown
         report.append("## Files by Language")
-        for lang, count in sorted(summary['language_counts'].items()):
+        for lang, count in sorted(summary["language_counts"].items()):
             report.append(f"- **{lang}**: {count} files")
         report.append("")
 
         # Pattern statistics
-        if summary['pattern_counts']:
+        if summary["pattern_counts"]:
             report.append("## Pattern Statistics")
-            for pattern, count in sorted(summary['pattern_counts'].items(), key=lambda x: x[1], reverse=True):
+            for pattern, count in sorted(
+                summary["pattern_counts"].items(), key=lambda x: x[1], reverse=True
+            ):
                 if count > 0:
                     report.append(f"- `{pattern}`: {count} occurrences")
             report.append("")
 
         # Files with most high-confidence hidden TODOs
-        if results['files']:
+        if results["files"]:
             report.append("## Files with High-Confidence Hidden TODOs")
             file_todo_counts = []
-            for file_path, data in results['files'].items():
-                high_conf_count = sum(1 for todo in data['hidden_todos'].values()
-                                      if todo['confidence_score'] >= 0.9)
+            for file_path, data in results["files"].items():
+                high_conf_count = sum(
+                    1 for todo in data["hidden_todos"].values() if todo["confidence_score"] >= 0.9
+                )
                 if high_conf_count > 0:
-                    file_todo_counts.append(
-                        (file_path, data['language'], high_conf_count))
+                    file_todo_counts.append((file_path, data["language"], high_conf_count))
 
             file_todo_counts.sort(key=lambda x: x[2], reverse=True)
             for file_path, language, count in file_todo_counts:
-                report.append(
-                    f"- `{file_path}` ({language}): {count} high-confidence TODOs")
+                report.append(f"- `{file_path}` ({language}): {count} high-confidence TODOs")
             report.append("")
 
         # Engineering-grade TODO suggestions
         engineering_suggestions = []
-        for file_path, file_data in results['files'].items():
-            for line_num, todo_data in file_data['hidden_todos'].items():
-                if 'engineering_suggestions' in todo_data:
-                    suggestions = todo_data['engineering_suggestions']
-                    if suggestions.get('needs_engineering_format'):
-                        engineering_suggestions.append({
-                            'file': file_path,
-                            'line': line_num,
-                            'language': file_data['language'],
-                            'original_comment': todo_data['comment'],
-                            'suggestions': suggestions
-                        })
+        for file_path, file_data in results["files"].items():
+            for line_num, todo_data in file_data["hidden_todos"].items():
+                if "engineering_suggestions" in todo_data:
+                    suggestions = todo_data["engineering_suggestions"]
+                    if suggestions.get("needs_engineering_format"):
+                        engineering_suggestions.append(
+                            {
+                                "file": file_path,
+                                "line": line_num,
+                                "language": file_data["language"],
+                                "original_comment": todo_data["comment"],
+                                "suggestions": suggestions,
+                            }
+                        )
 
         if engineering_suggestions:
             report.append("## Engineering-Grade TODO Suggestions")
             report.append("")
-            report.append(
-                "The following TODOs should be upgraded to the engineering-grade format:")
+            report.append("The following TODOs should be upgraded to the engineering-grade format:")
             report.append("")
 
             for suggestion in engineering_suggestions[:10]:  # Limit to top 10
                 report.append(
-                    f"### `{suggestion['file']}:{suggestion['line']}` ({suggestion['language']})")
+                    f"### `{suggestion['file']}:{suggestion['line']}` ({suggestion['language']})"
+                )
+                report.append(f"**Original:** {suggestion['original_comment'][:100]}...")
+                report.append(f"**Suggested Tier:** {suggestion['suggestions']['suggested_tier']}")
+                report.append(f"**Priority:** {suggestion['suggestions']['priority_level']}")
                 report.append(
-                    f"**Original:** {suggestion['original_comment'][:100]}...")
-                report.append(
-                    f"**Suggested Tier:** {suggestion['suggestions']['suggested_tier']}")
-                report.append(
-                    f"**Priority:** {suggestion['suggestions']['priority_level']}")
-                report.append(
-                    f"**Missing Elements:** {', '.join(suggestion['suggestions']['missing_elements'])}")
+                    f"**Missing Elements:** {', '.join(suggestion['suggestions']['missing_elements'])}"
+                )
                 report.append("")
                 report.append("**Suggested Template:**")
                 report.append("```")
-                report.append(suggestion['suggestions']['template_suggestion'])
+                report.append(suggestion["suggestions"]["template_suggestion"])
                 report.append("```")
                 report.append("")
 
             if len(engineering_suggestions) > 10:
                 report.append(
-                    f"... and {len(engineering_suggestions) - 10} more TODOs need engineering-grade format")
+                    f"... and {len(engineering_suggestions) - 10} more TODOs need engineering-grade format"
+                )
                 report.append("")
 
         # Pattern categories with confidence scores
-        if results['patterns']:
+        if results["patterns"]:
             report.append("## Pattern Categories by Confidence")
-            for category, items in results['patterns'].items():
+            for category, items in results["patterns"].items():
                 if items:
                     high_conf_items = [
-                        item for item in items if 'confidence_score' in item and item['confidence_score'] >= 0.9]
+                        item
+                        for item in items
+                        if "confidence_score" in item and item["confidence_score"] >= 0.9
+                    ]
                     medium_conf_items = [
-                        item for item in items if 'confidence_score' in item and 0.6 <= item['confidence_score'] < 0.9]
+                        item
+                        for item in items
+                        if "confidence_score" in item and 0.6 <= item["confidence_score"] < 0.9
+                    ]
                     low_conf_items = [
-                        item for item in items if 'confidence_score' in item and item['confidence_score'] < 0.6]
+                        item
+                        for item in items
+                        if "confidence_score" in item and item["confidence_score"] < 0.6
+                    ]
 
                     if high_conf_items or medium_conf_items:
                         report.append(
-                            f"### {category.replace('_', ' ').title()} ({len(items)} items)")
+                            f"### {category.replace('_', ' ').title()} ({len(items)} items)"
+                        )
 
                         if high_conf_items:
-                            report.append(
-                                f"#### High Confidence ({len(high_conf_items)} items)")
+                            report.append(f"#### High Confidence ({len(high_conf_items)} items)")
                             for item in high_conf_items[:3]:
-                                context_info = f" (context: {item['context_score']:.1f})" if 'context_score' in item else ""
+                                context_info = (
+                                    f" (context: {item['context_score']:.1f})"
+                                    if "context_score" in item
+                                    else ""
+                                )
                                 report.append(
-                                    f"- `{item['file']}:{item['line']}` ({item['language']}, conf: {item['confidence_score']:.1f}{context_info}): {item['comment'][:80]}...")
+                                    f"- `{item['file']}:{item['line']}` ({item['language']}, conf: {item['confidence_score']:.1f}{context_info}): {item['comment'][:80]}..."
+                                )
                             if len(high_conf_items) > 3:
                                 report.append(
-                                    f"- ... and {len(high_conf_items) - 3} more high-confidence items")
+                                    f"- ... and {len(high_conf_items) - 3} more high-confidence items"
+                                )
 
                         if medium_conf_items:
                             report.append(
-                                f"#### Medium Confidence ({len(medium_conf_items)} items)")
+                                f"#### Medium Confidence ({len(medium_conf_items)} items)"
+                            )
                             for item in medium_conf_items[:2]:
-                                context_info = f" (context: {item['context_score']:.1f})" if 'context_score' in item else ""
+                                context_info = (
+                                    f" (context: {item['context_score']:.1f})"
+                                    if "context_score" in item
+                                    else ""
+                                )
                                 report.append(
-                                    f"- `{item['file']}:{item['line']}` ({item['language']}, conf: {item['confidence_score']:.1f}{context_info}): {item['comment'][:80]}...")
+                                    f"- `{item['file']}:{item['line']}` ({item['language']}, conf: {item['confidence_score']:.1f}{context_info}): {item['comment'][:80]}..."
+                                )
                             if len(medium_conf_items) > 2:
                                 report.append(
-                                    f"- ... and {len(medium_conf_items) - 2} more medium-confidence items")
+                                    f"- ... and {len(medium_conf_items) - 2} more medium-confidence items"
+                                )
 
                         if low_conf_items:
                             report.append(
-                                f"#### Low Confidence ({len(low_conf_items)} items) - *Consider reviewing for false positives*")
+                                f"#### Low Confidence ({len(low_conf_items)} items) - *Consider reviewing for false positives*"
+                            )
 
                         report.append("")
 
@@ -1942,32 +1976,56 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description='Analyze files for hidden TODO patterns with improved accuracy')
-    parser.add_argument('--root', default='.',
-                        help='Root directory to analyze (default: current directory)')
-    parser.add_argument('--files', nargs='+',
-                        help='Specific files to analyze (instead of scanning directory)')
-    parser.add_argument('--languages', nargs='+',
-                        help='Specific languages to analyze (e.g., rust python javascript)')
+        description="Analyze files for hidden TODO patterns with improved accuracy"
+    )
     parser.add_argument(
-        '--output-json', help='Output JSON file for detailed results')
-    parser.add_argument('--output-md', help='Output Markdown report file')
-    parser.add_argument('--min-confidence', type=float, default=0.7,
-                        help='Minimum confidence threshold (0.0-1.0, default: 0.7)')
-    parser.add_argument('--verbose', '-v',
-                        action='store_true', help='Verbose output')
-    parser.add_argument('--disable-code-stub-scan',
-                        action='store_true', help='Disable code stub detection heuristics')
-    parser.add_argument('--ci-mode',
-                        action='store_true', help='CI mode - exit with error code if hidden TODOs found')
-    parser.add_argument('--warn-only',
-                        action='store_true', help='Warning mode - only warn, never fail')
-    parser.add_argument('--staged-only',
-                        action='store_true', help='Only analyze staged files with dependency resolution')
-    parser.add_argument('--disable-dependency-resolution',
-                        action='store_true', help='Disable dependency resolution for staged files')
-    parser.add_argument('--engineering-suggestions',
-                        action='store_true', help='Include engineering-grade TODO format suggestions')
+        "--root", default=".", help="Root directory to analyze (default: current directory)"
+    )
+    parser.add_argument(
+        "--files", nargs="+", help="Specific files to analyze (instead of scanning directory)"
+    )
+    parser.add_argument(
+        "--languages",
+        nargs="+",
+        help="Specific languages to analyze (e.g., rust python javascript)",
+    )
+    parser.add_argument("--output-json", help="Output JSON file for detailed results")
+    parser.add_argument("--output-md", help="Output Markdown report file")
+    parser.add_argument(
+        "--min-confidence",
+        type=float,
+        default=0.7,
+        help="Minimum confidence threshold (0.0-1.0, default: 0.7)",
+    )
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
+    parser.add_argument(
+        "--disable-code-stub-scan",
+        action="store_true",
+        help="Disable code stub detection heuristics",
+    )
+    parser.add_argument(
+        "--ci-mode",
+        action="store_true",
+        help="CI mode - exit with error code if hidden TODOs found",
+    )
+    parser.add_argument(
+        "--warn-only", action="store_true", help="Warning mode - only warn, never fail"
+    )
+    parser.add_argument(
+        "--staged-only",
+        action="store_true",
+        help="Only analyze staged files with dependency resolution",
+    )
+    parser.add_argument(
+        "--disable-dependency-resolution",
+        action="store_true",
+        help="Disable dependency resolution for staged files",
+    )
+    parser.add_argument(
+        "--engineering-suggestions",
+        action="store_true",
+        help="Include engineering-grade TODO format suggestions",
+    )
 
     args = parser.parse_args()
 
@@ -1979,21 +2037,19 @@ def main():
     # Analyze staged files with dependency resolution
     if args.staged_only:
         results = analyzer.analyze_staged_files_with_dependencies(
-            args.min_confidence,
-            dependency_resolution=not args.disable_dependency_resolution
+            args.min_confidence, dependency_resolution=not args.disable_dependency_resolution
         )
     # Analyze specific files or entire directory
     elif args.files:
         results = analyzer.analyze_files(args.files, args.min_confidence)
     else:
-        results = analyzer.analyze_directory(
-            args.languages, args.min_confidence)
+        results = analyzer.analyze_directory(args.languages, args.min_confidence)
 
     # Print summary
-    summary = results['summary']
-    print(f"\n{'='*60}")
+    summary = results["summary"]
+    print(f"\n{'=' * 60}")
     print("IMPROVED HIDDEN TODO ANALYSIS COMPLETE (v2.0)")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Total files: {summary['total_files']}")
     print(f"Non-ignored files: {summary['non_ignored_files']}")
     print(f"Ignored files: {summary['ignored_files']}")
@@ -2005,24 +2061,26 @@ def main():
     print(f"Confidence threshold: {summary['min_confidence_threshold']}")
 
     print("\nFiles by language:")
-    for lang, count in sorted(summary['language_counts'].items()):
+    for lang, count in sorted(summary["language_counts"].items()):
         print(f"  {lang}: {count} files")
 
-    if summary['pattern_counts']:
+    if summary["pattern_counts"]:
         print("\nTop patterns found:")
-        for pattern, count in sorted(summary['pattern_counts'].items(), key=lambda x: x[1], reverse=True)[:15]:
+        for pattern, count in sorted(
+            summary["pattern_counts"].items(), key=lambda x: x[1], reverse=True
+        )[:15]:
             if count > 0:
                 print(f"  {pattern}: {count}")
 
     # Save reports
     if args.output_json:
-        with open(args.output_json, 'w') as f:
+        with open(args.output_json, "w") as f:
             json.dump(results, f, indent=2)
         print(f"\nDetailed results saved to: {args.output_json}")
 
     if args.output_md:
         report = analyzer.generate_report(results)
-        with open(args.output_md, 'w') as f:
+        with open(args.output_md, "w") as f:
             f.write(report)
         print(f"Report saved to: {args.output_md}")
     else:
@@ -2033,23 +2091,20 @@ def main():
             print(f"⚠️  Could not generate report: {e}")
 
     # Handle CI mode and warn-only mode
-    summary = results['summary']
-    total_hidden_todos = summary['total_hidden_todos']
+    summary = results["summary"]
+    total_hidden_todos = summary["total_hidden_todos"]
 
     if total_hidden_todos > 0:
         if args.ci_mode:
-            print(
-                f"\n❌ CI MODE: Found {total_hidden_todos} hidden TODOs - blocking commit/push")
+            print(f"\n❌ CI MODE: Found {total_hidden_todos} hidden TODOs - blocking commit/push")
             exit(1)
         elif args.warn_only:
-            print(
-                f"\n⚠️  WARN MODE: Found {total_hidden_todos} hidden TODOs - proceeding anyway")
+            print(f"\n⚠️  WARN MODE: Found {total_hidden_todos} hidden TODOs - proceeding anyway")
         else:
-            print(
-                f"\n⚠️  Found {total_hidden_todos} hidden TODOs - consider addressing them")
+            print(f"\n⚠️  Found {total_hidden_todos} hidden TODOs - consider addressing them")
     else:
         print("\n✅ No hidden TODOs found - good job!")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

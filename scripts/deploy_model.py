@@ -7,6 +7,7 @@ Generates:
 - Runtime config file (JSON) with appropriate settings
 - Deployment manifest with model capabilities
 """
+
 import argparse
 import json
 import sys
@@ -15,6 +16,7 @@ from typing import Dict, Any, Optional
 
 try:
     import torch
+
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
@@ -25,18 +27,18 @@ def load_checkpoint(checkpoint_path: Path) -> Dict[str, Any]:
     if not TORCH_AVAILABLE:
         raise ImportError("PyTorch required for checkpoint loading")
 
-    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
 
     # Extract model architecture info
-    model_arch = checkpoint.get('model_arch', {})
-    config = checkpoint.get('config', {})
-    arch_cfg = config.get('arch', {})
+    model_arch = checkpoint.get("model_arch", {})
+    config = checkpoint.get("config", {})
+    arch_cfg = config.get("arch", {})
 
     return {
-        'checkpoint': checkpoint,
-        'model_arch': model_arch,
-        'arch_cfg': arch_cfg,
-        'step': checkpoint.get('step', 0),
+        "checkpoint": checkpoint,
+        "model_arch": model_arch,
+        "arch_cfg": arch_cfg,
+        "step": checkpoint.get("step", 0),
     }
 
 
@@ -60,7 +62,7 @@ def generate_runtime_config(
         caws_tier_enum = tier_map.get(caws_tier, CAWSBudgetTier.TIER_2)
 
         # Enable halt head if model supports it
-        if model_arch.get('use_halt_head', False):
+        if model_arch.get("use_halt_head", False):
             halt_head_enabled = True
 
         config = RuntimeConfig(
@@ -78,7 +80,7 @@ def generate_runtime_config(
             "halt_head_enabled": halt_head_enabled,
             "caws_tier": caws_tier,
         }
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             json.dump(config_dict, f, indent=2)
         print(f"[deploy_model] Generated basic runtime config: {output_path}")
 
@@ -93,10 +95,10 @@ def generate_deployment_manifest(
     """Generate deployment manifest with model capabilities."""
     manifest = {
         "model_info": {
-            "checkpoint_step": checkpoint_info['step'],
-            "use_halt_head": checkpoint_info['model_arch'].get('use_halt_head', False),
-            "use_self_evaluation": checkpoint_info['model_arch'].get('use_self_evaluation', False),
-            "arch": checkpoint_info['arch_cfg'],
+            "checkpoint_step": checkpoint_info["step"],
+            "use_halt_head": checkpoint_info["model_arch"].get("use_halt_head", False),
+            "use_self_evaluation": checkpoint_info["model_arch"].get("use_self_evaluation", False),
+            "arch": checkpoint_info["arch_cfg"],
         },
         "artifacts": {
             "pytorch_export": str(pytorch_export_path) if pytorch_export_path else None,
@@ -105,7 +107,7 @@ def generate_deployment_manifest(
         },
         "capabilities": {
             "latent_reasoning": False,  # Set from runtime config
-            "halt_head": checkpoint_info['model_arch'].get('use_halt_head', False),
+            "halt_head": checkpoint_info["model_arch"].get("use_halt_head", False),
             "code_mode": True,  # Always available
         },
     }
@@ -114,42 +116,43 @@ def generate_deployment_manifest(
     if runtime_config_path.exists():
         try:
             from runtime.config import RuntimeConfig
+
             config = RuntimeConfig.from_file(runtime_config_path)
             manifest["capabilities"]["latent_reasoning"] = config.latent_mode_enabled
             manifest["capabilities"]["halt_head"] = config.halt_head_enabled
         except Exception:
             # Fallback: read JSON directly
-            with open(runtime_config_path, 'r') as f:
+            with open(runtime_config_path, "r") as f:
                 config_dict = json.load(f)
                 manifest["capabilities"]["latent_reasoning"] = config_dict.get(
-                    "latent_mode_enabled", False)
-                manifest["capabilities"]["halt_head"] = config_dict.get(
-                    "halt_head_enabled", False)
+                    "latent_mode_enabled", False
+                )
+                manifest["capabilities"]["halt_head"] = config_dict.get("halt_head_enabled", False)
 
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         json.dump(manifest, f, indent=2)
     print(f"[deploy_model] Generated deployment manifest: {output_path}")
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        "Deploy Model - Generate deployment artifacts")
-    ap.add_argument("--checkpoint", required=True,
-                    help="Model checkpoint path (.pt)")
-    ap.add_argument("--out-dir", required=True,
-                    help="Output directory for artifacts")
-    ap.add_argument("--export-pytorch", action="store_true",
-                    help="Export PyTorch model")
-    ap.add_argument("--export-coreml", action="store_true",
-                    help="Export CoreML model")
-    ap.add_argument("--latent-mode", action="store_true",
-                    help="Enable latent mode in runtime config")
-    ap.add_argument("--halt-head", action="store_true",
-                    help="Enable halt head (if model supports it)")
-    ap.add_argument("--caws-tier", default="tier_2", choices=["tier_1", "tier_2", "tier_3"],
-                    help="CAWS budget tier")
-    ap.add_argument("--seq", type=int, default=2048,
-                    help="Sequence length for export")
+    ap = argparse.ArgumentParser("Deploy Model - Generate deployment artifacts")
+    ap.add_argument("--checkpoint", required=True, help="Model checkpoint path (.pt)")
+    ap.add_argument("--out-dir", required=True, help="Output directory for artifacts")
+    ap.add_argument("--export-pytorch", action="store_true", help="Export PyTorch model")
+    ap.add_argument("--export-coreml", action="store_true", help="Export CoreML model")
+    ap.add_argument(
+        "--latent-mode", action="store_true", help="Enable latent mode in runtime config"
+    )
+    ap.add_argument(
+        "--halt-head", action="store_true", help="Enable halt head (if model supports it)"
+    )
+    ap.add_argument(
+        "--caws-tier",
+        default="tier_2",
+        choices=["tier_1", "tier_2", "tier_3"],
+        help="CAWS budget tier",
+    )
+    ap.add_argument("--seq", type=int, default=2048, help="Sequence length for export")
     args = ap.parse_args()
 
     checkpoint_path = Path(args.checkpoint)
@@ -177,29 +180,27 @@ def main():
 
             # Load model
             from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
-            arch_cfg = checkpoint_info['arch_cfg']
+
+            arch_cfg = checkpoint_info["arch_cfg"]
             model_cfg = ModelCfg(
-                d_model=arch_cfg.get('d_model', 4096),
-                n_layers=arch_cfg.get('n_layers', 32),
-                n_heads=arch_cfg.get('n_heads', 32),
-                n_kv_heads=arch_cfg.get('n_kv_heads', 8),
-                d_head=arch_cfg.get('d_head', 128),
-                vocab_size=arch_cfg.get('vocab_size', 32000),
-                rope_theta=arch_cfg.get('rope_theta', 10000.0),
-                rope_scaling=arch_cfg.get('rope_scaling', 'dynamic'),
-                dropout=arch_cfg.get('dropout', 0.0),
+                d_model=arch_cfg.get("d_model", 4096),
+                n_layers=arch_cfg.get("n_layers", 32),
+                n_heads=arch_cfg.get("n_heads", 32),
+                n_kv_heads=arch_cfg.get("n_kv_heads", 8),
+                d_head=arch_cfg.get("d_head", 128),
+                vocab_size=arch_cfg.get("vocab_size", 32000),
+                rope_theta=arch_cfg.get("rope_theta", 10000.0),
+                rope_scaling=arch_cfg.get("rope_scaling", "dynamic"),
+                dropout=arch_cfg.get("dropout", 0.0),
             )
 
-            use_halt_head = checkpoint_info['model_arch'].get(
-                'use_halt_head', False)
+            use_halt_head = checkpoint_info["model_arch"].get("use_halt_head", False)
             model = StudentLM(model_cfg, use_halt_head=use_halt_head)
-            model.load_state_dict(
-                checkpoint_info['checkpoint']['model_state_dict'], strict=False)
+            model.load_state_dict(checkpoint_info["checkpoint"]["model_state_dict"], strict=False)
             model.eval()
 
             if not TORCH_AVAILABLE:
-                raise RuntimeError(
-                    "PyTorch is required for model export but not available")
+                raise RuntimeError("PyTorch is required for model export but not available")
 
             # Import torch locally to avoid reference before assignment
             import torch
@@ -217,6 +218,7 @@ def main():
         except Exception as e:
             print(f"[deploy_model] ERROR: PyTorch export failed: {e}")
             import traceback
+
             traceback.print_exc()
             sys.exit(1)
 
@@ -236,15 +238,13 @@ def main():
             pytorch_model = torch.jit.load(str(pytorch_export_path))
 
             # Find contract file
-            contract_path = pytorch_export_path.parent / \
-                f"{pytorch_export_path.stem}_contract.json"
+            contract_path = pytorch_export_path.parent / f"{pytorch_export_path.stem}_contract.json"
 
             coreml_path = out_dir / "model.mlpackage"
             convert_pytorch_to_coreml(
                 pytorch_model=pytorch_model,
                 output_path=str(coreml_path),
-                contract_path=str(
-                    contract_path) if contract_path.exists() else None,
+                contract_path=str(contract_path) if contract_path.exists() else None,
             )
 
             coreml_export_path = coreml_path
@@ -252,17 +252,18 @@ def main():
         except Exception as e:
             print(f"[deploy_model] ERROR: CoreML conversion failed: {e}")
             import traceback
+
             traceback.print_exc()
             sys.exit(1)
 
     # Generate runtime config
     runtime_config_path = out_dir / "runtime_config.json"
     generate_runtime_config(
-        model_arch=checkpoint_info['model_arch'],
+        model_arch=checkpoint_info["model_arch"],
         output_path=runtime_config_path,
         latent_mode_enabled=args.latent_mode,
-        halt_head_enabled=args.halt_head or checkpoint_info['model_arch'].get(
-            'use_halt_head', False),
+        halt_head_enabled=args.halt_head
+        or checkpoint_info["model_arch"].get("use_halt_head", False),
         caws_tier=args.caws_tier,
     )
 

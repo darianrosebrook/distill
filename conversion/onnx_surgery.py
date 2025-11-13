@@ -9,6 +9,7 @@ Lightweight ONNX surgery for smoke runs.
 Usage:
   python -m conversion.onnx_surgery --inp onnx/in.onnx --out onnx/out.onnx --infer --simplify
 """
+
 import argparse
 import sys
 from pathlib import Path
@@ -47,8 +48,7 @@ def strip_redundant_casts(model: onnx.ModelProto) -> onnx.ModelProto:
         model_with_shapes = shape_inference.infer_shapes(model)
     except Exception as e:
         # If shape inference fails, skip redundant cast removal
-        print(
-            f"[onnx_surgery] WARN: Shape inference failed, skipping redundant cast removal: {e}")
+        print(f"[onnx_surgery] WARN: Shape inference failed, skipping redundant cast removal: {e}")
         return model
 
     # Build a map of value names to their types
@@ -92,7 +92,8 @@ def strip_redundant_casts(model: onnx.ModelProto) -> onnx.ModelProto:
                     redundant_cast_map[output_name] = input_name
                     removed_count += 1
                     print(
-                        f"[onnx_surgery] Found redundant Cast: {input_name} ({input_type}) -> {target_type}")
+                        f"[onnx_surgery] Found redundant Cast: {input_name} ({input_type}) -> {target_type}"
+                    )
                     # Skip this node (don't add to keep_nodes)
                     continue
                 else:
@@ -129,13 +130,13 @@ def strip_redundant_casts(model: onnx.ModelProto) -> onnx.ModelProto:
 
         # Remove value_info entries for redundant Cast outputs
         model.graph.value_info[:] = [
-            vi for vi in model.graph.value_info
-            if vi.name not in redundant_cast_map
+            vi for vi in model.graph.value_info if vi.name not in redundant_cast_map
         ]
 
     if removed_count > 0:
         print(
-            f"[onnx_surgery] Removed {removed_count} redundant Cast nodes and updated graph references")
+            f"[onnx_surgery] Removed {removed_count} redundant Cast nodes and updated graph references"
+        )
 
     model.graph.ClearField("node")
     model.graph.node.extend(keep_nodes)
@@ -149,7 +150,7 @@ def cast_int64_initializers(model: onnx.ModelProto) -> int:
         if init.data_type == TensorProto.INT64:
             arr = numpy_helper.to_array(init)
             if arr.min() >= -(2**31) and arr.max() < 2**31:
-                new = numpy_helper.from_array(arr.astype('int32'), init.name)
+                new = numpy_helper.from_array(arr.astype("int32"), init.name)
                 new_inits.append(new)
                 changed += 1
             else:
@@ -171,10 +172,10 @@ def run(path_in: str, path_out: str):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--inp', required=True)
-    ap.add_argument('--out', required=True)
-    ap.add_argument('--infer', action='store_true')
-    ap.add_argument('--simplify', action='store_true')
+    ap.add_argument("--inp", required=True)
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--infer", action="store_true")
+    ap.add_argument("--simplify", action="store_true")
     args = ap.parse_args()
 
     model = onnx.load(args.inp)
@@ -196,9 +197,8 @@ def main():
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     onnx.save(model, args.out)
-    print(
-        f"[onnx_surgery] saved → {args.out} (int64→int32 changed: {changed})")
+    print(f"[onnx_surgery] saved → {args.out} (int64→int32 changed: {changed})")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main() if len(sys.argv) > 1 else run(sys.argv[1], sys.argv[2]))

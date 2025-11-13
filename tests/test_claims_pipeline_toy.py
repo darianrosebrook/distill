@@ -72,21 +72,15 @@ def create_toy_context() -> ConversationContext:
     return ConversationContext(
         prior_turns=[
             "The system processes user requests.",
-            "We implemented authentication last week."
+            "We implemented authentication last week.",
         ],
-        entity_registry={
-            "System": "the main application",
-            "User": "end user of the application"
-        },
-        code_spans=[
-            "def authenticate(user): return True",
-            "class UserService: pass"
-        ],
+        entity_registry={"System": "the main application", "User": "end user of the application"},
+        code_spans=["def authenticate(user): return True", "class UserService: pass"],
         doc_sections=[
             "Authentication is handled by UserService",
-            "The system supports multiple user types"
+            "The system supports multiple user types",
         ],
-        result_tables=[]
+        result_tables=[],
     )
 
 
@@ -145,21 +139,17 @@ def test_stage_4_verification():
         retriever=ToyEvidenceRetriever(),
         entailment=ToyEntailmentJudge(),
         coverage=ElementCoverageScorer(),
-        decontextualizer=Decontextualizer()
+        decontextualizer=Decontextualizer(),
     )
 
     claim = AtomicClaim(
         id="test-1",
         statement="The system processes requests",
-        elements=ClaimElements(
-            subject="system",
-            predicate="processes",
-            object="requests"
-        ),
+        elements=ClaimElements(subject="system", predicate="processes", object="requests"),
         contextual_brackets=[],
         source_sentence="The system processes requests",
         verification_requirements=["general_verification"],
-        confidence=0.9
+        confidence=0.9,
     )
 
     evidence_manifest = {
@@ -184,7 +174,7 @@ def test_full_pipeline_end_to_end():
         retriever=ToyEvidenceRetriever(),
         entailment=ToyEntailmentJudge(),
         coverage=ElementCoverageScorer(),
-        decontextualizer=Decontextualizer()
+        decontextualizer=Decontextualizer(),
     )
 
     context = create_toy_context()
@@ -193,7 +183,11 @@ def test_full_pipeline_end_to_end():
     text1 = "The system processed 1,000 requests on 2024-01-15."
     evidence1 = {
         "evidence": [
-            {"text": "On 2024-01-15, the system processed 1,000 requests.", "source": "log", "quality": 0.9}
+            {
+                "text": "On 2024-01-15, the system processed 1,000 requests.",
+                "source": "log",
+                "quality": 0.9,
+            }
         ]
     }
 
@@ -231,7 +225,7 @@ def test_pipeline_with_policy_gating():
         retriever=ToyEvidenceRetriever(),
         entailment=ToyEntailmentJudge(),
         coverage=ElementCoverageScorer(),
-        decontextualizer=Decontextualizer()
+        decontextualizer=Decontextualizer(),
     )
 
     context = create_toy_context()
@@ -239,10 +233,8 @@ def test_pipeline_with_policy_gating():
     # Test status claim without artifacts (should be blocked)
     text = "The system is production-ready."
     evidence = {
-        "evidence": [
-            {"text": "All tests pass.", "source": "test", "quality": 0.9}
-        ],
-        "artifacts": []  # Missing required artifacts
+        "evidence": [{"text": "All tests pass.", "source": "test", "quality": 0.9}],
+        "artifacts": [],  # Missing required artifacts
     }
 
     result = pipeline.process(text, context, evidence)
@@ -263,7 +255,7 @@ def test_pipeline_determinism():
         retriever=ToyEvidenceRetriever(),
         entailment=ToyEntailmentJudge(),
         coverage=ElementCoverageScorer(),
-        decontextualizer=Decontextualizer()
+        decontextualizer=Decontextualizer(),
     )
 
     context = create_toy_context()
@@ -291,7 +283,7 @@ def test_pipeline_error_handling():
         retriever=ToyEvidenceRetriever(),
         entailment=ToyEntailmentJudge(),
         coverage=ElementCoverageScorer(),
-        decontextualizer=Decontextualizer()
+        decontextualizer=Decontextualizer(),
     )
 
     context = create_toy_context()
@@ -319,7 +311,7 @@ def test_pipeline_coverage_requirements():
         retriever=ToyEvidenceRetriever(),
         entailment=ToyEntailmentJudge(),
         coverage=ElementCoverageScorer(),
-        decontextualizer=Decontextualizer()
+        decontextualizer=Decontextualizer(),
     )
     verifier.thresholds["coverage_min"] = 0.8  # High threshold
 
@@ -330,11 +322,7 @@ def test_pipeline_coverage_requirements():
     # Claim with elements
     text = "The system processes requests."
     # Evidence that doesn't fully cover elements
-    evidence = {
-        "evidence": [
-            {"text": "The system works.", "source": "doc", "quality": 0.9}
-        ]
-    }
+    evidence = {"evidence": [{"text": "The system works.", "source": "doc", "quality": 0.9}]}
 
     result = pipeline.process(text, context, evidence)
     if result.get("verification"):
@@ -355,15 +343,24 @@ def test_pipeline_outcome_distribution():
         retriever=ToyEvidenceRetriever(),
         entailment=ToyEntailmentJudge(),
         coverage=ElementCoverageScorer(),
-        decontextualizer=Decontextualizer()
+        decontextualizer=Decontextualizer(),
     )
 
     context = create_toy_context()
 
     test_cases = [
-        ("The system works.", {"evidence": [{"text": "The system works well.", "source": "doc", "quality": 0.9}]}),
-        ("The system does not work.", {"evidence": [{"text": "The system works.", "source": "doc", "quality": 0.9}]}),
-        ("The system processes requests.", {"evidence": [{"text": "Something else.", "source": "doc", "quality": 0.5}]}),
+        (
+            "The system works.",
+            {"evidence": [{"text": "The system works well.", "source": "doc", "quality": 0.9}]},
+        ),
+        (
+            "The system does not work.",
+            {"evidence": [{"text": "The system works.", "source": "doc", "quality": 0.9}]},
+        ),
+        (
+            "The system processes requests.",
+            {"evidence": [{"text": "Something else.", "source": "doc", "quality": 0.5}]},
+        ),
     ]
 
     outcomes = []
@@ -385,7 +382,7 @@ def test_pipeline_fingerprints():
         retriever=ToyEvidenceRetriever(),
         entailment=ToyEntailmentJudge(),
         coverage=ElementCoverageScorer(),
-        decontextualizer=Decontextualizer()
+        decontextualizer=Decontextualizer(),
     )
 
     claim = AtomicClaim(
@@ -395,7 +392,7 @@ def test_pipeline_fingerprints():
         contextual_brackets=[],
         source_sentence="Test claim",
         verification_requirements=[],
-        confidence=1.0
+        confidence=1.0,
     )
 
     evidence = {"evidence": [{"text": "Test evidence", "source": "test", "quality": 0.8}]}
@@ -408,4 +405,3 @@ def test_pipeline_fingerprints():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

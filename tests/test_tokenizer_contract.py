@@ -8,19 +8,23 @@ Tests:
 - Masking safety (padding mask never masks special tokens)
 @author: @darianrosebrook
 """
+
 import pytest
-from pathlib import Path
-from typing import Dict, Any, Optional
 
 from models.student.tokenizer.constants import (
-    BOS_TOKEN_ID, EOS_TOKEN_ID, BOT_TOKEN_ID, EOT_TOKEN_ID,
-    BOT_TOKEN, EOT_TOKEN
+    BOS_TOKEN_ID,
+    EOS_TOKEN_ID,
+    BOT_TOKEN_ID,
+    EOT_TOKEN_ID,
+    BOT_TOKEN,
+    EOT_TOKEN,
 )
 
 
 def load_student_tokenizer():
     """Load student tokenizer."""
     from training.dataset import load_tokenizer
+
     tokenizer_path = "models/student/tokenizer"
     return load_tokenizer(tokenizer_path)
 
@@ -28,27 +32,31 @@ def load_student_tokenizer():
 def test_special_token_ids_match_constants():
     """Test that special token IDs match constants.py."""
     tokenizer = load_student_tokenizer()
-    
+
     # Get token IDs from tokenizer
     bos_id = tokenizer.bos_token_id
     eos_id = tokenizer.eos_token_id
     unk_id = tokenizer.unk_token_id
-    
+
     # Get bot/eot IDs by encoding
     bot_tokens = tokenizer.encode(BOT_TOKEN, add_special_tokens=False)
     eot_tokens = tokenizer.encode(EOT_TOKEN, add_special_tokens=False)
-    
+
     # Verify IDs match constants
     assert bos_id == BOS_TOKEN_ID, f"BOS token ID mismatch: {bos_id} != {BOS_TOKEN_ID}"
     assert eos_id == EOS_TOKEN_ID, f"EOS token ID mismatch: {eos_id} != {EOS_TOKEN_ID}"
-    
+
     # Bot and EOT should be single tokens
-    assert len(bot_tokens) == 1, f"BOT token should be single token, got {len(bot_tokens)} tokens: {bot_tokens}"
-    assert len(eot_tokens) == 1, f"EOT token should be single token, got {len(eot_tokens)} tokens: {eot_tokens}"
-    
+    assert len(bot_tokens) == 1, (
+        f"BOT token should be single token, got {len(bot_tokens)} tokens: {bot_tokens}"
+    )
+    assert len(eot_tokens) == 1, (
+        f"EOT token should be single token, got {len(eot_tokens)} tokens: {eot_tokens}"
+    )
+
     bot_id = bot_tokens[0]
     eot_id = eot_tokens[0]
-    
+
     assert bot_id == BOT_TOKEN_ID, f"BOT token ID mismatch: {bot_id} != {BOT_TOKEN_ID}"
     assert eot_id == EOT_TOKEN_ID, f"EOT token ID mismatch: {eot_id} != {EOT_TOKEN_ID}"
 
@@ -56,65 +64,74 @@ def test_special_token_ids_match_constants():
 def test_special_tokens_are_single_tokens():
     """Test that special tokens (BOT, EOT) form single tokens, not split."""
     tokenizer = load_student_tokenizer()
-    
+
     # Test BOT token
     bot_tokens = tokenizer.encode(BOT_TOKEN, add_special_tokens=False)
-    assert len(bot_tokens) == 1, f"BOT token '{BOT_TOKEN}' should be single token, got {len(bot_tokens)}: {bot_tokens}"
-    
+    assert len(bot_tokens) == 1, (
+        f"BOT token '{BOT_TOKEN}' should be single token, got {len(bot_tokens)}: {bot_tokens}"
+    )
+
     # Test EOT token
     eot_tokens = tokenizer.encode(EOT_TOKEN, add_special_tokens=False)
-    assert len(eot_tokens) == 1, f"EOT token '{EOT_TOKEN}' should be single token, got {len(eot_tokens)}: {eot_tokens}"
-    
+    assert len(eot_tokens) == 1, (
+        f"EOT token '{EOT_TOKEN}' should be single token, got {len(eot_tokens)}: {eot_tokens}"
+    )
+
     # Verify round-trip: decode should produce original token
     bot_decoded = tokenizer.decode(bot_tokens, skip_special_tokens=False)
-    assert BOT_TOKEN in bot_decoded or bot_decoded.strip() == BOT_TOKEN, \
+    assert BOT_TOKEN in bot_decoded or bot_decoded.strip() == BOT_TOKEN, (
         f"BOT token round-trip failed: '{BOT_TOKEN}' -> {bot_tokens} -> '{bot_decoded}'"
-    
+    )
+
     eot_decoded = tokenizer.decode(eot_tokens, skip_special_tokens=False)
-    assert EOT_TOKEN in eot_decoded or eot_decoded.strip() == EOT_TOKEN, \
+    assert EOT_TOKEN in eot_decoded or eot_decoded.strip() == EOT_TOKEN, (
         f"EOT token round-trip failed: '{EOT_TOKEN}' -> {eot_tokens} -> '{eot_decoded}'"
+    )
 
 
 def test_round_trip_stability():
     """Test round-trip stability for prompts with special tokens."""
     tokenizer = load_student_tokenizer()
-    
+
     # Test prompts with special tokens
     test_prompts = [
         f"{BOT_TOKEN} tool call {EOT_TOKEN}",
         f"User: Hello {BOT_TOKEN}search{EOT_TOKEN}",
         f"Response: {BOT_TOKEN}callMCPTool{EOT_TOKEN} result here",
     ]
-    
+
     for prompt in test_prompts:
         # Encode
         encoded = tokenizer.encode(prompt, add_special_tokens=True)
-        
+
         # Decode
         decoded = tokenizer.decode(encoded, skip_special_tokens=False)
-        
+
         # Verify special tokens are preserved (may have whitespace differences)
-        assert BOT_TOKEN in decoded or BOT_TOKEN.strip() in decoded, \
+        assert BOT_TOKEN in decoded or BOT_TOKEN.strip() in decoded, (
             f"BOT token lost in round-trip for prompt: '{prompt}' -> '{decoded}'"
-        assert EOT_TOKEN in decoded or EOT_TOKEN.strip() in decoded, \
+        )
+        assert EOT_TOKEN in decoded or EOT_TOKEN.strip() in decoded, (
             f"EOT token lost in round-trip for prompt: '{prompt}' -> '{decoded}'"
-        
+        )
+
         # Re-encode and verify IDs match
         re_encoded = tokenizer.encode(decoded, add_special_tokens=True)
-        assert encoded == re_encoded, \
+        assert encoded == re_encoded, (
             f"Round-trip encoding mismatch for prompt: '{prompt}' -> {encoded} -> '{decoded}' -> {re_encoded}"
+        )
 
 
 def test_masking_safety():
     """Test that padding mask never masks special tokens (BOS/EOS/BOT/EOT)."""
     import torch
-    
+
     tokenizer = load_student_tokenizer()
-    
+
     # Create a sequence with special tokens
     prompt = f"{BOT_TOKEN} tool call {EOT_TOKEN}"
     encoded = tokenizer.encode(prompt, add_special_tokens=True)
-    
+
     # Get special token IDs
     bos_id = tokenizer.bos_token_id
     eos_id = tokenizer.eos_token_id
@@ -122,25 +139,26 @@ def test_masking_safety():
     eot_tokens = tokenizer.encode(EOT_TOKEN, add_special_tokens=False)
     bot_id = bot_tokens[0]
     eot_id = eot_tokens[0]
-    
+
     special_token_ids = {bos_id, eos_id, bot_id, eot_id}
-    
+
     # Create attention mask (1 for real tokens, 0 for padding)
     # Simulate padding: add zeros at the end
     seq_len = len(encoded)
     pad_len = 5
     padded_ids = encoded + [tokenizer.pad_token_id] * pad_len
     attention_mask = [1] * seq_len + [0] * pad_len
-    
+
     # Verify special tokens are not in padding positions
     for i, token_id in enumerate(padded_ids):
         if token_id in special_token_ids:
-            assert attention_mask[i] == 1, \
+            assert attention_mask[i] == 1, (
                 f"Special token {token_id} (position {i}) is masked by padding mask"
-    
+            )
+
     # Test with collate function (simulate batch padding)
     from training.dataset import collate_kd_batch
-    
+
     # Create batch with different lengths
     batch = []
     for i in range(3):
@@ -150,63 +168,65 @@ def test_masking_safety():
         input_ids = torch.tensor(tokens[:-1], dtype=torch.long)
         labels = torch.tensor(tokens[1:], dtype=torch.long)
         attention_mask = torch.ones_like(input_ids)
-        
-        batch.append({
-            "input_ids": input_ids,
-            "labels": labels,
-            "attention_mask": attention_mask,
-        })
-    
+
+        batch.append(
+            {
+                "input_ids": input_ids,
+                "labels": labels,
+                "attention_mask": attention_mask,
+            }
+        )
+
     # Collate batch (will pad to max length)
     collated = collate_kd_batch(batch)
-    
+
     # Verify special tokens in collated batch are not masked
     collated_ids = collated["input_ids"]
     collated_mask = collated["attention_mask"]
-    
+
     for b in range(collated_ids.shape[0]):
         for t in range(collated_ids.shape[1]):
             token_id = collated_ids[b, t].item()
             if token_id in special_token_ids:
-                assert collated_mask[b, t].item() == 1, \
+                assert collated_mask[b, t].item() == 1, (
                     f"Special token {token_id} (batch {b}, position {t}) is masked in collated batch"
+                )
 
 
 def test_loss_masking_never_hides_supervised_tokens():
     """Test that loss masking (ignore_index) never hides supervised tool/JSON tokens."""
     import torch
-    
+
     tokenizer = load_student_tokenizer()
-    
+
     # Create a sequence with tool tokens that should be supervised
     prompt = f"{BOT_TOKEN} search query {EOT_TOKEN}"
     encoded = tokenizer.encode(prompt, add_special_tokens=True)
-    
+
     # Get token IDs for BOT and EOT (these should be supervised)
     bot_tokens = tokenizer.encode(BOT_TOKEN, add_special_tokens=False)
     eot_tokens = tokenizer.encode(EOT_TOKEN, add_special_tokens=False)
     bot_id = bot_tokens[0]
     eot_id = eot_tokens[0]
-    
+
     supervised_token_ids = {bot_id, eot_id}
-    
+
     # Create labels (shifted by 1 for next-token prediction)
     input_ids = torch.tensor(encoded[:-1], dtype=torch.long)
     labels = torch.tensor(encoded[1:], dtype=torch.long)
-    
+
     # Verify supervised tokens are not masked with ignore_index (-100)
     for i, label_id in enumerate(labels):
         if label_id.item() in supervised_token_ids:
-            assert label_id.item() != -100, \
+            assert label_id.item() != -100, (
                 f"Supervised token {label_id.item()} (position {i}) is masked with ignore_index"
-    
+            )
+
     # Test with process-step supervision targets
     # Tool name IDs should not be masked
     tool_name_ids = torch.tensor([bot_id, eot_id], dtype=torch.long)
-    assert (tool_name_ids != -100).all(), \
-        "Tool name IDs should not be masked with ignore_index"
+    assert (tool_name_ids != -100).all(), "Tool name IDs should not be masked with ignore_index"
 
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

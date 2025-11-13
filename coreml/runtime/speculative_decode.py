@@ -6,6 +6,7 @@ with the worker model (~9B). Reduces TTFT by 25-40% with acceptable rollback rat
 
 Reference: docs/M_SERIES_ADVANCED_OPTIMIZATIONS.md Phase 8
 """
+
 from __future__ import annotations
 import time
 import random
@@ -14,6 +15,7 @@ import numpy as np
 
 try:
     from coremltools.models import MLModel
+
     COREML_AVAILABLE = True
 except ImportError:
     MLModel = None
@@ -153,9 +155,7 @@ class SpeculativeDecoder:
 
             # If all rejected, generate one token normally with worker
             if len(accepted) == 0:
-                next_token = self._generate_one_token_worker(
-                    current_input, worker_state
-                )
+                next_token = self._generate_one_token_worker(current_input, worker_state)
                 tokens.append(next_token)
                 self.accepted_tokens += 1
 
@@ -175,7 +175,8 @@ class SpeculativeDecoder:
                 "accepted_tokens": self.accepted_tokens,
                 "rejected_tokens": self.rejected_tokens,
                 "rollbacks": self.rollbacks,
-                "acceptance_rate": self.accepted_tokens / max(1, self.accepted_tokens + self.rejected_tokens),
+                "acceptance_rate": self.accepted_tokens
+                / max(1, self.accepted_tokens + self.rejected_tokens),
                 "rollback_rate": self.rollbacks / max(1, tokens_generated),
             },
             "ttft_ms": ttft_ms,
@@ -280,9 +281,7 @@ class SpeculativeDecoder:
                 )
 
             # Check if draft token should be accepted using standard criterion
-            if self._should_accept_draft_token(
-                draft_token, drafter_logits, worker_logits
-            ):
+            if self._should_accept_draft_token(draft_token, drafter_logits, worker_logits):
                 accepted.append(draft_token)
             else:
                 # Reject this token and all subsequent ones

@@ -3,6 +3,7 @@
 
 Author: @darianrosebrook
 """
+
 import json
 import os
 import hashlib
@@ -25,9 +26,7 @@ def sha256_file(path: str) -> Optional[str]:
 def run_cmd(cmd: str) -> str:
     """Run command and return output."""
     try:
-        result = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True, check=True
-        )
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=True)
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
         return f"ERROR: {e.stderr.strip()}"
@@ -122,10 +121,7 @@ def main() -> None:
     # Fixture stats
     fixtures_dir = "eval/tool_broker/fixtures"
     if os.path.exists(fixtures_dir):
-        fixture_files = [
-            f for f in os.listdir(fixtures_dir)
-            if f.endswith(".jsonl")
-        ]
+        fixture_files = [f for f in os.listdir(fixtures_dir) if f.endswith(".jsonl")]
         signals["fixtures"] = {
             "count": len(fixture_files),
             "files": fixture_files,

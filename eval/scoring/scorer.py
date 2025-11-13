@@ -1,4 +1,5 @@
 """Scoring module that reuses verifier logic for model evaluation."""
+
 from __future__ import annotations
 import json
 import re
@@ -28,7 +29,7 @@ def extract_integration_spans(text: str) -> List[List[int]]:
     """
     spans = []
     # Use same regex as verifier: Integration: ... (sentence)
-    for m in re.finditer(r'Integration:\s*([^\n]+?)(?:[\.!?…]\s|$)', text, flags=re.UNICODE):
+    for m in re.finditer(r"Integration:\s*([^\n]+?)(?:[\.!?…]\s|$)", text, flags=re.UNICODE):
         spans.append([m.start(1), m.end(1)])
     return spans
 
@@ -45,10 +46,12 @@ def extract_tool_calls_from_trace(tool_trace: List[Dict[str, Any]]) -> List[Dict
     """
     calls = []
     for tc in tool_trace:
-        calls.append({
-            "name": tc.get("name", ""),
-            "arguments": tc.get("arguments", {}),
-        })
+        calls.append(
+            {
+                "name": tc.get("name", ""),
+                "arguments": tc.get("arguments", {}),
+            }
+        )
     return calls
 
 
@@ -104,8 +107,7 @@ def score_item(
     integration_spans_bytes = extract_integration_spans(model_output)
 
     # Apply integration span cap
-    integration_spans_exceeded_cap = len(
-        integration_spans_bytes) > integration_span_cap
+    integration_spans_exceeded_cap = len(integration_spans_bytes) > integration_span_cap
     if integration_spans_exceeded_cap:
         integration_spans_bytes = integration_spans_bytes[:integration_span_cap]
 
@@ -132,8 +134,7 @@ def score_item(
     negative_control_ok = True
     if negative_control:
         # Check if integration spans are grounded (should be false for negative controls)
-        grounded_lax = contains_grounding(
-            model_output, integration_spans_bytes, tool_result_fields)
+        grounded_lax = contains_grounding(model_output, integration_spans_bytes, tool_result_fields)
         if grounded_lax:
             negative_control_ok = False
 
@@ -172,7 +173,7 @@ def score_item(
         # Strict grounding check
         for span in integration_spans_bytes:
             if len(span) >= 2:
-                seg = model_output[span[0]:span[1]]
+                seg = model_output[span[0] : span[1]]
                 if grounded_values_in_span_strict(seg, tool_result_fields):
                     integration_grounded_strict = True
                     break
@@ -217,7 +218,7 @@ def score_item(
 
     ts_api_patterns = [
         "from './servers",
-        "from \"./servers",
+        'from "./servers',
         "callMCPTool(",
         "import * as",
     ]
@@ -244,8 +245,7 @@ def score_item(
 
     # Tool definition tokens (loaded on demand in code-mode)
     tool_def_tokens = sum(
-        len(str(tc.get("name", ""))) + len(str(tc.get("arguments", {})))
-        for tc in observed_calls
+        len(str(tc.get("name", ""))) + len(str(tc.get("arguments", {}))) for tc in observed_calls
     )
     tool_def_tokens = tool_def_tokens // 4  # Rough token estimate
 
@@ -253,13 +253,12 @@ def score_item(
     tool_result_tokens = 0
     if used_direct_tool:
         # Direct tool calls echo results into context
-        tool_result_tokens = sum(len(str(tc.get("result", {})))
-                                 for tc in tool_trace)
+        tool_result_tokens = sum(len(str(tc.get("result", {}))) for tc in tool_trace)
         tool_result_tokens = tool_result_tokens // 4
     elif used_code_mode:
         # Code-mode: results stay in sandbox, only summaries/logs returned
         # Estimate log return tokens (console.log outputs)
-        log_pattern = re.compile(r'console\.log\([^)]+\)', re.IGNORECASE)
+        log_pattern = re.compile(r"console\.log\([^)]+\)", re.IGNORECASE)
         log_matches = log_pattern.findall(model_output)
         tool_result_tokens = sum(len(match) for match in log_matches) // 4
 
@@ -276,15 +275,10 @@ def score_item(
     # CES tokens: total context efficiency tokens
     # Includes: prompt + model_out + tool_defs_loaded + tool_results_in_context + file_reads + log_returns
     ces_tokens_total = (
-        tokens_in +
-        tokens_out +
-        tool_def_tokens +
-        tool_result_tokens +
-        file_read_tokens
+        tokens_in + tokens_out + tool_def_tokens + tool_result_tokens + file_read_tokens
     )
     ces_tokens_direct_tool = tool_result_tokens if used_direct_tool else 0
-    ces_tokens_code_mode = (tool_result_tokens +
-                            file_read_tokens) if used_code_mode else 0
+    ces_tokens_code_mode = (tool_result_tokens + file_read_tokens) if used_code_mode else 0
 
     # Data leak detection (PII in tokens when bindings exist)
     # Hardened: only count leaks when binding path exists AND snippet length > threshold
@@ -295,9 +289,9 @@ def score_item(
     if tool_result_fields:
         # Compiled PII patterns (hardened, international support)
         pii_patterns = {
-            "EMAIL": re.compile(r'\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Za-z]{2,}\b'),
-            "PHONE": re.compile(r'\b(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{2,4}\)?[-.\s]?){2,4}\d{2,4}\b'),
-            "SSN": re.compile(r'\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b'),
+            "EMAIL": re.compile(r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Za-z]{2,}\b"),
+            "PHONE": re.compile(r"\b(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{2,4}\)?[-.\s]?){2,4}\d{2,4}\b"),
+            "SSN": re.compile(r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b"),
         }
 
         for pii_type, pattern in pii_patterns.items():
@@ -326,9 +320,9 @@ def score_item(
         intermediate_sizes = meta.get("intermediate_sizes", [])
         pii_tags_present = meta.get("pii_tags_present", False)
         eligible_for_code_mode = (
-            tool_count >= 2 or
-            (max(intermediate_sizes) >= 10000 if intermediate_sizes else False) or
-            pii_tags_present
+            tool_count >= 2
+            or (max(intermediate_sizes) >= 10000 if intermediate_sizes else False)
+            or pii_tags_present
         )
 
     # Build scores dict
@@ -370,11 +364,11 @@ def score_item(
         # Compute halt probability from logits [continue, halt]
         if len(halt_logits) == 2:
             import numpy as np
+
             # Softmax to get probabilities
             exp_logits = np.exp(halt_logits)
             probs = exp_logits / exp_logits.sum()
-            scores["halt_probability"] = float(
-                probs[1])  # Probability of halting
+            scores["halt_probability"] = float(probs[1])  # Probability of halting
 
     return scores
 
@@ -428,15 +422,17 @@ def evaluate_speed_gates(
         if current_hw_profile_key != baseline_hw_profile_key:
             try:
                 from eval.hw_profile import require_same_profile
-                require_same_profile(current_hw_profile_key,
-                                     baseline_hw_profile_key)
+
+                require_same_profile(current_hw_profile_key, baseline_hw_profile_key)
             except SystemExit:
                 return {
                     "gates_passed": False,
                     "ttft_regression": {"skipped": True, "reason": "hardware_profile_mismatch"},
                     "tps_regression": {"skipped": True, "reason": "hardware_profile_mismatch"},
                     "ttfa_gate": {"skipped": True, "reason": "hardware_profile_mismatch"},
-                    "errors": [f"Hardware profile mismatch: {current_hw_profile_key} vs {baseline_hw_profile_key}"],
+                    "errors": [
+                        f"Hardware profile mismatch: {current_hw_profile_key} vs {baseline_hw_profile_key}"
+                    ],
                 }
 
     if not hardware_match:
@@ -475,7 +471,7 @@ def evaluate_speed_gates(
             if regression > regression_threshold:
                 gates_passed = False
                 errors.append(
-                    f"TTFT {percentile} regression: {regression*100:.1f}% "
+                    f"TTFT {percentile} regression: {regression * 100:.1f}% "
                     f"(current={current_val:.1f}ms, baseline={baseline_val:.1f}ms)"
                 )
 
@@ -486,8 +482,7 @@ def evaluate_speed_gates(
         baseline_val = baseline_metrics.get("tps", {}).get(percentile, 0.0)
 
         if baseline_val > 0:
-            regression = (baseline_val - current_val) / \
-                baseline_val  # TPS: lower is worse
+            regression = (baseline_val - current_val) / baseline_val  # TPS: lower is worse
             tps_regression[percentile] = {
                 "passed": regression <= regression_threshold,
                 "regression": regression,
@@ -497,13 +492,12 @@ def evaluate_speed_gates(
             if regression > regression_threshold:
                 gates_passed = False
                 errors.append(
-                    f"TPS {percentile} regression: {regression*100:.1f}% "
+                    f"TPS {percentile} regression: {regression * 100:.1f}% "
                     f"(current={current_val:.1f} tok/s, baseline={baseline_val:.1f} tok/s)"
                 )
 
     # TTFA gate: p95 tokens ≤ 25
-    ttfa_tokens_p95 = current_metrics.get(
-        "ttfa_tokens", {}).get("p95", float('inf'))
+    ttfa_tokens_p95 = current_metrics.get("ttfa_tokens", {}).get("p95", float("inf"))
     ttfa_gate = {
         "passed": ttfa_tokens_p95 <= 25.0,
         "ttfa_tokens_p95": ttfa_tokens_p95,
@@ -511,9 +505,7 @@ def evaluate_speed_gates(
     }
     if ttfa_tokens_p95 > 25.0:
         gates_passed = False
-        errors.append(
-            f"TTFA gate failed: p95 tokens={ttfa_tokens_p95:.1f} > 25"
-        )
+        errors.append(f"TTFA gate failed: p95 tokens={ttfa_tokens_p95:.1f} > 25")
 
     # ANE residency gates (if provided)
     ane_gates = {
@@ -560,8 +552,7 @@ def evaluate_speed_gates(
                 else:
                     ane_gates["regression_within_limit"] = True
         else:
-            ane_gates["warnings"].append(
-                "No baseline ANE residency for comparison")
+            ane_gates["warnings"].append("No baseline ANE residency for comparison")
 
     # Combine speed gates and ANE gates
     all_errors = errors + ane_gates["errors"]
@@ -609,30 +600,27 @@ def capture_baseline_ces_metrics(
         scores = result.get("scores", {})
         if scores.get("eligible_for_code_mode", False):
             eligible_results.append(result)
-            baseline_metrics["ces_tokens_total"] += scores.get(
-                "ces_tokens_total", 0)
-            baseline_metrics["ces_tokens_direct_tool"] += scores.get(
-                "ces_tokens_direct_tool", 0)
-            baseline_metrics["ces_tokens_code_mode"] += scores.get(
-                "ces_tokens_code_mode", 0)
-            baseline_metrics["data_leak_events"] += scores.get(
-                "data_leak_events", 0)
+            baseline_metrics["ces_tokens_total"] += scores.get("ces_tokens_total", 0)
+            baseline_metrics["ces_tokens_direct_tool"] += scores.get("ces_tokens_direct_tool", 0)
+            baseline_metrics["ces_tokens_code_mode"] += scores.get("ces_tokens_code_mode", 0)
+            baseline_metrics["data_leak_events"] += scores.get("data_leak_events", 0)
 
     baseline_metrics["eligible_count"] = len(eligible_results)
 
     if eligible_results:
-        code_adopted = sum(1 for r in eligible_results if r.get(
-            "scores", {}).get("used_code_mode", False))
-        baseline_metrics["code_mode_adoption_rate"] = code_adopted / \
-            len(eligible_results)
+        code_adopted = sum(
+            1 for r in eligible_results if r.get("scores", {}).get("used_code_mode", False)
+        )
+        baseline_metrics["code_mode_adoption_rate"] = code_adopted / len(eligible_results)
 
     # Save baseline if output path provided
     if output_path:
         import json
         from pathlib import Path
+
         baseline_path = Path(output_path)
         baseline_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(baseline_path, 'w') as f:
+        with open(baseline_path, "w") as f:
             json.dump(baseline_metrics, f, indent=2)
 
     return baseline_metrics
@@ -735,8 +723,7 @@ def evaluate_code_mode_gates(
 
         if leaks > 0:
             gates_passed = False
-            errors.append(
-                f"No-leakage gate failed: {leaks} data leak events detected")
+            errors.append(f"No-leakage gate failed: {leaks} data leak events detected")
 
     # Code-Mode Adoption gate
     adoption_gate = {"passed": True, "skipped": True}
@@ -788,7 +775,12 @@ def _evaluate_claim_quality(results: List[Dict[str, Any]], claim_extractor: Any)
         - claim_confidence_avg: Average claim confidence
     """
     if not results:
-        return {"avg_claim_count": 0, "avg_success_rate": 0, "supported_claim_ratio": 0, "claim_confidence_avg": 0}
+        return {
+            "avg_claim_count": 0,
+            "avg_success_rate": 0,
+            "supported_claim_ratio": 0,
+            "claim_confidence_avg": 0,
+        }
 
     total_claims = 0
     total_success_rate = 0
@@ -809,16 +801,15 @@ def _evaluate_claim_quality(results: List[Dict[str, Any]], claim_extractor: Any)
             teacher_claims = claim_extractor.extract_claims(teacher_output)
 
             total_claims += len(student_claims)
-            total_success_rate += claim_extractor.extract_claim_success_rate(
-                student_output)
+            total_success_rate += claim_extractor.extract_claim_success_rate(student_output)
 
             # Check claim support
             for claim in student_claims:
                 total_confidence += claim.confidence
                 # Simplified support check (would need more sophisticated logic)
                 supported = any(
-                    claim.statement.lower() in teacher_claim.lower() or
-                    teacher_claim.lower() in claim.statement.lower()
+                    claim.statement.lower() in teacher_claim.lower()
+                    or teacher_claim.lower() in claim.statement.lower()
                     for teacher_claim in teacher_claims
                 )
                 if supported:
@@ -853,7 +844,12 @@ def _evaluate_caws_compliance(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     from training.claim_extraction import SimpleClaimExtractor
 
     if not results:
-        return {"compliance_gate_passed": False, "avg_budget_penalty": 0, "avg_quality_penalty": 0, "tier_compliance_rate": 0}
+        return {
+            "compliance_gate_passed": False,
+            "avg_budget_penalty": 0,
+            "avg_quality_penalty": 0,
+            "tier_compliance_rate": 0,
+        }
 
     claim_extractor = SimpleClaimExtractor()
     total_budget_penalty = 0
@@ -872,7 +868,7 @@ def _evaluate_caws_compliance(results: List[Dict[str, Any]]) -> Dict[str, Any]:
             compliance_loss = caws_compliance_loss(
                 student_output=student_output,
                 teacher_output=item_meta.get("teacher_text", ""),
-                claim_extractor=claim_extractor
+                claim_extractor=claim_extractor,
             )
 
             # Extract penalty components (simplified - would need to expose individual penalties)
@@ -897,9 +893,7 @@ def _evaluate_caws_compliance(results: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     # Compliance gate: low penalties and high tier compliance
     compliance_gate_passed = (
-        avg_budget_penalty < 0.5 and
-        avg_quality_penalty < 0.8 and
-        tier_compliance_rate > 0.8
+        avg_budget_penalty < 0.5 and avg_quality_penalty < 0.8 and tier_compliance_rate > 0.8
     )
 
     return {
@@ -912,8 +906,7 @@ def _evaluate_caws_compliance(results: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def _compute_overall_efficiency(
-    all_metrics: Dict[str, Any],
-    baseline_summary: Optional[Dict[str, Any]]
+    all_metrics: Dict[str, Any], baseline_summary: Optional[Dict[str, Any]]
 ) -> Dict[str, Any]:
     """
     Compute overall system efficiency combining all metrics.
@@ -934,8 +927,7 @@ def _compute_overall_efficiency(
         score_components.append(0.9)  # High score for passing gates
     else:
         score_components.append(0.3)  # Lower score for failing gates
-        recommendations.append(
-            "Improve code-mode CES efficiency and adoption rates")
+        recommendations.append("Improve code-mode CES efficiency and adoption rates")
         bottlenecks.append("code_mode_efficiency")
 
     # Latent efficiency
@@ -944,8 +936,7 @@ def _compute_overall_efficiency(
         score_components.append(0.9)
     else:
         score_components.append(0.4)
-        recommendations.append(
-            "Optimize latent reasoning token reduction and accuracy")
+        recommendations.append("Optimize latent reasoning token reduction and accuracy")
         bottlenecks.append("latent_efficiency")
 
     # CAWS compliance
@@ -959,28 +950,28 @@ def _compute_overall_efficiency(
 
     # Claim quality
     claim_qual = all_metrics.get("claim_quality", {})
-    claim_score = min(1.0, claim_qual.get("supported_claim_ratio", 0) * 0.8 +
-                      claim_qual.get("claim_confidence_avg", 0) * 0.2)
+    claim_score = min(
+        1.0,
+        claim_qual.get("supported_claim_ratio", 0) * 0.8
+        + claim_qual.get("claim_confidence_avg", 0) * 0.2,
+    )
     score_components.append(claim_score)
 
     if claim_score < 0.7:
-        recommendations.append(
-            "Improve claim extraction and support validation")
+        recommendations.append("Improve claim extraction and support validation")
         bottlenecks.append("claim_quality")
 
     # Overall score (weighted average)
     if score_components:
         weights = [0.3, 0.3, 0.2, 0.2]  # Equal weights
-        efficiency_score = sum(
-            s * w for s, w in zip(score_components, weights))
+        efficiency_score = sum(s * w for s, w in zip(score_components, weights))
     else:
         efficiency_score = 0.0
 
     # Baseline comparison
     baseline_comparison = {}
     if baseline_summary:
-        baseline_efficiency = baseline_summary.get(
-            "overall", {}).get("efficiency_score", 0.5)
+        baseline_efficiency = baseline_summary.get("overall", {}).get("efficiency_score", 0.5)
         improvement = efficiency_score - baseline_efficiency
         baseline_comparison = {
             "baseline_efficiency": baseline_efficiency,
@@ -991,7 +982,8 @@ def _compute_overall_efficiency(
 
         if improvement < 0:
             recommendations.append(
-                f"Efficiency regressed by {abs(improvement):.1f} points vs baseline")
+                f"Efficiency regressed by {abs(improvement):.1f} points vs baseline"
+            )
             bottlenecks.append("regression_vs_baseline")
 
     return {
@@ -1003,7 +995,9 @@ def _compute_overall_efficiency(
     }
 
 
-def load_baseline_speed_metrics(baseline_report_path: Path) -> Optional[Dict[str, Dict[str, float]]]:
+def load_baseline_speed_metrics(
+    baseline_report_path: Path,
+) -> Optional[Dict[str, Dict[str, float]]]:
     """
     Load baseline speed metrics from a previous report.
 
@@ -1017,7 +1011,7 @@ def load_baseline_speed_metrics(baseline_report_path: Path) -> Optional[Dict[str
         return None
 
     try:
-        with open(baseline_report_path, 'r') as f:
+        with open(baseline_report_path, "r") as f:
             report = json.load(f)
             return report.get("speed_metrics")
     except Exception as e:

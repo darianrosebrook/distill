@@ -1,6 +1,7 @@
 """
 Pytest configuration and shared fixtures.
 """
+
 import json
 import tempfile
 from pathlib import Path
@@ -16,11 +17,11 @@ from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
 def device():
     """Get device for testing."""
     if torch.cuda.is_available():
-        return torch.device('cuda')
+        return torch.device("cuda")
     elif torch.backends.mps.is_available():
-        return torch.device('mps')
+        return torch.device("mps")
     else:
-        return torch.device('cpu')
+        return torch.device("cpu")
 
 
 @pytest.fixture
@@ -34,7 +35,7 @@ def small_model_cfg():
         d_head=32,
         vocab_size=1000,
         rope_theta=10000.0,
-        rope_scaling='none',
+        rope_scaling="none",
         dropout=0.0,
     )
 
@@ -51,7 +52,7 @@ def small_model(small_model_cfg, device):
 @pytest.fixture
 def temp_jsonl_file() -> Generator[Path, None, None]:
     """Create a temporary JSONL file for testing."""
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
         # Write some test data
         test_data = [
             {
@@ -66,7 +67,7 @@ def temp_jsonl_file() -> Generator[Path, None, None]:
             },
         ]
         for item in test_data:
-            f.write(json.dumps(item) + '\n')
+            f.write(json.dumps(item) + "\n")
         temp_path = Path(f.name)
 
     yield temp_path
@@ -94,6 +95,7 @@ def sample_batch():
 @pytest.fixture
 def mock_tokenizer():
     """Create a mock tokenizer for testing."""
+
     class MockTokenizer:
         def __init__(self):
             self.vocab_size = 1000
@@ -108,8 +110,7 @@ def mock_tokenizer():
             token_ids = [abs(hash(t)) % self.vocab_size for t in tokens]
 
             if add_special_tokens:
-                token_ids = [self.eos_token_id] + \
-                    token_ids + [self.eos_token_id]
+                token_ids = [self.eos_token_id] + token_ids + [self.eos_token_id]
 
             return token_ids
 
@@ -124,6 +125,7 @@ def mock_tokenizer():
 
 # Integration test fixtures - provide paths or skip if resources not available
 
+
 @pytest.fixture
 def coreml_model_path():
     """Path to CoreML model for golden vector tests."""
@@ -131,8 +133,7 @@ def coreml_model_path():
     # In dev, we skip the test gracefully
     path = "coreml/artifacts/worker/model.mlpackage"
     if not Path(path).exists():
-        pytest.skip(
-            f"CoreML model not found: {path}. Run 'make coreml-worker' first.")
+        pytest.skip(f"CoreML model not found: {path}. Run 'make coreml-worker' first.")
     return path
 
 
@@ -144,7 +145,8 @@ def current_metrics_path():
     path = "eval/reports/current_performance.json"
     if not Path(path).exists():
         pytest.skip(
-            f"Current performance metrics not found: {path}. Run performance evaluation first.")
+            f"Current performance metrics not found: {path}. Run performance evaluation first."
+        )
     return path
 
 
@@ -155,8 +157,7 @@ def fp16_model_path():
     # In dev, we skip the test gracefully
     path = "models/student/exported/student_fp16.pt"
     if not Path(path).exists():
-        pytest.skip(
-            f"FP16 model not found: {path}. Run 'make pytorch-worker' first.")
+        pytest.skip(f"FP16 model not found: {path}. Run 'make pytorch-worker' first.")
     return path
 
 
@@ -167,8 +168,7 @@ def golden_vectors_dir():
     # In dev, we skip the test gracefully
     path = "coreml/golden_vectors"
     if not Path(path).exists():
-        pytest.skip(
-            f"Golden vectors directory not found: {path}. Generate golden vectors first.")
+        pytest.skip(f"Golden vectors directory not found: {path}. Generate golden vectors first.")
     return path
 
 
@@ -179,6 +179,5 @@ def baseline_metrics_path():
     # In dev, we skip the test gracefully
     path = "eval/baselines/performance_baseline.json"
     if not Path(path).exists():
-        pytest.skip(
-            f"Baseline performance metrics not found: {path}. Create baseline first.")
+        pytest.skip(f"Baseline performance metrics not found: {path}. Create baseline first.")
     return path

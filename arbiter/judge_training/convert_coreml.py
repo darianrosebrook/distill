@@ -10,7 +10,11 @@ app = typer.Typer()
 
 
 @app.command()
-def main(onnx_path: str, out_path: str = "arbiter/judge_training/artifacts/coreml/judge.mlpackage", compute_units: str = "ALL"):
+def main(
+    onnx_path: str,
+    out_path: str = "arbiter/judge_training/artifacts/coreml/judge.mlpackage",
+    compute_units: str = "ALL",
+):
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     model = ct.converters.onnx.convert(
         model=onnx_path,
@@ -23,4 +27,3 @@ def main(onnx_path: str, out_path: str = "arbiter/judge_training/artifacts/corem
 
 if __name__ == "__main__":
     app()
-

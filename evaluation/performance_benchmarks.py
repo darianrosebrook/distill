@@ -15,6 +15,7 @@ import time
 
 class ModelRole(Enum):
     """Model roles in the arbiter stack"""
+
     WORKER = "worker"
     JUDGE = "judge"
     DRAFTER = "drafter"
@@ -23,6 +24,7 @@ class ModelRole(Enum):
 @dataclass
 class PerformanceTargets:
     """Performance targets for each model role"""
+
     # Latency targets (milliseconds)
     p50_latency_ms: float
     p95_latency_ms: float
@@ -78,6 +80,7 @@ PERFORMANCE_TARGETS = {
 @dataclass
 class PerformanceMetrics:
     """Measured performance metrics"""
+
     latency_ms: float
     tokens_per_second: float
     memory_mb: float
@@ -118,10 +121,8 @@ class PerformanceBenchmark:
         n = len(sorted_latencies)
 
         p50 = sorted_latencies[int(n * 0.50)]
-        p95 = sorted_latencies[int(
-            n * 0.95)] if n > 20 else sorted_latencies[-1]
-        p99 = sorted_latencies[int(
-            n * 0.99)] if n > 100 else sorted_latencies[-1]
+        p95 = sorted_latencies[int(n * 0.95)] if n > 20 else sorted_latencies[-1]
+        p99 = sorted_latencies[int(n * 0.99)] if n > 100 else sorted_latencies[-1]
 
         return {
             "p50": p50 <= self.targets.p50_latency_ms,
@@ -242,8 +243,7 @@ class PerformanceBenchmark:
 
         # Evaluate throughput
         if metrics.tokens_per_second:
-            results["throughput"] = self.evaluate_throughput(
-                metrics.tokens_per_second)
+            results["throughput"] = self.evaluate_throughput(metrics.tokens_per_second)
 
         # Evaluate quality
         results["quality"] = self.evaluate_quality(
@@ -259,12 +259,12 @@ class PerformanceBenchmark:
 
         # Overall pass/fail
         all_pass = (
-            results.get("latency", {}).get("pass", True) and
-            results.get("throughput", {}).get("pass", True) and
-            results.get("quality", {}).get("accuracy_pass", True) and
-            results.get("quality", {}).get("confidence_pass", True) and
-            results.get("resources", {}).get("memory_pass", True) and
-            results.get("resources", {}).get("cpu_pass", True)
+            results.get("latency", {}).get("pass", True)
+            and results.get("throughput", {}).get("pass", True)
+            and results.get("quality", {}).get("accuracy_pass", True)
+            and results.get("quality", {}).get("confidence_pass", True)
+            and results.get("resources", {}).get("memory_pass", True)
+            and results.get("resources", {}).get("cpu_pass", True)
         )
         results["overall_pass"] = all_pass
 
@@ -339,10 +339,14 @@ if __name__ == "__main__":
     print("JUDGE MODEL PERFORMANCE EVALUATION:")
     print(f"Overall Pass: {results['overall_pass']}")
     print(
-        f"Latency P95: {results['latency']['p95_value']:.2f}ms (target: {results['targets']['p95_latency_ms']}ms)")
+        f"Latency P95: {results['latency']['p95_value']:.2f}ms (target: {results['targets']['p95_latency_ms']}ms)"
+    )
     print(
-        f"Throughput: {results['throughput']['measured']:.2f} tokens/sec (target: {results['targets']['tokens_per_second']} tokens/sec)")
+        f"Throughput: {results['throughput']['measured']:.2f} tokens/sec (target: {results['targets']['tokens_per_second']} tokens/sec)"
+    )
     print(
-        f"Accuracy: {results['quality']['accuracy_value']:.2%} (target: {results['targets']['min_accuracy']:.2%})")
+        f"Accuracy: {results['quality']['accuracy_value']:.2%} (target: {results['targets']['min_accuracy']:.2%})"
+    )
     print(
-        f"Memory: {results['resources']['memory_value']:.0f}MB (target: {results['targets']['max_memory_mb']:.0f}MB)")
+        f"Memory: {results['resources']['memory_value']:.0f}MB (target: {results['targets']['max_memory_mb']:.0f}MB)"
+    )

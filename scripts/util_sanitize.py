@@ -3,6 +3,7 @@ PII redaction and URL allowlist utilities for dataset generation.
 
 Author: @darianrosebrook
 """
+
 import re
 
 URL_ALLOW = {"example.com", "example.org", "example.net"}
@@ -44,8 +45,11 @@ def redact_pii(text: str) -> str:
     cc_pattern_specific = r"\b\d{4}[ -]?\d{4}[ -]?\d{4}[ -]?\d{4}\b"
     text = re.sub(cc_pattern_specific, "[REDACTED_CC]", text)
     # Also catch longer sequences
-    text = re.sub(cc_pattern, lambda m: "[REDACTED_CC]" if len(
-        re.sub(r'[ -]', '', m.group())) >= 13 else m.group(), text)
+    text = re.sub(
+        cc_pattern,
+        lambda m: "[REDACTED_CC]" if len(re.sub(r"[ -]", "", m.group())) >= 13 else m.group(),
+        text,
+    )
 
     return text
 
@@ -66,15 +70,16 @@ def scan_safety(text: str) -> dict:
     # Check URLs
     urls = re.findall(r"https?://([^/\s]+)", text)
     normalized_allow = {normalize_hostname(h) for h in URL_ALLOW}
-    urls_ok = all(normalize_hostname(host)
-                  in normalized_allow for host in urls)
+    urls_ok = all(normalize_hostname(host) in normalized_allow for host in urls)
 
     # Check for PII patterns (count hits before redaction)
     email_hits = len(re.findall(r"[\w\.-]+@[\w\.-]+", text))
-    uuid_hits = len(re.findall(
-        r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\b",
-        text,
-    ))
+    uuid_hits = len(
+        re.findall(
+            r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\b",
+            text,
+        )
+    )
     phone_hits = len(re.findall(r"\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}", text))
     cc_hits = len(re.findall(r"\b\d{4}[ -]?\d{4}[ -]?\d{4}[ -]?\d{4}\b", text))
     pii_hits = email_hits + uuid_hits + phone_hits + cc_hits

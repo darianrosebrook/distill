@@ -28,9 +28,11 @@ class HardwareInfo:
 def detect_hardware() -> HardwareInfo:
     import platform
     import subprocess
+
     ver = "unknown"
     try:
         import coremltools as _ct
+
         ver = getattr(_ct, "__version__", "unknown")
     except Exception:
         pass
@@ -85,7 +87,9 @@ class StepAdapter:
             f"{self.__class__.__name__}.prepare_state() must be implemented by subclass"
         )
 
-    def first_step(self, model: MLModel, prompt_ids: np.ndarray, state: Dict[str, Any]) -> tuple[np.ndarray, Dict[str, Any]]:
+    def first_step(
+        self, model: MLModel, prompt_ids: np.ndarray, state: Dict[str, Any]
+    ) -> tuple[np.ndarray, Dict[str, Any]]:
         """
         Run first inference step with prompt.
 
@@ -101,7 +105,9 @@ class StepAdapter:
             f"{self.__class__.__name__}.first_step() must be implemented by subclass"
         )
 
-    def next_step(self, model: MLModel, token_id: int, state: Dict[str, Any]) -> tuple[np.ndarray, Dict[str, Any]]:
+    def next_step(
+        self, model: MLModel, token_id: int, state: Dict[str, Any]
+    ) -> tuple[np.ndarray, Dict[str, Any]]:
         """
         Run next inference step with single token.
 
@@ -133,7 +139,7 @@ def is_valid_tool_json(acc_text: str) -> bool:
 
 def run_coreml_speed(
     mlpackage_path: Path,
-    prompts: List[List[int]],   # tokenized prompts (ids)
+    prompts: List[List[int]],  # tokenized prompts (ids)
     adapter: StepAdapter,
     *,
     max_new_tokens: int = 64,
@@ -165,11 +171,10 @@ def run_coreml_speed(
     if prompt_cache is not None and prompt_texts is not None:
         try:
             from coreml.runtime.prompt_cache import extract_system_prompt
-            system_prompts = [extract_system_prompt(
-                text) for text in prompt_texts]
+
+            system_prompts = [extract_system_prompt(text) for text in prompt_texts]
         except Exception as e:
-            print(
-                f"[perf_mem_eval] WARN: Failed to extract system prompts for caching: {e}")
+            print(f"[perf_mem_eval] WARN: Failed to extract system prompts for caching: {e}")
             system_prompts = None
 
     # Use speculative decoding if available
@@ -277,8 +282,7 @@ def run_coreml_speed(
 
             # Measure first CoreML step
             t0 = time.perf_counter()
-            logits0, state = adapter.first_step(
-                model, ids_np, state)   # logits0: [V]
+            logits0, state = adapter.first_step(model, ids_np, state)  # logits0: [V]
             t1 = time.perf_counter()
             first_step_ms = (t1 - t0) * 1000.0
 
@@ -305,12 +309,12 @@ def run_coreml_speed(
             if tokenizer is not None:
                 try:
                     # Use optimized decode if available
-                    if hasattr(tokenizer, 'decode_optimized'):
+                    if hasattr(tokenizer, "decode_optimized"):
                         acc_text = tokenizer.decode_optimized(
-                            np.array(gen), skip_special_tokens=True)
+                            np.array(gen), skip_special_tokens=True
+                        )
                     else:
-                        acc_text = tokenizer.decode(
-                            gen, skip_special_tokens=True)
+                        acc_text = tokenizer.decode(gen, skip_special_tokens=True)
                     if is_valid_tool_json(acc_text):
                         found_tool = True
                         found_tool_ms = 0.0
@@ -327,16 +331,15 @@ def run_coreml_speed(
                 if tokenizer is not None and not found_tool:
                     try:
                         # Use optimized decode if available
-                        if hasattr(tokenizer, 'decode_optimized'):
+                        if hasattr(tokenizer, "decode_optimized"):
                             acc_text = tokenizer.decode_optimized(
-                                np.array(gen), skip_special_tokens=True)
+                                np.array(gen), skip_special_tokens=True
+                            )
                         else:
-                            acc_text = tokenizer.decode(
-                                gen, skip_special_tokens=True)
+                            acc_text = tokenizer.decode(gen, skip_special_tokens=True)
                         if is_valid_tool_json(acc_text):
                             found_tool = True
-                            found_tool_ms = (
-                                time.perf_counter() - t_start) * 1000.0
+                            found_tool_ms = (time.perf_counter() - t_start) * 1000.0
                             found_tool_tok = len(gen)
                     except Exception:
                         pass
@@ -357,9 +360,9 @@ def run_coreml_speed(
 
     speed = {
         "ttft_ms": {"p50": pct(ttf_ms, 50), "p90": pct(ttf_ms, 90), "p95": pct(ttf_ms, 95)},
-        "tps":     {"p50": pct(tps_seq, 50), "p90": pct(tps_seq, 90), "p95": pct(tps_seq, 95)},
+        "tps": {"p50": pct(tps_seq, 50), "p90": pct(tps_seq, 90), "p95": pct(tps_seq, 95)},
         "ttfa_tokens": {"p50": pct(ttfa_tokens, 50), "p95": pct(ttfa_tokens, 95)},
-        "ttfa_ms":     {"p50": pct(ttfa_ms, 50), "p95": pct(ttfa_ms, 95)},
+        "ttfa_ms": {"p50": pct(ttfa_ms, 50), "p95": pct(ttfa_ms, 95)},
     }
 
     # Add TTFT split if measured
@@ -434,35 +437,35 @@ def load_tokenized_prompts(
     """
     try:
         from training.dataset import load_tokenizer
+
         base_tokenizer = load_tokenizer(tokenizer_path)
 
         # Wrap with optimized tokenizer if requested
         if use_optimized_tokenizer:
             try:
                 from coreml.runtime.tokenizer_optimized import OptimizedTokenizer
-                tokenizer = OptimizedTokenizer(
-                    base_tokenizer, max_seq_length=max_prompt_length)
+
+                tokenizer = OptimizedTokenizer(base_tokenizer, max_seq_length=max_prompt_length)
             except Exception as e:
                 print(
-                    f"[perf_mem_eval] WARN: Failed to use optimized tokenizer, falling back to standard: {e}")
+                    f"[perf_mem_eval] WARN: Failed to use optimized tokenizer, falling back to standard: {e}"
+                )
                 tokenizer = base_tokenizer
         else:
             tokenizer = base_tokenizer
     except Exception as e:
-        raise RuntimeError(
-            f"Failed to load tokenizer from {tokenizer_path}: {e}")
+        raise RuntimeError(f"Failed to load tokenizer from {tokenizer_path}: {e}")
 
     prompts = []
     prompt_texts = [] if return_texts else None
     if not dataset_path.exists():
-        print(
-            f"[perf_mem_eval] WARN: Dataset not found: {dataset_path}, using synthetic prompts")
+        print(f"[perf_mem_eval] WARN: Dataset not found: {dataset_path}, using synthetic prompts")
         result = [[1, 2, 3], [4, 5, 6, 7]]
         if return_texts:
             return result, ["synthetic prompt 1", "synthetic prompt 2"]
         return result
 
-    with open(dataset_path, 'r', encoding='utf-8') as f:
+    with open(dataset_path, "r", encoding="utf-8") as f:
         for line_idx, line in enumerate(f):
             if line_idx >= max_samples:
                 break
@@ -484,10 +487,9 @@ def load_tokenized_prompts(
                         # Build prompt from input dict
                         system = input_data.get("system", "")
                         history = input_data.get("history", [])
-                        history_text = "\n".join([
-                            f"{msg.get('role', '')}: {msg.get('content', '')}"
-                            for msg in history
-                        ])
+                        history_text = "\n".join(
+                            [f"{msg.get('role', '')}: {msg.get('content', '')}" for msg in history]
+                        )
                         prompt_text = f"{system}\n\n{history_text}"
 
                 if prompt_text:
@@ -496,7 +498,7 @@ def load_tokenized_prompts(
                         prompt_texts.append(prompt_text)
 
                     # Tokenize prompt (use optimized method if available)
-                    if hasattr(tokenizer, 'encode_optimized'):
+                    if hasattr(tokenizer, "encode_optimized"):
                         encoded = tokenizer.encode_optimized(
                             prompt_text,
                             max_length=max_prompt_length,
@@ -512,12 +514,10 @@ def load_tokenized_prompts(
                         )
                     prompts.append(encoded)
             except Exception as e:
-                print(
-                    f"[perf_mem_eval] WARN: Failed to process line {line_idx}: {e}")
+                print(f"[perf_mem_eval] WARN: Failed to process line {line_idx}: {e}")
                 continue
 
-    print(
-        f"[perf_mem_eval] Loaded {len(prompts)} tokenized prompts from {dataset_path}")
+    print(f"[perf_mem_eval] Loaded {len(prompts)} tokenized prompts from {dataset_path}")
 
     if return_texts:
         return prompts, prompt_texts
@@ -526,49 +526,107 @@ def load_tokenized_prompts(
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", type=Path, required=True,
-                    help="Path to .mlpackage")
-    ap.add_argument("--dataset", type=Path, required=False,
-                    default=Path("data/contextual_final.jsonl"),
-                    help="JSONL with prompts (default: data/contextual_final.jsonl)")
-    ap.add_argument("--tokenizer", type=str, default="models/student/tokenizer",
-                    help="Tokenizer path (default: models/student/tokenizer)")
+    ap.add_argument("--model", type=Path, required=True, help="Path to .mlpackage")
+    ap.add_argument(
+        "--dataset",
+        type=Path,
+        required=False,
+        default=Path("data/contextual_final.jsonl"),
+        help="JSONL with prompts (default: data/contextual_final.jsonl)",
+    )
+    ap.add_argument(
+        "--tokenizer",
+        type=str,
+        default="models/student/tokenizer",
+        help="Tokenizer path (default: models/student/tokenizer)",
+    )
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--max-new-tokens", type=int, default=64)
-    ap.add_argument("--max-samples", type=int, default=100,
-                    help="Maximum number of samples to evaluate (default: 100)")
-    ap.add_argument("--export-path", type=str,
-                    default="pytorch_exportedprogram_coreml")
+    ap.add_argument(
+        "--max-samples",
+        type=int,
+        default=100,
+        help="Maximum number of samples to evaluate (default: 100)",
+    )
+    ap.add_argument("--export-path", type=str, default="pytorch_exportedprogram_coreml")
     ap.add_argument("--hardware", type=str, default="")
-    ap.add_argument("--enable-prompt-cache", action="store_true",
-                    help="Enable prompt caching for system prompts (30-50% TTFT reduction)")
-    ap.add_argument("--cache-size-mb", type=int, default=100,
-                    help="Maximum prompt cache size in MB (default: 100)")
-    ap.add_argument("--drafter-model", type=Path, default=None,
-                    help="Path to drafter model .mlpackage for speculative decoding")
-    ap.add_argument("--enable-speculative", action="store_true",
-                    help="Enable speculative decoding (drafter + worker, 25-40% TTFT improvement)")
-    ap.add_argument("--spec-k", type=int, default=2,
-                    help="Number of draft tokens per step (default: 2)")
-    ap.add_argument("--measure-ane-residency", action="store_true",
-                    help="Measure ANE residency during inference (requires inference samples)")
-    ap.add_argument("--ane-samples", type=int, default=100,
-                    help="Number of samples for ANE residency measurement (default: 100)")
-    ap.add_argument("--use-optimized-tokenizer", action="store_true",
-                    help="Use optimized tokenizer with pre-allocated buffers (10-20% TTFT reduction for long prompts)")
-    ap.add_argument("--use-optimized-kv-cache", action="store_true",
-                    help="Use optimized KV cache with ANE-friendly layout (reduced memory allocations)")
-    ap.add_argument("--kv-cache-heads", type=int, default=None,
-                    help="Number of attention heads for KV cache (default: auto-detect)")
-    ap.add_argument("--kv-cache-head-dim", type=int, default=None,
-                    help="Head dimension for KV cache (default: auto-detect)")
-    ap.add_argument("--kv-cache-gqa-groups", type=int, default=None,
-                    help="Number of query groups for GQA (default: standard MHA)")
-    ap.add_argument("--workload-type", type=str, default="interactive",
-                    choices=["interactive", "offline"],
-                    help="Workload type: 'interactive' (batch=1) or 'offline' (batch 2-4)")
-    ap.add_argument("--batch-size", type=int, default=None,
-                    help="Override batch size (default: auto-select based on workload-type)")
+    ap.add_argument(
+        "--enable-prompt-cache",
+        action="store_true",
+        help="Enable prompt caching for system prompts (30-50% TTFT reduction)",
+    )
+    ap.add_argument(
+        "--cache-size-mb",
+        type=int,
+        default=100,
+        help="Maximum prompt cache size in MB (default: 100)",
+    )
+    ap.add_argument(
+        "--drafter-model",
+        type=Path,
+        default=None,
+        help="Path to drafter model .mlpackage for speculative decoding",
+    )
+    ap.add_argument(
+        "--enable-speculative",
+        action="store_true",
+        help="Enable speculative decoding (drafter + worker, 25-40% TTFT improvement)",
+    )
+    ap.add_argument(
+        "--spec-k", type=int, default=2, help="Number of draft tokens per step (default: 2)"
+    )
+    ap.add_argument(
+        "--measure-ane-residency",
+        action="store_true",
+        help="Measure ANE residency during inference (requires inference samples)",
+    )
+    ap.add_argument(
+        "--ane-samples",
+        type=int,
+        default=100,
+        help="Number of samples for ANE residency measurement (default: 100)",
+    )
+    ap.add_argument(
+        "--use-optimized-tokenizer",
+        action="store_true",
+        help="Use optimized tokenizer with pre-allocated buffers (10-20% TTFT reduction for long prompts)",
+    )
+    ap.add_argument(
+        "--use-optimized-kv-cache",
+        action="store_true",
+        help="Use optimized KV cache with ANE-friendly layout (reduced memory allocations)",
+    )
+    ap.add_argument(
+        "--kv-cache-heads",
+        type=int,
+        default=None,
+        help="Number of attention heads for KV cache (default: auto-detect)",
+    )
+    ap.add_argument(
+        "--kv-cache-head-dim",
+        type=int,
+        default=None,
+        help="Head dimension for KV cache (default: auto-detect)",
+    )
+    ap.add_argument(
+        "--kv-cache-gqa-groups",
+        type=int,
+        default=None,
+        help="Number of query groups for GQA (default: standard MHA)",
+    )
+    ap.add_argument(
+        "--workload-type",
+        type=str,
+        default="interactive",
+        choices=["interactive", "offline"],
+        help="Workload type: 'interactive' (batch=1) or 'offline' (batch 2-4)",
+    )
+    ap.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        help="Override batch size (default: auto-select based on workload-type)",
+    )
     args = ap.parse_args()
 
     # Initialize prompt cache if enabled
@@ -576,12 +634,11 @@ def main():
     if args.enable_prompt_cache:
         try:
             from coreml.runtime.prompt_cache import PromptCache
+
             prompt_cache = PromptCache(max_cache_size_mb=args.cache_size_mb)
-            print(
-                f"[perf_mem_eval] Prompt caching enabled (max {args.cache_size_mb}MB)")
+            print(f"[perf_mem_eval] Prompt caching enabled (max {args.cache_size_mb}MB)")
         except Exception as e:
-            print(
-                f"[perf_mem_eval] WARN: Failed to initialize prompt cache: {e}")
+            print(f"[perf_mem_eval] WARN: Failed to initialize prompt cache: {e}")
 
     # Load tokenized prompts from dataset
     prompt_texts = None
@@ -629,11 +686,9 @@ def main():
                 precision="fp16",
                 use_numpy=True,
             )
-            print(
-                f"[perf_mem_eval] Optimized KV cache initialized: {kv_cache.stats()}")
+            print(f"[perf_mem_eval] Optimized KV cache initialized: {kv_cache.stats()}")
         except Exception as e:
-            print(
-                f"[perf_mem_eval] WARN: Failed to initialize optimized KV cache: {e}")
+            print(f"[perf_mem_eval] WARN: Failed to initialize optimized KV cache: {e}")
 
     # Initialize batch policy
     batch_policy = None
@@ -655,14 +710,13 @@ def main():
                 args.batch_size, workload_type=args.workload_type
             )
             if not is_allowed:
-                print(
-                    f"[perf_mem_eval] WARN: Batch size {args.batch_size} not allowed: {reason}")
+                print(f"[perf_mem_eval] WARN: Batch size {args.batch_size} not allowed: {reason}")
         else:
-            selected_batch_size = batch_policy.select_batch_size(
-                workload_type=args.workload_type)
+            selected_batch_size = batch_policy.select_batch_size(workload_type=args.workload_type)
 
         print(
-            f"[perf_mem_eval] Batch policy: workload_type={args.workload_type}, batch_size={selected_batch_size}")
+            f"[perf_mem_eval] Batch policy: workload_type={args.workload_type}, batch_size={selected_batch_size}"
+        )
     except Exception as e:
         print(f"[perf_mem_eval] WARN: Failed to initialize batch policy: {e}")
         # Default to batch=1 if policy fails
@@ -691,8 +745,7 @@ def main():
             # Prepare input dict for model prediction
             inputs = {"prompt_ids": prompt_ids}
             # Include state keys that the model expects (e.g., KV cache)
-            inputs.update(
-                {k: v for k, v in state.items() if k in ["kv_cache"]})
+            inputs.update({k: v for k, v in state.items() if k in ["kv_cache"]})
 
             out = model.predict(inputs)
 
@@ -711,13 +764,13 @@ def main():
                         logits = logits[0]
                 else:
                     raise ValueError(
-                        f"Could not find logits in model output. Keys: {list(out.keys())}")
+                        f"Could not find logits in model output. Keys: {list(out.keys())}"
+                    )
 
             # Update state with any returned state from model
             # Common keys: kv_cache, position_ids, attention_mask, etc.
             updated_state = state.copy()
-            state_keys = ["kv_cache", "position_ids",
-                          "attention_mask", "state"]
+            state_keys = ["kv_cache", "position_ids", "attention_mask", "state"]
             for key in state_keys:
                 if key in out:
                     updated_state[key] = out[key]
@@ -737,8 +790,11 @@ def main():
             # Prepare input dict for model prediction
             inputs = {"token_id": np.array([[token_id]], dtype=np.int32)}
             # Include state keys that the model expects (e.g., KV cache)
-            state_inputs = {k: v for k, v in state.items(
-            ) if k in ["kv_cache", "position_ids", "attention_mask"]}
+            state_inputs = {
+                k: v
+                for k, v in state.items()
+                if k in ["kv_cache", "position_ids", "attention_mask"]
+            }
             inputs.update(state_inputs)
 
             out = model.predict(inputs)
@@ -758,12 +814,12 @@ def main():
                         logits = logits[0]
                 else:
                     raise ValueError(
-                        f"Could not find logits in model output. Keys: {list(out.keys())}")
+                        f"Could not find logits in model output. Keys: {list(out.keys())}"
+                    )
 
             # Update state with any returned state from model
             updated_state = state.copy()
-            state_keys = ["kv_cache", "position_ids",
-                          "attention_mask", "state"]
+            state_keys = ["kv_cache", "position_ids", "attention_mask", "state"]
             for key in state_keys:
                 if key in out:
                     updated_state[key] = out[key]
@@ -780,11 +836,11 @@ def main():
         if args.drafter_model is None:
             print("[perf_mem_eval] WARN: --enable-speculative requires --drafter-model")
         elif not args.drafter_model.exists():
-            print(
-                f"[perf_mem_eval] WARN: Drafter model not found: {args.drafter_model}")
+            print(f"[perf_mem_eval] WARN: Drafter model not found: {args.drafter_model}")
         else:
             try:
                 from coreml.runtime.speculative_decode import SpeculativeDecoder
+
                 drafter_model = MLModel(str(args.drafter_model))
                 worker_model = MLModel(str(args.model))
 
@@ -800,23 +856,23 @@ def main():
                     k=args.spec_k,
                     temperature=0.0,
                 )
-                print(
-                    f"[perf_mem_eval] Speculative decoding enabled (k={args.spec_k})")
+                print(f"[perf_mem_eval] Speculative decoding enabled (k={args.spec_k})")
             except Exception as e:
-                print(
-                    f"[perf_mem_eval] WARN: Failed to initialize speculative decoder: {e}")
+                print(f"[perf_mem_eval] WARN: Failed to initialize speculative decoder: {e}")
 
     # Load tokenizer for TTFA detection if available
     tokenizer = None
     try:
         from training.dataset import load_tokenizer
+
         tokenizer = load_tokenizer(args.tokenizer)
     except Exception as e:
-        print(
-            f"[perf_mem_eval] WARN: Failed to load tokenizer, TTFA detection disabled: {e}")
+        print(f"[perf_mem_eval] WARN: Failed to load tokenizer, TTFA detection disabled: {e}")
 
     speed = run_coreml_speed(
-        args.model, prompts, DummyAdapter(),
+        args.model,
+        prompts,
+        DummyAdapter(),
         max_new_tokens=args.max_new_tokens,
         tokenizer=tokenizer,
         prompt_cache=prompt_cache,
@@ -841,26 +897,23 @@ def main():
             def inference_fn():
                 # Run inference on a random prompt
                 import random
+
                 prompt_ids = random.choice(prompts)
                 ids_np = np.array(prompt_ids, dtype=np.int32)[None, :]
                 state = adapter_instance.prepare_state(ids_np)
-                logits, state = adapter_instance.first_step(
-                    model, ids_np, state)
+                logits, state = adapter_instance.first_step(model, ids_np, state)
                 # Sample a few more tokens
                 for _ in range(5):
                     token = int(np.argmax(logits))
-                    logits, state = adapter_instance.next_step(
-                        model, token, state)
+                    logits, state = adapter_instance.next_step(model, token, state)
 
             ane_residency = monitor.measure_residency(
                 inference_fn=inference_fn,
                 num_samples=args.ane_samples,
             )
-            print(
-                f"[perf_mem_eval] ANE residency: {ane_residency.get('ane_time_pct', 0):.1%}")
+            print(f"[perf_mem_eval] ANE residency: {ane_residency.get('ane_time_pct', 0):.1%}")
         except Exception as e:
-            print(
-                f"[perf_mem_eval] WARN: Failed to measure ANE residency: {e}")
+            print(f"[perf_mem_eval] WARN: Failed to measure ANE residency: {e}")
 
     hw = detect_hardware()
 
@@ -868,6 +921,7 @@ def main():
     hardware_profile_key = None
     try:
         from eval.hw_profile import load_profiles, match_profile
+
         profiles = load_profiles(Path("configs/hardware_profiles.yaml"))
         profile = match_profile(profiles)
         hardware_profile_key = profile.key

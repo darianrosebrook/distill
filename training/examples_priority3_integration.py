@@ -28,6 +28,7 @@ from training.losses import (
 # Example 1: Intermediate Layer Matching with Local Teacher Model
 # ============================================================================
 
+
 def extract_teacher_hidden_states(
     teacher_model: nn.Module,
     input_ids: torch.Tensor,
@@ -48,12 +49,10 @@ def extract_teacher_hidden_states(
         List of hidden states per layer
     """
     # If teacher model supports return_hidden_states
-    if hasattr(teacher_model, 'forward'):
+    if hasattr(teacher_model, "forward"):
         try:
             _, teacher_hidden_states = teacher_model(
-                input_ids,
-                attention_mask=attention_mask,
-                return_hidden_states=True
+                input_ids, attention_mask=attention_mask, return_hidden_states=True
             )
             return teacher_hidden_states
         except TypeError:
@@ -73,7 +72,7 @@ def extract_teacher_hidden_states(
     # Register hooks on transformer blocks
     hooks = []
     for name, module in teacher_model.named_modules():
-        if 'block' in name.lower() or 'layer' in name.lower():
+        if "block" in name.lower() or "layer" in name.lower():
             hook = module.register_forward_hook(hook_fn)
             hooks.append(hook)
 
@@ -108,26 +107,25 @@ def example_intermediate_layer_matching(
 
     # 1. Extract student hidden states
     student_logits, student_hidden_states = student_model(
-        input_ids,
-        attention_mask=attention_mask,
-        return_hidden_states=True
+        input_ids, attention_mask=attention_mask, return_hidden_states=True
     )
 
     # 2. Extract teacher hidden states
     teacher_hidden_states = extract_teacher_hidden_states(
-        teacher_model,
-        input_ids,
-        attention_mask=attention_mask
+        teacher_model, input_ids, attention_mask=attention_mask
     )
 
     # 3. Define layer mapping
     # Example: Map student layers [0, 8, 16, 24] to teacher layers [0, 16, 32, 48]
-    layer_mapping = kd_cfg.get("layer_mapping", {
-        0: 0,   # Student layer 0 -> Teacher layer 0
-        8: 16,  # Student layer 8 -> Teacher layer 16
-        16: 32,  # Student layer 16 -> Teacher layer 32
-        24: 48,  # Student layer 24 -> Teacher layer 48
-    })
+    layer_mapping = kd_cfg.get(
+        "layer_mapping",
+        {
+            0: 0,  # Student layer 0 -> Teacher layer 0
+            8: 16,  # Student layer 8 -> Teacher layer 16
+            16: 32,  # Student layer 16 -> Teacher layer 32
+            24: 48,  # Student layer 24 -> Teacher layer 48
+        },
+    )
 
     # 4. Create projection layers if dimensions differ
     projection_layers = None
@@ -159,6 +157,7 @@ def example_intermediate_layer_matching(
 # ============================================================================
 # Example 2: Self-Evaluation Head Usage
 # ============================================================================
+
 
 def compute_teacher_quality_score(
     teacher_output: str,
@@ -216,6 +215,7 @@ def compute_teacher_quality_score(
         try:
             # Try to use nltk if available
             from nltk.translate.bleu_score import sentence_bleu
+
             reference = [ground_truth.split()]
             candidate = teacher_output.split()
             bleu_score = sentence_bleu(reference, candidate)
@@ -234,12 +234,12 @@ def compute_teacher_quality_score(
             candidate_unigrams = set(candidate_tokens)
 
             matches = len(reference_unigrams & candidate_unigrams)
-            precision = matches / \
-                len(candidate_unigrams) if candidate_unigrams else 0.0
+            precision = matches / len(candidate_unigrams) if candidate_unigrams else 0.0
 
             # Brevity penalty (simplified)
-            brevity_penalty = min(1.0, len(
-                candidate_tokens) / len(reference_tokens)) if reference_tokens else 0.0
+            brevity_penalty = (
+                min(1.0, len(candidate_tokens) / len(reference_tokens)) if reference_tokens else 0.0
+            )
 
             # Simplified BLEU score (unigram precision with brevity penalty)
             bleu_approx = precision * brevity_penalty
@@ -266,16 +266,12 @@ def example_self_evaluation_training(
     """
     # 1. Get student evaluation score
     student_logits, eval_score = student_model(
-        input_ids,
-        attention_mask=attention_mask,
-        return_eval_score=True
+        input_ids, attention_mask=attention_mask, return_eval_score=True
     )
 
     # 2. Compute teacher quality score
     teacher_quality = compute_teacher_quality_score(
-        teacher_output=teacher_output,
-        ground_truth=ground_truth,
-        method="heuristic"
+        teacher_output=teacher_output, ground_truth=ground_truth, method="heuristic"
     )
 
     # 3. Compute self-evaluation loss
@@ -290,6 +286,7 @@ def example_self_evaluation_training(
 # ============================================================================
 # Example 3: Combined Usage in Training Loop
 # ============================================================================
+
 
 def example_combined_training_step(
     student_model: StudentLM,
@@ -317,41 +314,30 @@ def example_combined_training_step(
     if use_intermediate and use_self_eval:
         # Need two forward passes (model doesn't support both simultaneously)
         student_logits, student_hidden_states = student_model(
-            input_ids,
-            attention_mask=attention_mask,
-            return_hidden_states=True
+            input_ids, attention_mask=attention_mask, return_hidden_states=True
         )
         _, eval_score = student_model(
-            input_ids,
-            attention_mask=attention_mask,
-            return_eval_score=True
+            input_ids, attention_mask=attention_mask, return_eval_score=True
         )
     elif use_intermediate:
         student_logits, student_hidden_states = student_model(
-            input_ids,
-            attention_mask=attention_mask,
-            return_hidden_states=True
+            input_ids, attention_mask=attention_mask, return_hidden_states=True
         )
         eval_score = None
     elif use_self_eval:
         student_logits, eval_score = student_model(
-            input_ids,
-            attention_mask=attention_mask,
-            return_eval_score=True
+            input_ids, attention_mask=attention_mask, return_eval_score=True
         )
         student_hidden_states = None
     else:
-        student_model(
-            input_ids, attention_mask=attention_mask)
+        student_model(input_ids, attention_mask=attention_mask)
         student_hidden_states = None
         eval_score = None
 
     # Compute intermediate layer loss
     if use_intermediate and student_hidden_states is not None and teacher_model is not None:
         teacher_hidden_states = extract_teacher_hidden_states(
-            teacher_model,
-            input_ids,
-            attention_mask=attention_mask
+            teacher_model, input_ids, attention_mask=attention_mask
         )
 
         layer_mapping = kd_cfg.get("layer_mapping", {})
@@ -408,16 +394,14 @@ EXAMPLE_CONFIG = {
         "use_intermediate_layers": True,
         "intermediate_layer_weight": 0.1,
         "layer_mapping": {
-            0: 0,   # Student layer 0 -> Teacher layer 0
+            0: 0,  # Student layer 0 -> Teacher layer 0
             8: 16,  # Student layer 8 -> Teacher layer 16
             16: 32,  # Student layer 16 -> Teacher layer 32
             24: 48,  # Student layer 24 -> Teacher layer 48
         },
-
         # Enable self-evaluation head
         "use_self_evaluation": True,
         "self_evaluation_weight": 0.05,
-
         # Other KD settings
         "kl_weight": 0.4,
         "ce_teacher_weight": 0.2,

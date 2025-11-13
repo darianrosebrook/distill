@@ -3,6 +3,7 @@ Training script for answer generation stage.
 
 Trains model to generate final answers or code after tool execution.
 """
+
 import argparse
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -14,13 +15,16 @@ from torch.utils.data import DataLoader
 import yaml
 
 from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
-from training.dataset_answer_generation import AnswerGenerationDataset, collate_answer_generation_batch
+from training.dataset_answer_generation import (
+    AnswerGenerationDataset,
+    collate_answer_generation_batch,
+)
 from training.tracing import create_tracer_from_config
 
 
 def load_config(config_path: str) -> Dict[str, Any]:
     """Load YAML configuration file."""
-    with open(config_path, 'r') as f:
+    with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
 
@@ -46,11 +50,10 @@ def create_model(cfg: Dict[str, Any], device: torch.device) -> nn.Module:
     init_cfg = cfg.get("init", {})
     base_checkpoint = init_cfg.get("base_checkpoint")
     if base_checkpoint and Path(base_checkpoint).exists():
-        print(
-            f"[distill_answer_generation] Loading checkpoint: {base_checkpoint}")
-        checkpoint = torch.load(base_checkpoint, map_location='cpu')
-        if 'model_state_dict' in checkpoint:
-            model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+        print(f"[distill_answer_generation] Loading checkpoint: {base_checkpoint}")
+        checkpoint = torch.load(base_checkpoint, map_location="cpu")
+        if "model_state_dict" in checkpoint:
+            model.load_state_dict(checkpoint["model_state_dict"], strict=False)
         else:
             model.load_state_dict(checkpoint, strict=False)
         print("[distill_answer_generation] Checkpoint loaded")
@@ -81,9 +84,7 @@ def train_step(
 
         # Standard cross-entropy loss
         ce_loss = F.cross_entropy(
-            logits.view(-1, logits.size(-1)),
-            labels.view(-1),
-            ignore_index=-100
+            logits.view(-1, logits.size(-1)), labels.view(-1), ignore_index=-100
         )
 
         total_loss = ce_loss
@@ -106,15 +107,13 @@ def train_step(
 def main() -> None:
     """Main training entry point."""
     ap = argparse.ArgumentParser(description="Answer generation training")
-    ap.add_argument('--config', required=True, help='Config file')
-    ap.add_argument('--data', required=True,
-                    help='Path to answer generation JSONL file')
-    ap.add_argument(
-        '--output-dir', default='models/student/checkpoints', help='Output directory')
-    ap.add_argument('--resume', help='Resume from checkpoint')
+    ap.add_argument("--config", required=True, help="Config file")
+    ap.add_argument("--data", required=True, help="Path to answer generation JSONL file")
+    ap.add_argument("--output-dir", default="models/student/checkpoints", help="Output directory")
+    ap.add_argument("--resume", help="Resume from checkpoint")
     args = ap.parse_args()
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[distill_answer_generation] Using device: {device}")
 
     # Load config
@@ -139,11 +138,10 @@ def main() -> None:
     # Setup FP16 scaler
     train_cfg = cfg.get("train", {})
     use_fp16 = train_cfg.get("fp16", False)
-    scaler = torch.cuda.amp.GradScaler() if use_fp16 and device.type == 'cuda' else None
+    scaler = torch.cuda.amp.GradScaler() if use_fp16 and device.type == "cuda" else None
 
     # Create dataset
-    tokenizer_path = cfg.get("io", {}).get(
-        "tokenizer_path", "models/student/tokenizer")
+    tokenizer_path = cfg.get("io", {}).get("tokenizer_path", "models/student/tokenizer")
     dataset = AnswerGenerationDataset(
         data_path=args.data,
         tokenizer_path=tokenizer_path,
@@ -160,12 +158,14 @@ def main() -> None:
 
     # Initialize tracer
     tracer = create_tracer_from_config(cfg, run_name="final")
-    tracer.log_hparams({
-        "stage": "final",
-        "data_path": args.data,
-        "lr": opt_cfg.get("lr", 2e-4),
-        "batch_size": train_cfg.get("micro_batch_size", 2),
-    })
+    tracer.log_hparams(
+        {
+            "stage": "final",
+            "data_path": args.data,
+            "lr": opt_cfg.get("lr", 2e-4),
+            "batch_size": train_cfg.get("micro_batch_size", 2),
+        }
+    )
 
     # Training loop
     total_steps = train_cfg.get("steps", 50000)
@@ -191,38 +191,42 @@ def main() -> None:
 
             # Logging
             if step % log_every == 0:
-                tracer.log_metrics(
-                    step=step, metrics=loss_dict, prefix="train/")
+                tracer.log_metrics(step=step, metrics=loss_dict, prefix="train/")
 
             # Checkpointing
             if step % save_every == 0:
                 checkpoint_path = output_dir / f"final_step_{step}.pt"
-                torch.save({
-                    "step": step,
-                    "model_state_dict": model.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
-                    "loss": loss_dict.get("total", 0.0),
-                    "config": cfg,
-                }, checkpoint_path)
-                print(
-                    f"[distill_answer_generation] Saved checkpoint: {checkpoint_path}")
+                torch.save(
+                    {
+                        "step": step,
+                        "model_state_dict": model.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict(),
+                        "loss": loss_dict.get("total", 0.0),
+                        "config": cfg,
+                    },
+                    checkpoint_path,
+                )
+                print(f"[distill_answer_generation] Saved checkpoint: {checkpoint_path}")
 
         if step >= total_steps:
             break
 
     # Final checkpoint
     final_path = output_dir / "final_latest.pt"
-    torch.save({
-        "step": step,
-        "model_state_dict": model.state_dict(),
-        "optimizer_state_dict": optimizer.state_dict(),
-        "loss": loss_dict.get("total", 0.0),
-        "config": cfg,
-    }, final_path)
+    torch.save(
+        {
+            "step": step,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "loss": loss_dict.get("total", 0.0),
+            "config": cfg,
+        },
+        final_path,
+    )
 
     tracer.close()
     print(f"[distill_answer_generation] ✅ Training complete: {final_path}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

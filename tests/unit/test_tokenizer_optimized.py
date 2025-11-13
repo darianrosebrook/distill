@@ -3,12 +3,14 @@ Unit tests for optimized tokenizer I/O.
 
 Tests pre-allocated buffers and ring buffers for M-series Apple Silicon optimization.
 """
+
 import pytest
 import numpy as np
 from unittest.mock import Mock
 
 try:
     from coreml.runtime.tokenizer_optimized import OptimizedTokenizer, RingBuffer, wrap_tokenizer
+
     TOKENIZER_OPTIMIZED_AVAILABLE = True
 except ImportError:
     TOKENIZER_OPTIMIZED_AVAILABLE = False
@@ -39,8 +41,7 @@ class TestRingBuffer:
 
         read_tokens = buffer.read(5)
         assert len(read_tokens) == 5
-        assert np.array_equal(read_tokens, np.array(
-            [1, 2, 3, 4, 5], dtype=np.int32))
+        assert np.array_equal(read_tokens, np.array([1, 2, 3, 4, 5], dtype=np.int32))
 
     def test_wrap_around(self):
         """Test ring buffer wrap-around behavior."""
@@ -135,8 +136,7 @@ class TestOptimizedTokenizer:
         """Test batch decoding."""
         opt_tokenizer = OptimizedTokenizer(mock_tokenizer, max_seq_length=100)
 
-        batch_token_ids = np.array(
-            [[1, 2, 3, 0, 0], [4, 5, 0, 0, 0]], dtype=np.int32)
+        batch_token_ids = np.array([[1, 2, 3, 0, 0], [4, 5, 0, 0, 0]], dtype=np.int32)
         texts = opt_tokenizer.decode_batch_optimized(batch_token_ids)
 
         assert len(texts) == 2

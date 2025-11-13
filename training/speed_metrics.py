@@ -6,6 +6,7 @@ These are proxies for the actual CoreML/ANE measurements.
 
 Reference: inference-speed-optimization-during-distillation-c3d3cffc.plan.md Phase 4
 """
+
 import time
 from typing import Dict, List
 import torch
@@ -69,7 +70,7 @@ def measure_proxy(
 
         for i in range(min(max_new_tokens - 1, 32)):  # Limit to 32 for speed
             # Single token forward
-            if hasattr(model, 'forward_decode'):
+            if hasattr(model, "forward_decode"):
                 # Use decode path if available
                 next_logits, kv_cache = model.forward_decode(
                     torch.tensor([[generated_tokens[-1]]], device=device),
@@ -79,10 +80,9 @@ def measure_proxy(
                 next_token_id = torch.argmax(next_logits[0, 0, :]).item()
             else:
                 # Fallback: full forward pass
-                next_input = torch.cat([
-                    current_ids,
-                    torch.tensor([[generated_tokens[-1]]], device=device)
-                ], dim=1)
+                next_input = torch.cat(
+                    [current_ids, torch.tensor([[generated_tokens[-1]]], device=device)], dim=1
+                )
                 next_logits = model(next_input, attention_mask=None)
                 next_token_id = torch.argmax(next_logits[0, -1, :]).item()
                 current_ids = next_input
@@ -101,8 +101,7 @@ def measure_proxy(
         if tokenizer is not None:
             try:
                 # Decode generated tokens to check for valid tool JSON
-                decoded_text = tokenizer.decode(
-                    generated_tokens, skip_special_tokens=True)
+                decoded_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
                 # Check if decoded text contains valid tool JSON
                 # This is a simple heuristic - use your actual JSON validator for production
@@ -115,8 +114,8 @@ def measure_proxy(
         return {
             "ttft_ms": float(ttft_ms),
             "tps": float(tps),
-            "ttfa_tokens": float(ttfa_tokens) if ttfa_tokens is not None else float('inf'),
-            "ttfa_ms": float(ttfa_ms) if ttfa_ms is not None else float('inf'),
+            "ttfa_tokens": float(ttfa_tokens) if ttfa_tokens is not None else float("inf"),
+            "ttfa_ms": float(ttfa_ms) if ttfa_ms is not None else float("inf"),
             "tokens_generated": tokens_generated,
         }
 
@@ -180,10 +179,10 @@ def aggregate_speed_metrics(metrics_list: List[Dict[str, float]]) -> Dict[str, D
 
     ttft_values = [m["ttft_ms"] for m in metrics_list]
     tps_values = [m["tps"] for m in metrics_list]
-    ttfa_tokens_values = [m["ttfa_tokens"]
-                          for m in metrics_list if m["ttfa_tokens"] != float('inf')]
-    ttfa_ms_values = [m["ttfa_ms"]
-                      for m in metrics_list if m["ttfa_ms"] != float('inf')]
+    ttfa_tokens_values = [
+        m["ttfa_tokens"] for m in metrics_list if m["ttfa_tokens"] != float("inf")
+    ]
+    ttfa_ms_values = [m["ttfa_ms"] for m in metrics_list if m["ttfa_ms"] != float("inf")]
 
     return {
         "ttft_ms": {
@@ -197,11 +196,11 @@ def aggregate_speed_metrics(metrics_list: List[Dict[str, float]]) -> Dict[str, D
             "p95": pct(tps_values, 95),
         },
         "ttfa_tokens": {
-            "p50": pct(ttfa_tokens_values, 50) if ttfa_tokens_values else float('inf'),
-            "p95": pct(ttfa_tokens_values, 95) if ttfa_tokens_values else float('inf'),
+            "p50": pct(ttfa_tokens_values, 50) if ttfa_tokens_values else float("inf"),
+            "p95": pct(ttfa_tokens_values, 95) if ttfa_tokens_values else float("inf"),
         },
         "ttfa_ms": {
-            "p50": pct(ttfa_ms_values, 50) if ttfa_ms_values else float('inf'),
-            "p95": pct(ttfa_ms_values, 95) if ttfa_ms_values else float('inf'),
+            "p50": pct(ttfa_ms_values, 50) if ttfa_ms_values else float("inf"),
+            "p95": pct(ttfa_ms_values, 95) if ttfa_ms_values else float("inf"),
         },
     }

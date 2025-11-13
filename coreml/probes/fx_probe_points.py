@@ -15,6 +15,7 @@ class Probe:
         def hook(_m, _inp, out):
             t = out.detach().float().cpu().numpy()
             self.data[key] = t
+
         self.hooks.append(module.register_forward_hook(hook))
         return self
 

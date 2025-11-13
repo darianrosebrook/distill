@@ -13,6 +13,7 @@ app = typer.Typer()
 
 class DecodeWrapper(nn.Module):
     """Wrapper for decoder-only export with KV cache inputs/outputs."""
+
     def __init__(self, model: StudentLM, n_layers: int, n_kv_heads: int, d_head: int):
         super().__init__()
         self.model = model
@@ -22,7 +23,7 @@ class DecodeWrapper(nn.Module):
 
     def forward(self, input_ids: torch.Tensor, *kv_caches) -> tuple:
         """Decode forward with KV cache inputs.
-        
+
         Args:
             input_ids: [B, 1] single token
             kv_caches: n_layers * 2 tensors (k_cache, v_cache) each [B, Hk, T_cache, Dh]
@@ -42,9 +43,9 @@ class DecodeWrapper(nn.Module):
                     kv_list.append((k_cache, v_cache))
             else:
                 kv_list.append(None)
-        
+
         logits, updated_caches = self.model.forward_decode(input_ids, kv_list, pos=0)
-        
+
         # Flatten updated caches for ONNX export
         outputs = [logits]
         for k_cache, v_cache in updated_caches:
@@ -55,7 +56,7 @@ class DecodeWrapper(nn.Module):
 @app.command()
 def main(config: str = "conversion/shape_sets.json", mode: str = "both"):
     """Export ONNX models for prefill and/or decode modes.
-    
+
     Args:
         config: Path to shape_sets.json
         mode: Export mode - "prefill", "decode", or "both" (default)
@@ -103,15 +104,19 @@ def main(config: str = "conversion/shape_sets.json", mode: str = "both"):
         # Use a reasonable cache size for export (can be dynamic in runtime)
         # Start with empty cache (T_cache=0) - ONNX will infer dynamic dimension
         cache_len = 1  # Start with minimal cache for export shape inference
-        
+
         dummy_input_ids = torch.zeros((1, 1), dtype=torch.int32)
         dummy_kv_inputs = []
-        
+
         for _ in range(cfg.n_layers):
             # k_cache: [B, Hk, T_cache, Dh] - T_cache can be dynamic
-            dummy_k_cache = torch.zeros((1, cfg.n_kv_heads, cache_len, cfg.d_head), dtype=torch.float16)
+            dummy_k_cache = torch.zeros(
+                (1, cfg.n_kv_heads, cache_len, cfg.d_head), dtype=torch.float16
+            )
             # v_cache: [B, Hk, T_cache, Dh]
-            dummy_v_cache = torch.zeros((1, cfg.n_kv_heads, cache_len, cfg.d_head), dtype=torch.float16)
+            dummy_v_cache = torch.zeros(
+                (1, cfg.n_kv_heads, cache_len, cfg.d_head), dtype=torch.float16
+            )
             dummy_kv_inputs.extend([dummy_k_cache, dummy_v_cache])
 
         # Input names: input_ids + per-layer k_cache/v_cache

@@ -3,6 +3,7 @@ Dataset loader for knowledge distillation training.
 
 Loads JSONL format from make_kd_mix.py and prepares batches for training.
 """
+
 import json
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -12,6 +13,7 @@ from torch.utils.data import Dataset
 
 try:
     from transformers import AutoTokenizer
+
     HF_TOKENIZER_AVAILABLE = True
 except ImportError:
     HF_TOKENIZER_AVAILABLE = False
@@ -21,7 +23,8 @@ def load_tokenizer(tokenizer_path: str):
     """Load tokenizer from path."""
     if not HF_TOKENIZER_AVAILABLE:
         raise RuntimeError(
-            "transformers library required for tokenizer. Install with: pip install transformers")
+            "transformers library required for tokenizer. Install with: pip install transformers"
+        )
 
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
     if tokenizer.pad_token is None:
@@ -79,7 +82,8 @@ class KDDataset(Dataset):
         # Load tokenizer
         if not HF_TOKENIZER_AVAILABLE:
             raise RuntimeError(
-                "transformers library required for tokenizer. Install with: pip install transformers")
+                "transformers library required for tokenizer. Install with: pip install transformers"
+            )
 
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
         if self.tokenizer.pad_token is None:
@@ -94,17 +98,16 @@ class KDDataset(Dataset):
     def _load_data(self):
         """Load samples from JSONL file."""
         if not self.jsonl_path.exists():
-            raise FileNotFoundError(
-                f"Dataset file not found: {self.jsonl_path}")
+            raise FileNotFoundError(f"Dataset file not found: {self.jsonl_path}")
 
-        with open(self.jsonl_path, 'r', encoding='utf-8') as f:
+        with open(self.jsonl_path, "r", encoding="utf-8") as f:
             first_line = True
             for line_num, line in enumerate(f):
                 if not line.strip():
                     continue
                 try:
                     data = json.loads(line)
-                    
+
                     # Check for dataset header (first line with __header__ flag)
                     if first_line and data.get("__header__", False):
                         self.dataset_header = data
@@ -113,27 +116,26 @@ class KDDataset(Dataset):
                             self.dataset_fingerprint = data["dataset_sha256"]
                         first_line = False
                         continue
-                    
+
                     first_line = False
-                    
+
                     if "prompt" not in data or "teacher_text" not in data:
                         print(
-                            f"[KDDataset] WARN: Skipping line {line_num+1}: missing required fields")
+                            f"[KDDataset] WARN: Skipping line {line_num + 1}: missing required fields"
+                        )
                         continue
                     # CoT-free validation: Fail if reasoning_content detected
                     if "teacher_reasoning_content" in data and data["teacher_reasoning_content"]:
                         raise ValueError(
-                            f"CoT-free training: teacher_reasoning_content detected in line {line_num+1}. "
+                            f"CoT-free training: teacher_reasoning_content detected in line {line_num + 1}. "
                             "Training on reasoning_content violates ToS. Use process-step supervision instead."
                         )
                     self.samples.append(data)
                 except json.JSONDecodeError as e:
-                    print(
-                        f"[KDDataset] WARN: Skipping line {line_num+1}: JSON decode error: {e}")
+                    print(f"[KDDataset] WARN: Skipping line {line_num + 1}: JSON decode error: {e}")
                     continue
 
-        print(
-            f"[KDDataset] Loaded {len(self.samples)} samples from {self.jsonl_path}")
+        print(f"[KDDataset] Loaded {len(self.samples)} samples from {self.jsonl_path}")
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -156,8 +158,10 @@ class KDDataset(Dataset):
         if self.latent_curriculum is not None:
             sample = self.latent_curriculum.apply(sample, self.tokenizer)
 
-        prompt = sample.get("prompt", sample.get("training_text", "").split(
-            "\n\n")[0] if "training_text" in sample else "")
+        prompt = sample.get(
+            "prompt",
+            sample.get("training_text", "").split("\n\n")[0] if "training_text" in sample else "",
+        )
         teacher_text = sample.get("teacher_text", "")
 
         # Use training_text if available (from latent curriculum)
@@ -170,20 +174,21 @@ class KDDataset(Dataset):
         self.tokenizer.encode(prompt, add_special_tokens=False)
 
         # Tokenize teacher response
-        teacher_tokens = self.tokenizer.encode(
-            teacher_text, add_special_tokens=False)
+        teacher_tokens = self.tokenizer.encode(teacher_text, add_special_tokens=False)
 
         # Compute span targets for code-mode loss if metadata contains teacher_targets
         span_targets = None
         if "metadata" in sample and "span_targets" in sample["metadata"]:
             # Check if span_targets need to be computed from teacher_text
             metadata_span_targets = sample["metadata"].get("span_targets", {})
-            if not metadata_span_targets.get("ts_mode_spans") and not metadata_span_targets.get("direct_tool_spans"):
+            if not metadata_span_targets.get("ts_mode_spans") and not metadata_span_targets.get(
+                "direct_tool_spans"
+            ):
                 # Compute spans from teacher_text using tokenizer
                 try:
                     from data.generators.mcp_code_mode import compute_span_targets_from_tokenized
-                    span_targets = compute_span_targets_from_tokenized(
-                        teacher_text, self.tokenizer)
+
+                    span_targets = compute_span_targets_from_tokenized(teacher_text, self.tokenizer)
                 except Exception:
                     span_targets = None
             else:
@@ -195,7 +200,7 @@ class KDDataset(Dataset):
 
         # Truncate if needed
         if len(full_tokens) > self.max_seq_length:
-            full_tokens = full_tokens[:self.max_seq_length]
+            full_tokens = full_tokens[: self.max_seq_length]
 
         # Create input_ids and labels
         # Labels are shifted by 1 for next-token prediction
@@ -215,36 +220,36 @@ class KDDataset(Dataset):
 
         # Add process-step supervision targets if available
         if "tool_name_ids" in sample:
-            result["tool_name_ids"] = torch.tensor(
-                sample["tool_name_ids"], dtype=torch.long)
+            result["tool_name_ids"] = torch.tensor(sample["tool_name_ids"], dtype=torch.long)
         if "tool_name_mask" in sample:
-            result["tool_name_mask"] = torch.tensor(
-                sample["tool_name_mask"], dtype=torch.bool)
+            result["tool_name_mask"] = torch.tensor(sample["tool_name_mask"], dtype=torch.bool)
         if "gold_json_text_ids" in sample:
             result["gold_json_text_ids"] = torch.tensor(
-                sample["gold_json_text_ids"], dtype=torch.long)
+                sample["gold_json_text_ids"], dtype=torch.long
+            )
         if "mask_valid_json_tokens" in sample:
             result["mask_valid_json_tokens"] = torch.tensor(
-                sample["mask_valid_json_tokens"], dtype=torch.bool)
+                sample["mask_valid_json_tokens"], dtype=torch.bool
+            )
         if "tool_result_fields" in sample:
             result["tool_result_fields"] = torch.tensor(
-                sample["tool_result_fields"], dtype=torch.long)
+                sample["tool_result_fields"], dtype=torch.long
+            )
         if "integration_mask" in sample:
-            result["integration_mask"] = torch.tensor(
-                sample["integration_mask"], dtype=torch.bool)
+            result["integration_mask"] = torch.tensor(sample["integration_mask"], dtype=torch.bool)
 
         # Add teacher targets (use teacher tokens as targets)
         if teacher_tokens:
-            teacher_target_ids = torch.tensor(
-                teacher_tokens[:len(labels)], dtype=torch.long)
+            teacher_target_ids = torch.tensor(teacher_tokens[: len(labels)], dtype=torch.long)
             # Pad or truncate to match labels length
             if len(teacher_target_ids) < len(labels):
                 # Pad with -100 (ignore index)
                 padding = torch.full(
-                    (len(labels) - len(teacher_target_ids),), -100, dtype=torch.long)
+                    (len(labels) - len(teacher_target_ids),), -100, dtype=torch.long
+                )
                 teacher_target_ids = torch.cat([teacher_target_ids, padding])
             elif len(teacher_target_ids) > len(labels):
-                teacher_target_ids = teacher_target_ids[:len(labels)]
+                teacher_target_ids = teacher_target_ids[: len(labels)]
             result["teacher_target_ids"] = teacher_target_ids
 
         # Add loss mask if latent curriculum was applied
@@ -253,34 +258,33 @@ class KDDataset(Dataset):
             # Ensure loss_mask matches labels length
             if len(loss_mask) < len(labels):
                 # Pad with True (supervise padding)
-                padding = torch.ones(
-                    len(labels) - len(loss_mask), dtype=torch.bool)
+                padding = torch.ones(len(labels) - len(loss_mask), dtype=torch.bool)
                 loss_mask = torch.cat([loss_mask, padding])
             elif len(loss_mask) > len(labels):
-                loss_mask = loss_mask[:len(labels)]
+                loss_mask = loss_mask[: len(labels)]
             result["loss_mask"] = loss_mask
 
         # Add teacher logits if available
-        if self.teacher_logits_available and "teacher_logits" in sample and sample["teacher_logits"]:
-            teacher_logits = torch.tensor(
-                sample["teacher_logits"], dtype=torch.float32)
+        if (
+            self.teacher_logits_available
+            and "teacher_logits" in sample
+            and sample["teacher_logits"]
+        ):
+            teacher_logits = torch.tensor(sample["teacher_logits"], dtype=torch.float32)
             # Reshape if needed: [T*V] -> [T, V] or [T, V] already
             vocab_size = len(self.tokenizer)
             if teacher_logits.dim() == 1:
                 # Assume flattened [T*V]
                 seq_len = len(labels)
-                teacher_logits = teacher_logits[:seq_len *
-                                                vocab_size].view(seq_len, vocab_size)
+                teacher_logits = teacher_logits[: seq_len * vocab_size].view(seq_len, vocab_size)
             elif teacher_logits.dim() == 2:
                 # Already [T, V]
                 seq_len = min(teacher_logits.size(0), len(labels))
                 teacher_logits = teacher_logits[:seq_len]
                 # Pad if needed
                 if seq_len < len(labels):
-                    padding = torch.zeros(
-                        len(labels) - seq_len, vocab_size, dtype=torch.float32)
-                    teacher_logits = torch.cat(
-                        [teacher_logits, padding], dim=0)
+                    padding = torch.zeros(len(labels) - seq_len, vocab_size, dtype=torch.float32)
+                    teacher_logits = torch.cat([teacher_logits, padding], dim=0)
             result["teacher_logits"] = teacher_logits
 
         # Add teacher quality score if available (for self-evaluation head training)
@@ -311,8 +315,7 @@ class KDDataset(Dataset):
                     for layer_states in teacher_hidden_states:
                         if isinstance(layer_states, list):
                             # Convert to tensor: [T, D] or [B, T, D]
-                            layer_tensor = torch.tensor(
-                                layer_states, dtype=torch.float32)
+                            layer_tensor = torch.tensor(layer_states, dtype=torch.float32)
                             hidden_states_tensors.append(layer_tensor)
                         else:
                             # Already a tensor or unsupported format
@@ -370,22 +373,19 @@ def collate_kd_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
         # Pad input_ids
         input_ids = item["input_ids"]
         if pad_len > 0:
-            input_ids = torch.cat(
-                [input_ids, torch.zeros(pad_len, dtype=torch.long)])
+            input_ids = torch.cat([input_ids, torch.zeros(pad_len, dtype=torch.long)])
         input_ids_list.append(input_ids)
 
         # Pad attention_mask
         attention_mask = item["attention_mask"]
         if pad_len > 0:
-            attention_mask = torch.cat(
-                [attention_mask, torch.zeros(pad_len, dtype=torch.long)])
+            attention_mask = torch.cat([attention_mask, torch.zeros(pad_len, dtype=torch.long)])
         attention_mask_list.append(attention_mask)
 
         # Pad labels (with -100 for ignore index)
         labels = item["labels"]
         if pad_len > 0:
-            labels = torch.cat(
-                [labels, torch.full((pad_len,), -100, dtype=torch.long)])
+            labels = torch.cat([labels, torch.full((pad_len,), -100, dtype=torch.long)])
         labels_list.append(labels)
 
         # Pad teacher_target_ids if present
@@ -393,7 +393,8 @@ def collate_kd_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
             teacher_target_ids = item["teacher_target_ids"]
             if pad_len > 0:
                 teacher_target_ids = torch.cat(
-                    [teacher_target_ids, torch.full((pad_len,), -100, dtype=torch.long)])
+                    [teacher_target_ids, torch.full((pad_len,), -100, dtype=torch.long)]
+                )
             teacher_target_ids_list.append(teacher_target_ids)
 
         # Pad teacher_logits if present
@@ -410,42 +411,46 @@ def collate_kd_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
             tool_name_ids = item["tool_name_ids"]
             if pad_len > 0:
                 tool_name_ids = torch.cat(
-                    [tool_name_ids, torch.full((pad_len,), -100, dtype=torch.long)])
+                    [tool_name_ids, torch.full((pad_len,), -100, dtype=torch.long)]
+                )
             tool_name_ids_list.append(tool_name_ids)
 
         if "tool_name_mask" in item:
             tool_name_mask = item["tool_name_mask"]
             if pad_len > 0:
-                tool_name_mask = torch.cat(
-                    [tool_name_mask, torch.zeros(pad_len, dtype=torch.bool)])
+                tool_name_mask = torch.cat([tool_name_mask, torch.zeros(pad_len, dtype=torch.bool)])
             tool_name_mask_list.append(tool_name_mask)
 
         if "gold_json_text_ids" in item:
             gold_json_text_ids = item["gold_json_text_ids"]
             if pad_len > 0:
                 gold_json_text_ids = torch.cat(
-                    [gold_json_text_ids, torch.full((pad_len,), -100, dtype=torch.long)])
+                    [gold_json_text_ids, torch.full((pad_len,), -100, dtype=torch.long)]
+                )
             gold_json_text_ids_list.append(gold_json_text_ids)
 
         if "mask_valid_json_tokens" in item:
             mask_valid_json_tokens = item["mask_valid_json_tokens"]
             if pad_len > 0:
                 mask_valid_json_tokens = torch.cat(
-                    [mask_valid_json_tokens, torch.zeros(pad_len, dtype=torch.bool)])
+                    [mask_valid_json_tokens, torch.zeros(pad_len, dtype=torch.bool)]
+                )
             mask_valid_json_tokens_list.append(mask_valid_json_tokens)
 
         if "tool_result_fields" in item:
             tool_result_fields = item["tool_result_fields"]
             if pad_len > 0:
                 tool_result_fields = torch.cat(
-                    [tool_result_fields, torch.full((pad_len,), -100, dtype=torch.long)])
+                    [tool_result_fields, torch.full((pad_len,), -100, dtype=torch.long)]
+                )
             tool_result_fields_list.append(tool_result_fields)
 
         if "integration_mask" in item:
             integration_mask = item["integration_mask"]
             if pad_len > 0:
                 integration_mask = torch.cat(
-                    [integration_mask, torch.zeros(pad_len, dtype=torch.bool)])
+                    [integration_mask, torch.zeros(pad_len, dtype=torch.bool)]
+                )
             integration_mask_list.append(integration_mask)
 
         # Handle loss mask (from latent curriculum)
@@ -453,8 +458,7 @@ def collate_kd_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
             loss_mask = item["loss_mask"]
             if pad_len > 0:
                 # Pad with True (supervise padding tokens)
-                loss_mask = torch.cat(
-                    [loss_mask, torch.ones(pad_len, dtype=torch.bool)])
+                loss_mask = torch.cat([loss_mask, torch.ones(pad_len, dtype=torch.bool)])
             loss_mask_list.append(loss_mask)
 
     # Stack into batches
@@ -478,8 +482,7 @@ def collate_kd_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
     if gold_json_text_ids_list:
         result["gold_json_text_ids"] = torch.stack(gold_json_text_ids_list)
     if mask_valid_json_tokens_list:
-        result["mask_valid_json_tokens"] = torch.stack(
-            mask_valid_json_tokens_list)
+        result["mask_valid_json_tokens"] = torch.stack(mask_valid_json_tokens_list)
     if tool_result_fields_list:
         result["tool_result_fields"] = torch.stack(tool_result_fields_list)
     if integration_mask_list:

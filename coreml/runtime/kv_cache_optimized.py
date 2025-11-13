@@ -6,12 +6,14 @@ Reduces memory allocations and improves inference efficiency.
 
 Reference: docs/M_SERIES_ADVANCED_OPTIMIZATIONS.md Phase 11
 """
+
 from __future__ import annotations
 from typing import Tuple, Optional, Dict, Any
 import numpy as np
 
 try:
     import torch
+
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
@@ -82,17 +84,13 @@ class OptimizedKVCache:
         # Pre-allocate KV cache (unified memory advantage)
         # Layout: [n_heads, max_seq_len, head_dim]
         if use_numpy:
-            self.k_cache = np.zeros(
-                (n_heads, max_seq_len, head_dim), dtype=dtype)
-            self.v_cache = np.zeros(
-                (n_heads, max_seq_len, head_dim), dtype=dtype)
+            self.k_cache = np.zeros((n_heads, max_seq_len, head_dim), dtype=dtype)
+            self.v_cache = np.zeros((n_heads, max_seq_len, head_dim), dtype=dtype)
         else:
             if not TORCH_AVAILABLE:
                 raise RuntimeError("torch not available for tensor allocation")
-            self.k_cache = torch.zeros(
-                n_heads, max_seq_len, head_dim, dtype=dtype)
-            self.v_cache = torch.zeros(
-                n_heads, max_seq_len, head_dim, dtype=dtype)
+            self.k_cache = torch.zeros(n_heads, max_seq_len, head_dim, dtype=dtype)
+            self.v_cache = torch.zeros(n_heads, max_seq_len, head_dim, dtype=dtype)
 
         # Track current sequence length
         self.current_len = 0
@@ -120,8 +118,7 @@ class OptimizedKVCache:
             position: Position in sequence to update
         """
         if position < 0 or position >= self.max_seq_len:
-            raise ValueError(
-                f"Position {position} out of range [0, {self.max_seq_len})")
+            raise ValueError(f"Position {position} out of range [0, {self.max_seq_len})")
 
         # Ensure k and v are correct shape
         if k.ndim == 2:
@@ -139,8 +136,8 @@ class OptimizedKVCache:
                 v = v.cpu().numpy()
 
         # In-place update (ANE-friendly)
-        self.k_cache[:, position:position+1, :] = k
-        self.v_cache[:, position:position+1, :] = v
+        self.k_cache[:, position : position + 1, :] = k
+        self.v_cache[:, position : position + 1, :] = v
 
         # Update current length
         self.current_len = max(self.current_len, position + 1)
@@ -274,12 +271,14 @@ class GroupedQueryKVCache(OptimizedKVCache):
     def stats(self) -> Dict[str, Any]:
         """Get GQA cache statistics."""
         base_stats = super().stats()
-        base_stats.update({
-            "n_query_heads": self.n_query_heads,
-            "n_kv_heads": self.n_kv_heads,
-            "num_query_groups": self.num_query_groups,
-            "gqa_reduction_factor": self.num_query_groups,
-        })
+        base_stats.update(
+            {
+                "n_query_heads": self.n_query_heads,
+                "n_kv_heads": self.n_kv_heads,
+                "num_query_groups": self.num_query_groups,
+                "gqa_reduction_factor": self.num_query_groups,
+            }
+        )
         return base_stats
 
 

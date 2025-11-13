@@ -15,9 +15,7 @@ BANNED = re.compile(
 STATUS = re.compile(
     r"(?i)\b(production[-\s]?ready|enterprise[-\s]?grade|battle[-\s]?tested|deployed|released)\b"
 )
-BENCH = re.compile(
-    r"(?i)\b(p50|p95|ttft|tps|throughput|latency|tokens\s?per\s?second)\b"
-)
+BENCH = re.compile(r"(?i)\b(p50|p95|ttft|tps|throughput|latency|tokens\s?per\s?second)\b")
 NUM = re.compile(r"(?i)-?\d+(?:\.\d+)?\s?(%|ms|s|tok/s|tokens/s|items)?")
 
 # Evidence anchor syntax: [evidence: path.json#dotted.key]
@@ -28,9 +26,7 @@ def main():
     ap = argparse.ArgumentParser(
         description="Lint documentation for banned terms and missing evidence anchors"
     )
-    ap.add_argument(
-        "--root", default="docs", help="Docs root to scan"
-    )
+    ap.add_argument("--root", default="docs", help="Docs root to scan")
     args = ap.parse_args()
 
     root = pathlib.Path(args.root)
@@ -74,12 +70,19 @@ def main():
             nearby_start = max(0, line_idx - 3)
             nearby_end = min(len(lines_list), line_idx + 4)
             nearby_lines = lines_list[nearby_start:nearby_end]
-            has_image_tag = any(nearby_line.strip().startswith(
-                "![") for nearby_line in nearby_lines)
+            has_image_tag = any(
+                nearby_line.strip().startswith("![") for nearby_line in nearby_lines
+            )
             has_url = any(
-                "http" in nearby_line or "www." in nearby_line for nearby_line in nearby_lines)
+                "http" in nearby_line or "www." in nearby_line for nearby_line in nearby_lines
+            )
             # If line is between image tag and URL, it's likely an external link title
-            if has_image_tag and has_url and line.strip() and not line.strip().startswith(("!", "[", "]", "(")):
+            if (
+                has_image_tag
+                and has_url
+                and line.strip()
+                and not line.strip().startswith(("!", "[", "]", "("))
+            ):
                 # Check if it's a short line (likely a title) between image and URL
                 if len(line.strip()) < 100:  # Titles are typically shorter
                     continue
@@ -131,13 +134,32 @@ def main():
                 continue
 
             # Skip lines that are clearly examples or documentation
-            if any(skip in line.lower() for skip in [
-                "example:", "for example", "e.g.,", "i.e.,",
-                "see:", "note:", "hint:", "todo:", "fixme:",
-                "```", "<!--", "date:", "author:",
-                "created", "for future reference", "helps reason",
-                "record", "log", "script", "implementation:", "features:"
-            ]):
+            if any(
+                skip in line.lower()
+                for skip in [
+                    "example:",
+                    "for example",
+                    "e.g.,",
+                    "i.e.,",
+                    "see:",
+                    "note:",
+                    "hint:",
+                    "todo:",
+                    "fixme:",
+                    "```",
+                    "<!--",
+                    "date:",
+                    "author:",
+                    "created",
+                    "for future reference",
+                    "helps reason",
+                    "record",
+                    "log",
+                    "script",
+                    "implementation:",
+                    "features:",
+                ]
+            ):
                 continue
 
             # Skip lines that are just markdown formatting or lists
@@ -146,16 +168,29 @@ def main():
                 continue
 
             # Skip numbered lists (e.g., "1. **Title**" or "1) Title")
-            if re.match(r'^\d+[\.\)]\s+', stripped):
+            if re.match(r"^\d+[\.\)]\s+", stripped):
                 continue
 
             # Skip technical implementation details (code snippets, file paths, etc.)
-            if any(skip in line.lower() for skip in [
-                "created", "for future reference", "helps reason",
-                "record", "log", "script", "implementation:", "features:",
-                "wrapper", "fingerprint", "reproducibility", "path update",
-                "diagnostics", "memory pressure"
-            ]):
+            if any(
+                skip in line.lower()
+                for skip in [
+                    "created",
+                    "for future reference",
+                    "helps reason",
+                    "record",
+                    "log",
+                    "script",
+                    "implementation:",
+                    "features:",
+                    "wrapper",
+                    "fingerprint",
+                    "reproducibility",
+                    "path update",
+                    "diagnostics",
+                    "memory pressure",
+                ]
+            ):
                 continue
 
             # Check for status/bench/quant claims that need anchors
@@ -169,27 +204,26 @@ def main():
                 num_match = NUM.search(line)
                 if num_match:
                     # Check if number has units or is near status/benchmark terms
-                    num_context = line[max(
-                        0, num_match.start()-20):min(len(line), num_match.end()+20)]
-                    if any(unit in num_context.lower() for unit in ['%', 'ms', 's', 'tok/s', 'tokens/s', 'items']):
+                    num_context = line[
+                        max(0, num_match.start() - 20) : min(len(line), num_match.end() + 20)
+                    ]
+                    if any(
+                        unit in num_context.lower()
+                        for unit in ["%", "ms", "s", "tok/s", "tokens/s", "items"]
+                    ):
                         # Only flag if it's clearly a performance claim, not just a technical detail
                         if STATUS.search(num_context) or BENCH.search(num_context):
                             has_num_claim = True
 
             if has_status or has_bench or has_num_claim:
-                bad.append((
-                    f"{p}:{i}",
-                    line.strip()[:140],
-                    "missing_evidence_anchor"
-                ))
+                bad.append((f"{p}:{i}", line.strip()[:140], "missing_evidence_anchor"))
 
     if bad:
         print("Documentation claims linter failed. Offenses:")
         for loc, snippet, kind in bad:
             print(f" - {loc}: [{kind}] {snippet}")
         print(
-            "\nHint: attach an anchor like: "
-            "[evidence: eval/reports/latest.json#summary.gates_ok]"
+            "\nHint: attach an anchor like: [evidence: eval/reports/latest.json#summary.gates_ok]"
         )
         sys.exit(1)
 

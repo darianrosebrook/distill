@@ -12,6 +12,7 @@ from pathlib import Path
 
 # Import from arbiter.claims.pipeline
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
@@ -24,7 +25,7 @@ def mk_claim(txt: str) -> AtomicClaim:
         contextual_brackets=[],
         source_sentence=txt,
         verification_requirements=["integration"],
-        confidence=1.0
+        confidence=1.0,
     )
 
 
@@ -34,7 +35,7 @@ def test_status_claim_requires_artifacts_short_circuits():
     claim = mk_claim("The system is production-ready")
     evid = {
         "evidence": [{"text": "All tests pass locally.", "source": "local", "quality": 0.8}],
-        "artifacts": []
+        "artifacts": [],
     }
     res = v.verify_claim_evidence(claim, evid)
     assert res.status == "INSUFFICIENT_EVIDENCE"
@@ -52,16 +53,17 @@ def test_numeric_claim_requires_json_field():
             {
                 "type": "bench_json",
                 "path": "evaluation/perf_mem_eval.json",
-                "json_path": "p95.ttft_ms"
+                "json_path": "p95.ttft_ms",
             }
-        ]
+        ],
     }
     # File may not exist in unit tests; numeric verification returns missing_proof
     res = v.verify_claim_evidence(claim, evid)
     # Should be INSUFFICIENT_EVIDENCE if file doesn't exist or field missing
     assert res.status == "INSUFFICIENT_EVIDENCE"
-    assert "numeric" in json.dumps(
-        res.element_coverage) or "artifact" in json.dumps(res.element_coverage)
+    assert "numeric" in json.dumps(res.element_coverage) or "artifact" in json.dumps(
+        res.element_coverage
+    )
 
 
 def test_superlative_is_always_blocked():
@@ -81,8 +83,8 @@ def test_claim_with_required_artifacts_passes_policy_gate():
         "evidence": [{"text": "All tests pass.", "source": "test", "quality": 0.9}],
         "artifacts": [
             {"type": "eval_report", "path": "eval/reports/latest.json"},
-            {"type": "coverage_report", "path": "coverage/index.html"}
-        ]
+            {"type": "coverage_report", "path": "coverage/index.html"},
+        ],
     }
     res = v.verify_claim_evidence(claim, evid)
     # Should pass policy gate (may still fail on entailment/coverage)
@@ -101,7 +103,7 @@ def test_benchmark_claim_requires_bench_json():
         "artifacts": [
             {"type": "eval_report", "path": "eval/reports/latest.json"}
             # Missing bench_json
-        ]
+        ],
     }
     res = v.verify_claim_evidence(claim, evid)
     assert res.status == "INSUFFICIENT_EVIDENCE"

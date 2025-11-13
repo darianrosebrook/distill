@@ -20,6 +20,7 @@ from pathlib import Path
 @dataclass
 class ConversationContext:
     """Context for disambiguation and claim extraction."""
+
     prior_turns: List[str]
     entity_registry: Dict[str, str]
     code_spans: List[str]
@@ -30,6 +31,7 @@ class ConversationContext:
 @dataclass
 class AmbiguityInstance:
     """Detected ambiguity in text."""
+
     phrase: str
     possible_interpretations: List[str]
     context_dependency: bool
@@ -40,6 +42,7 @@ class AmbiguityInstance:
 @dataclass
 class DisambiguationResult:
     """Result of ambiguity resolution."""
+
     success: bool
     disambiguated_sentence: Optional[str]
     failure_reason: Optional[str]
@@ -50,6 +53,7 @@ class DisambiguationResult:
 @dataclass
 class VerifiableContentResult:
     """Result of verifiable content qualification."""
+
     has_verifiable_content: bool
     rewritten_sentence: Optional[str]
     indicators: List[str]
@@ -59,6 +63,7 @@ class VerifiableContentResult:
 @dataclass
 class ClaimElements:
     """Structured elements of a claim for coverage analysis."""
+
     subject: Optional[str] = None
     predicate: Optional[str] = None
     object: Optional[str] = None
@@ -66,18 +71,18 @@ class ClaimElements:
 
 
 class ClaimCategory(Enum):
-    STATUS = auto()       # e.g., "production-ready", "enterprise-grade", "operational in prod"
-    QUANT = auto()        # numeric assertions: counts, %, latencies, TPS, coverage
-    BENCHMARK = auto()    # performance claims: p50/p95 latencies, TTFT/TPS, throughput
+    STATUS = auto()  # e.g., "production-ready", "enterprise-grade", "operational in prod"
+    QUANT = auto()  # numeric assertions: counts, %, latencies, TPS, coverage
+    BENCHMARK = auto()  # performance claims: p50/p95 latencies, TTFT/TPS, throughput
     SUPERLATIVE = auto()  # "best", "leading", "state-of-the-art" (generally disallowed)
 
 
 @dataclass
 class ClaimsPolicy:
     """Repo-level policy for evidence requirements by claim category."""
+
     # Which categories are allowed and under what artifact requirements
-    require_artifacts: Dict[ClaimCategory,
-                            Dict[str, Any]] = field(default_factory=dict)
+    require_artifacts: Dict[ClaimCategory, Dict[str, Any]] = field(default_factory=dict)
     # Disallowed terms that always fail (SUPERLATIVE by default)
     banned_terms: List[str] = field(default_factory=list)
     # Numeric field name allowlist for QUANT/BENCHMARK (JSON path or dotted keys)
@@ -90,6 +95,7 @@ class ClaimsPolicy:
 @dataclass
 class AtomicClaim:
     """Atomic, verifiable claim."""
+
     id: str
     statement: str
     contextual_brackets: List[str]
@@ -102,6 +108,7 @@ class AtomicClaim:
 @dataclass
 class VerificationResult:
     """CAWS-compliant verification result."""
+
     status: str  # "VERIFIED", "UNVERIFIED", "INSUFFICIENT_EVIDENCE"
     evidence_quality: float
     caws_compliance: bool
@@ -119,17 +126,49 @@ class ClaimDisambiguation:
 
     # Pronoun patterns
     PRONOUNS = {
-        'he', 'she', 'it', 'they', 'him', 'her', 'them', 'his', 'hers', 'theirs',
-        'this', 'that', 'these', 'those', 'which', 'who', 'whom', 'whose'
+        "he",
+        "she",
+        "it",
+        "they",
+        "him",
+        "her",
+        "them",
+        "his",
+        "hers",
+        "theirs",
+        "this",
+        "that",
+        "these",
+        "those",
+        "which",
+        "who",
+        "whom",
+        "whose",
     }
 
     # Temporal reference patterns
     TEMPORAL_WORDS = {
-        'now', 'then', 'today', 'yesterday', 'tomorrow', 'recently', 'soon', 'later',
-        'before', 'after', 'during', 'while', 'when', 'once', 'previously', 'currently'
+        "now",
+        "then",
+        "today",
+        "yesterday",
+        "tomorrow",
+        "recently",
+        "soon",
+        "later",
+        "before",
+        "after",
+        "during",
+        "while",
+        "when",
+        "once",
+        "previously",
+        "currently",
     }
 
-    def detect_ambiguities(self, text: str, context: ConversationContext) -> List[AmbiguityInstance]:
+    def detect_ambiguities(
+        self, text: str, context: ConversationContext
+    ) -> List[AmbiguityInstance]:
         """Detect ambiguities in text before extraction.
 
         Detects:
@@ -143,57 +182,68 @@ class ClaimDisambiguation:
         # Detect referential ambiguities (pronouns)
         for i, word in enumerate(words):
             # Remove punctuation for matching
-            clean_word = re.sub(r'[^\w]', '', word)
+            clean_word = re.sub(r"[^\w]", "", word)
             if clean_word in self.PRONOUNS:
                 # Check if we can resolve from context
-                can_resolve = self._can_resolve_pronoun(
-                    clean_word, i, words, context)
-                ambiguities.append(AmbiguityInstance(
-                    phrase=word,
-                    possible_interpretations=self._get_pronoun_interpretations(
-                        clean_word, context),
-                    context_dependency=True,
-                    resolution_confidence=0.8 if can_resolve else 0.2,
-                    ambiguity_type="referential"
-                ))
+                can_resolve = self._can_resolve_pronoun(clean_word, i, words, context)
+                ambiguities.append(
+                    AmbiguityInstance(
+                        phrase=word,
+                        possible_interpretations=self._get_pronoun_interpretations(
+                            clean_word, context
+                        ),
+                        context_dependency=True,
+                        resolution_confidence=0.8 if can_resolve else 0.2,
+                        ambiguity_type="referential",
+                    )
+                )
 
         # Detect temporal ambiguities
         for i, word in enumerate(words):
-            clean_word = re.sub(r'[^\w]', '', word)
+            clean_word = re.sub(r"[^\w]", "", word)
             if clean_word in self.TEMPORAL_WORDS:
                 can_resolve = self._can_resolve_temporal(clean_word, context)
-                ambiguities.append(AmbiguityInstance(
-                    phrase=word,
-                    possible_interpretations=self._get_temporal_interpretations(
-                        clean_word, context),
-                    context_dependency=True,
-                    resolution_confidence=0.7 if can_resolve else 0.3,
-                    ambiguity_type="temporal"
-                ))
+                ambiguities.append(
+                    AmbiguityInstance(
+                        phrase=word,
+                        possible_interpretations=self._get_temporal_interpretations(
+                            clean_word, context
+                        ),
+                        context_dependency=True,
+                        resolution_confidence=0.7 if can_resolve else 0.3,
+                        ambiguity_type="temporal",
+                    )
+                )
 
         # Detect structural ambiguities (ambiguous conjunctions, relative clauses)
         # Pattern: "X and Y" where X/Y could be ambiguous
         structural_patterns = [
-            r'\b(and|or|but)\s+(\w+)',  # Conjunctions
-            r'\b(that|which|who)\s+(\w+)',  # Relative clauses
+            r"\b(and|or|but)\s+(\w+)",  # Conjunctions
+            r"\b(that|which|who)\s+(\w+)",  # Relative clauses
         ]
 
         for pattern in structural_patterns:
             matches = re.finditer(pattern, text, re.IGNORECASE)
             for match in matches:
                 phrase = match.group(0)
-                ambiguities.append(AmbiguityInstance(
-                    phrase=phrase,
-                    possible_interpretations=[
-                        f"Interpretation 1: {phrase}", f"Interpretation 2: {phrase}"],
-                    context_dependency=True,
-                    resolution_confidence=0.5,
-                    ambiguity_type="structural"
-                ))
+                ambiguities.append(
+                    AmbiguityInstance(
+                        phrase=phrase,
+                        possible_interpretations=[
+                            f"Interpretation 1: {phrase}",
+                            f"Interpretation 2: {phrase}",
+                        ],
+                        context_dependency=True,
+                        resolution_confidence=0.5,
+                        ambiguity_type="structural",
+                    )
+                )
 
         return ambiguities
 
-    def _can_resolve_pronoun(self, pronoun: str, position: int, words: List[str], context: ConversationContext) -> bool:
+    def _can_resolve_pronoun(
+        self, pronoun: str, position: int, words: List[str], context: ConversationContext
+    ) -> bool:
         """Check if pronoun can be resolved from context."""
         # Check entity registry
         if context.entity_registry:
@@ -216,26 +266,26 @@ class ClaimDisambiguation:
         # Check entity registry for potential matches
         if context.entity_registry:
             for entity, description in context.entity_registry.items():
-                if pronoun in ['he', 'him', 'his']:
+                if pronoun in ["he", "him", "his"]:
                     interpretations.append(f"{entity} (male entity)")
-                elif pronoun in ['she', 'her', 'hers']:
+                elif pronoun in ["she", "her", "hers"]:
                     interpretations.append(f"{entity} (female entity)")
-                elif pronoun in ['it', 'its']:
+                elif pronoun in ["it", "its"]:
                     interpretations.append(f"{entity} (object)")
-                elif pronoun in ['they', 'them', 'their', 'theirs']:
+                elif pronoun in ["they", "them", "their", "theirs"]:
                     interpretations.append(f"{entity} (plural)")
-                elif pronoun in ['this', 'that', 'these', 'those']:
+                elif pronoun in ["this", "that", "these", "those"]:
                     interpretations.append(f"{entity} (referent)")
 
         # Add generic interpretations if no matches
         if not interpretations:
-            if pronoun in ['he', 'him', 'his']:
+            if pronoun in ["he", "him", "his"]:
                 interpretations.append("Male referent from context")
-            elif pronoun in ['she', 'her', 'hers']:
+            elif pronoun in ["she", "her", "hers"]:
                 interpretations.append("Female referent from context")
-            elif pronoun in ['it', 'its']:
+            elif pronoun in ["it", "its"]:
                 interpretations.append("Object referent from context")
-            elif pronoun in ['they', 'them', 'their', 'theirs']:
+            elif pronoun in ["they", "them", "their", "theirs"]:
                 interpretations.append("Plural referent from context")
             else:
                 interpretations.append("Referent from context")
@@ -247,26 +297,30 @@ class ClaimDisambiguation:
         # If we have prior turns, we can infer temporal context
         return len(context.prior_turns) > 0
 
-    def _get_temporal_interpretations(self, temporal_word: str, context: ConversationContext) -> List[str]:
+    def _get_temporal_interpretations(
+        self, temporal_word: str, context: ConversationContext
+    ) -> List[str]:
         """Get possible interpretations for temporal reference."""
         interpretations = []
 
-        if temporal_word == 'now':
+        if temporal_word == "now":
             interpretations.append("Current time")
             if context.prior_turns:
                 interpretations.append("Time of conversation")
-        elif temporal_word == 'then':
+        elif temporal_word == "then":
             interpretations.append("Previous time mentioned")
             if context.prior_turns:
                 interpretations.append("Time from prior turn")
-        elif temporal_word in ['today', 'yesterday', 'tomorrow']:
+        elif temporal_word in ["today", "yesterday", "tomorrow"]:
             interpretations.append(f"Absolute date: {temporal_word}")
-        elif temporal_word in ['recently', 'soon', 'later']:
+        elif temporal_word in ["recently", "soon", "later"]:
             interpretations.append("Relative to conversation time")
 
         return interpretations or [f"Temporal reference: {temporal_word}"]
 
-    def resolve_ambiguity(self, ambiguous_phrase: str, context: ConversationContext) -> DisambiguationResult:
+    def resolve_ambiguity(
+        self, ambiguous_phrase: str, context: ConversationContext
+    ) -> DisambiguationResult:
         """Resolve ambiguity using available context."""
         audit_trail = []
         unresolved = []
@@ -281,7 +335,7 @@ class ClaimDisambiguation:
                 disambiguated_sentence=ambiguous_phrase,
                 failure_reason=None,
                 audit_trail=[{"action": "no_ambiguities_detected"}],
-                unresolved_ambiguities=[]
+                unresolved_ambiguities=[],
             )
 
         # Try to resolve each ambiguity
@@ -289,42 +343,48 @@ class ClaimDisambiguation:
             if amb.ambiguity_type == "referential":
                 resolution = self._resolve_referential_ambiguity(amb, context)
                 if resolution:
-                    resolved_text = resolved_text.replace(
-                        amb.phrase, resolution, 1)
-                    audit_trail.append({
-                        "type": "referential_resolution",
-                        "phrase": amb.phrase,
-                        "resolved_to": resolution
-                    })
+                    resolved_text = resolved_text.replace(amb.phrase, resolution, 1)
+                    audit_trail.append(
+                        {
+                            "type": "referential_resolution",
+                            "phrase": amb.phrase,
+                            "resolved_to": resolution,
+                        }
+                    )
                 else:
                     unresolved.append(amb)
-                    audit_trail.append({
-                        "type": "referential_failure",
-                        "phrase": amb.phrase,
-                        "reason": "no_matching_entity"
-                    })
+                    audit_trail.append(
+                        {
+                            "type": "referential_failure",
+                            "phrase": amb.phrase,
+                            "reason": "no_matching_entity",
+                        }
+                    )
 
             elif amb.ambiguity_type == "temporal":
                 resolution = self._resolve_temporal_ambiguity(amb, context)
                 if resolution:
-                    resolved_text = resolved_text.replace(
-                        amb.phrase, resolution, 1)
-                    audit_trail.append({
-                        "type": "temporal_resolution",
-                        "phrase": amb.phrase,
-                        "resolved_to": resolution
-                    })
+                    resolved_text = resolved_text.replace(amb.phrase, resolution, 1)
+                    audit_trail.append(
+                        {
+                            "type": "temporal_resolution",
+                            "phrase": amb.phrase,
+                            "resolved_to": resolution,
+                        }
+                    )
                 else:
                     unresolved.append(amb)
 
             else:
                 # Structural ambiguities are harder to resolve automatically
                 unresolved.append(amb)
-                audit_trail.append({
-                    "type": "structural_ambiguity",
-                    "phrase": amb.phrase,
-                    "reason": "requires_manual_resolution"
-                })
+                audit_trail.append(
+                    {
+                        "type": "structural_ambiguity",
+                        "phrase": amb.phrase,
+                        "reason": "requires_manual_resolution",
+                    }
+                )
 
         success = len(unresolved) == 0
 
@@ -333,24 +393,26 @@ class ClaimDisambiguation:
             disambiguated_sentence=resolved_text if success else None,
             failure_reason=None if success else f"{len(unresolved)} ambiguities unresolved",
             audit_trail=audit_trail,
-            unresolved_ambiguities=unresolved
+            unresolved_ambiguities=unresolved,
         )
 
-    def _resolve_referential_ambiguity(self, ambiguity: AmbiguityInstance, context: ConversationContext) -> Optional[str]:
+    def _resolve_referential_ambiguity(
+        self, ambiguity: AmbiguityInstance, context: ConversationContext
+    ) -> Optional[str]:
         """Resolve a referential ambiguity using context."""
-        pronoun = re.sub(r'[^\w]', '', ambiguity.phrase.lower())
+        pronoun = re.sub(r"[^\w]", "", ambiguity.phrase.lower())
 
         # Check entity registry first
         if context.entity_registry:
             # Find most recent entity that matches pronoun type
             for entity, description in context.entity_registry.items():
-                if pronoun in ['he', 'him', 'his'] and 'male' in description.lower():
+                if pronoun in ["he", "him", "his"] and "male" in description.lower():
                     return entity
-                elif pronoun in ['she', 'her', 'hers'] and 'female' in description.lower():
+                elif pronoun in ["she", "her", "hers"] and "female" in description.lower():
                     return entity
-                elif pronoun in ['it', 'its']:
+                elif pronoun in ["it", "its"]:
                     return entity
-                elif pronoun in ['they', 'them', 'their', 'theirs']:
+                elif pronoun in ["they", "them", "their", "theirs"]:
                     return entity
 
         # Check prior turns for entities
@@ -358,30 +420,34 @@ class ClaimDisambiguation:
             # Simple heuristic: use first entity mentioned in prior turns
             for turn in reversed(context.prior_turns):
                 # Look for capitalized words (likely proper nouns)
-                entities = re.findall(r'\b[A-Z][a-z]+\b', turn)
+                entities = re.findall(r"\b[A-Z][a-z]+\b", turn)
                 if entities:
                     return entities[0]
 
         return None
 
-    def _resolve_temporal_ambiguity(self, ambiguity: AmbiguityInstance, context: ConversationContext) -> Optional[str]:
+    def _resolve_temporal_ambiguity(
+        self, ambiguity: AmbiguityInstance, context: ConversationContext
+    ) -> Optional[str]:
         """Resolve a temporal ambiguity using context."""
-        temporal_word = re.sub(r'[^\w]', '', ambiguity.phrase.lower())
+        temporal_word = re.sub(r"[^\w]", "", ambiguity.phrase.lower())
 
-        if temporal_word == 'now':
+        if temporal_word == "now":
             return "currently"
-        elif temporal_word == 'then':
+        elif temporal_word == "then":
             return "at that time"
-        elif temporal_word == 'recently':
+        elif temporal_word == "recently":
             return "in recent times"
-        elif temporal_word == 'soon':
+        elif temporal_word == "soon":
             return "in the near future"
-        elif temporal_word == 'later':
+        elif temporal_word == "later":
             return "at a later time"
 
         return None
 
-    def detect_unresolvable_ambiguities(self, sentence: str, context: ConversationContext) -> List[AmbiguityInstance]:
+    def detect_unresolvable_ambiguities(
+        self, sentence: str, context: ConversationContext
+    ) -> List[AmbiguityInstance]:
         """Identify ambiguities that cannot be resolved."""
         ambiguities = self.detect_ambiguities(sentence, context)
         unresolvable = []
@@ -389,10 +455,14 @@ class ClaimDisambiguation:
         for amb in ambiguities:
             # Check if we can resolve it
             if amb.ambiguity_type == "referential":
-                if not self._can_resolve_pronoun(re.sub(r'[^\w]', '', amb.phrase.lower()), 0, sentence.split(), context):
+                if not self._can_resolve_pronoun(
+                    re.sub(r"[^\w]", "", amb.phrase.lower()), 0, sentence.split(), context
+                ):
                     unresolvable.append(amb)
             elif amb.ambiguity_type == "temporal":
-                if not self._can_resolve_temporal(re.sub(r'[^\w]', '', amb.phrase.lower()), context):
+                if not self._can_resolve_temporal(
+                    re.sub(r"[^\w]", "", amb.phrase.lower()), context
+                ):
                     unresolvable.append(amb)
             elif amb.ambiguity_type == "structural":
                 # Structural ambiguities are generally harder to resolve
@@ -406,23 +476,25 @@ class VerifiableContentQualification:
 
     # Subjective language patterns (low verifiability)
     SUBJECTIVE_PATTERNS = [
-        r'\b(think|believe|feel|seem|appear|probably|maybe|perhaps|might|could|should)\b',
-        r'\b(good|bad|better|best|worse|worst|nice|great|terrible|awesome)\b',
-        r'\b(opinion|viewpoint|perspective|interpretation)\b',
+        r"\b(think|believe|feel|seem|appear|probably|maybe|perhaps|might|could|should)\b",
+        r"\b(good|bad|better|best|worse|worst|nice|great|terrible|awesome)\b",
+        r"\b(opinion|viewpoint|perspective|interpretation)\b",
     ]
 
     # Factual indicators (high verifiability)
     FACTUAL_INDICATORS = {
-        'dates': r'\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b',
-        'quantities': r'\b\d+\s*(percent|%|dollars?|\$|units?|items?|times?|hours?|minutes?|seconds?)\b',
-        'numbers': r'\b\d+\.?\d*\b',
+        "dates": r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b",
+        "quantities": r"\b\d+\s*(percent|%|dollars?|\$|units?|items?|times?|hours?|minutes?|seconds?)\b",
+        "numbers": r"\b\d+\.?\d*\b",
         # Capitalized words (likely proper nouns)
-        'proper_nouns': r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b',
-        'authorities': r'\b(according to|per|stated by|reported by|source:|reference:)\b',
-        'measurements': r'\b\d+\s*(cm|m|km|inch|ft|yd|lb|kg|g|ml|l)\b',
+        "proper_nouns": r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b",
+        "authorities": r"\b(according to|per|stated by|reported by|source:|reference:)\b",
+        "measurements": r"\b\d+\s*(cm|m|km|inch|ft|yd|lb|kg|g|ml|l)\b",
     }
 
-    def detect_verifiable_content(self, sentence: str, context: ConversationContext) -> VerifiableContentResult:
+    def detect_verifiable_content(
+        self, sentence: str, context: ConversationContext
+    ) -> VerifiableContentResult:
         """Detect if sentence contains verifiable factual content."""
         indicators = []
         confidence = 0.0
@@ -457,36 +529,37 @@ class VerifiableContentQualification:
             has_verifiable_content=has_verifiable,
             rewritten_sentence=rewritten if rewritten else sentence if has_verifiable else None,
             indicators=indicators,
-            confidence=confidence
+            confidence=confidence,
         )
 
-    def rewrite_unverifiable_content(self, sentence: str, context: ConversationContext) -> Optional[str]:
+    def rewrite_unverifiable_content(
+        self, sentence: str, context: ConversationContext
+    ) -> Optional[str]:
         """Rewrite sentence to remove unverifiable content."""
         rewritten = sentence
 
         # Remove subjective qualifiers
         subjective_replacements = {
-            r'\b(think|believe|feel)\s+that\s+': '',
-            r'\b(probably|maybe|perhaps|might|could)\s+': '',
-            r'\b(seems?|appears?)\s+to\s+be\s+': 'is ',
-            r'\b(in my opinion|I think|I believe)\s*,?\s*': '',
+            r"\b(think|believe|feel)\s+that\s+": "",
+            r"\b(probably|maybe|perhaps|might|could)\s+": "",
+            r"\b(seems?|appears?)\s+to\s+be\s+": "is ",
+            r"\b(in my opinion|I think|I believe)\s*,?\s*": "",
         }
 
         for pattern, replacement in subjective_replacements.items():
-            rewritten = re.sub(pattern, replacement,
-                               rewritten, flags=re.IGNORECASE)
+            rewritten = re.sub(pattern, replacement, rewritten, flags=re.IGNORECASE)
 
         # Remove opinion markers
         opinion_patterns = [
-            r'\b(opinion|viewpoint|perspective|interpretation)\s+is\s+that\s+',
-            r'\bfrom\s+my\s+(perspective|viewpoint|understanding)\s*,?\s*',
+            r"\b(opinion|viewpoint|perspective|interpretation)\s+is\s+that\s+",
+            r"\bfrom\s+my\s+(perspective|viewpoint|understanding)\s*,?\s*",
         ]
 
         for pattern in opinion_patterns:
-            rewritten = re.sub(pattern, '', rewritten, flags=re.IGNORECASE)
+            rewritten = re.sub(pattern, "", rewritten, flags=re.IGNORECASE)
 
         # Clean up extra spaces
-        rewritten = re.sub(r'\s+', ' ', rewritten).strip()
+        rewritten = re.sub(r"\s+", " ", rewritten).strip()
 
         # Only return if we actually changed something and result is non-empty
         if rewritten != sentence and rewritten:
@@ -506,13 +579,13 @@ class AtomicClaimDecomposition:
             "location": None,
             "quantity": None,
             "condition": None,
-            "negation": False
+            "negation": False,
         }
 
         # Extract negation
         negation_patterns = [
-            r'\b(not|no|never|none|nobody|nothing|nowhere)\b',
-            r'\b(doesn\'t|don\'t|didn\'t|won\'t|can\'t|cannot|isn\'t|aren\'t)\b'
+            r"\b(not|no|never|none|nobody|nothing|nowhere)\b",
+            r"\b(doesn\'t|don\'t|didn\'t|won\'t|can\'t|cannot|isn\'t|aren\'t)\b",
         ]
         for pattern in negation_patterns:
             if re.search(pattern, claim_text, re.IGNORECASE):
@@ -522,9 +595,9 @@ class AtomicClaimDecomposition:
 
         # Extract time qualifiers
         time_patterns = [
-            r'\b(today|yesterday|tomorrow|now|then|recently|soon|later|before|after|during|while|when|once|previously|currently)\b',
-            r'\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b',
-            r'\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b'
+            r"\b(today|yesterday|tomorrow|now|then|recently|soon|later|before|after|during|while|when|once|previously|currently)\b",
+            r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b",
+            r"\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b",
         ]
         for pattern in time_patterns:
             match = re.search(pattern, claim_text, re.IGNORECASE)
@@ -534,8 +607,8 @@ class AtomicClaimDecomposition:
 
         # Extract location qualifiers
         location_patterns = [
-            r'\b(in|at|on|from|to|near|within|outside)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',
-            r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(city|state|country|region|area)'
+            r"\b(in|at|on|from|to|near|within|outside)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)",
+            r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(city|state|country|region|area)",
         ]
         for pattern in location_patterns:
             match = re.search(pattern, claim_text)
@@ -545,8 +618,8 @@ class AtomicClaimDecomposition:
 
         # Extract quantity qualifiers
         quantity_patterns = [
-            r'\b\d+\s*(percent|%|dollars?|\$|units?|items?|times?|hours?|minutes?|seconds?)',
-            r'\b\d+\.?\d*\b'
+            r"\b\d+\s*(percent|%|dollars?|\$|units?|items?|times?|hours?|minutes?|seconds?)",
+            r"\b\d+\.?\d*\b",
         ]
         for pattern in quantity_patterns:
             match = re.search(pattern, claim_text, re.IGNORECASE)
@@ -556,9 +629,9 @@ class AtomicClaimDecomposition:
 
         # Extract condition qualifiers (if-then, when, etc.)
         condition_patterns = [
-            r'\bif\s+(.+?)\s+(then|,|$)',
-            r'\bwhen\s+(.+?)\s+(,|then|$)',
-            r'\bprovided\s+that\s+(.+?)\s+(,|then|$)'
+            r"\bif\s+(.+?)\s+(then|,|$)",
+            r"\bwhen\s+(.+?)\s+(,|then|$)",
+            r"\bprovided\s+that\s+(.+?)\s+(,|then|$)",
         ]
         for pattern in condition_patterns:
             match = re.search(pattern, claim_text, re.IGNORECASE)
@@ -570,8 +643,8 @@ class AtomicClaimDecomposition:
         # Pattern: Subject Verb Object (SVO)
         # Try to find: "Subject verb object" or "Subject is/was object"
         svo_patterns = [
-            r'^([A-Z][^.!?]*?)\s+(is|was|are|were|has|have|had|does|did|will|can|should|must)\s+(.+?)(?:\.|$)',
-            r'^([A-Z][^.!?]*?)\s+(\w+ed|\w+ing|\w+s)\s+(.+?)(?:\.|$)',
+            r"^([A-Z][^.!?]*?)\s+(is|was|are|were|has|have|had|does|did|will|can|should|must)\s+(.+?)(?:\.|$)",
+            r"^([A-Z][^.!?]*?)\s+(\w+ed|\w+ing|\w+s)\s+(.+?)(?:\.|$)",
         ]
 
         for pattern in svo_patterns:
@@ -592,12 +665,12 @@ class AtomicClaimDecomposition:
                 if words[0][0].isupper():
                     elements.subject = words[0]
                 elif len(words) > 1:
-                    elements.subject = ' '.join(words[:2])
+                    elements.subject = " ".join(words[:2])
 
         # Extract predicate from verb patterns
         if not elements.predicate:
             verb_patterns = [
-                r'\b(is|was|are|were|has|have|had|does|did|will|can|should|must|makes?|creates?|implements?|provides?|returns?)\b'
+                r"\b(is|was|are|were|has|have|had|does|did|will|can|should|must|makes?|creates?|implements?|provides?|returns?)\b"
             ]
             for pattern in verb_patterns:
                 match = re.search(pattern, claim_text, re.IGNORECASE)
@@ -607,13 +680,15 @@ class AtomicClaimDecomposition:
 
         return elements
 
-    def extract_atomic_claims(self, qualified_sentence: str, context: ConversationContext) -> List[AtomicClaim]:
+    def extract_atomic_claims(
+        self, qualified_sentence: str, context: ConversationContext
+    ) -> List[AtomicClaim]:
         """Extract atomic claims from disambiguated, qualified sentence."""
         claims = []
 
         # Split on conjunctions (and, or, but)
         # Pattern: split on conjunctions but preserve structure
-        conjunction_pattern = r'\s+(and|or|but)\s+'
+        conjunction_pattern = r"\s+(and|or|but)\s+"
         parts = re.split(conjunction_pattern, qualified_sentence)
 
         # Process each part
@@ -625,7 +700,7 @@ class AtomicClaimDecomposition:
 
             # Further split on commas if they separate independent clauses
             # Split on comma followed by capital
-            clauses = re.split(r',\s+(?=[A-Z])', part)
+            clauses = re.split(r",\s+(?=[A-Z])", part)
 
             for clause in clauses:
                 clause = clause.strip()
@@ -633,87 +708,94 @@ class AtomicClaimDecomposition:
                     continue
 
                 # Remove trailing punctuation for processing
-                clean_clause = clause.rstrip('.,;:!?')
+                clean_clause = clause.rstrip(".,;:!?")
 
                 # Skip if too short (likely not a complete claim)
                 if len(clean_clause.split()) < 3:
                     continue
 
                 # Handle conditionals (if-then statements)
-                if re.search(r'\bif\s+', clean_clause, re.IGNORECASE):
+                if re.search(r"\bif\s+", clean_clause, re.IGNORECASE):
                     # Extract both condition and consequence
                     conditional_match = re.search(
-                        r'\bif\s+(.+?)\s+then\s+(.+?)$', clean_clause, re.IGNORECASE)
+                        r"\bif\s+(.+?)\s+then\s+(.+?)$", clean_clause, re.IGNORECASE
+                    )
                     if conditional_match:
                         condition = conditional_match.group(1).strip()
                         consequence = conditional_match.group(2).strip()
 
                         # Create claim for condition
-                        condition_elements = self._extract_claim_elements(
-                            condition)
-                        claims.append(AtomicClaim(
-                            id=f"claim_{claim_id_counter}",
-                            statement=condition,
-                            contextual_brackets=self._extract_context_brackets(
-                                condition, context),
-                            source_sentence=qualified_sentence,
-                            verification_requirements=[
-                                "condition_verification"],
-                            confidence=0.8,
-                            elements=condition_elements
-                        ))
+                        condition_elements = self._extract_claim_elements(condition)
+                        claims.append(
+                            AtomicClaim(
+                                id=f"claim_{claim_id_counter}",
+                                statement=condition,
+                                contextual_brackets=self._extract_context_brackets(
+                                    condition, context
+                                ),
+                                source_sentence=qualified_sentence,
+                                verification_requirements=["condition_verification"],
+                                confidence=0.8,
+                                elements=condition_elements,
+                            )
+                        )
                         claim_id_counter += 1
 
                         # Create claim for consequence
-                        consequence_elements = self._extract_claim_elements(
-                            consequence)
-                        claims.append(AtomicClaim(
-                            id=f"claim_{claim_id_counter}",
-                            statement=consequence,
-                            contextual_brackets=self._extract_context_brackets(
-                                consequence, context),
-                            source_sentence=qualified_sentence,
-                            verification_requirements=[
-                                "consequence_verification"],
-                            confidence=0.8,
-                            elements=consequence_elements
-                        ))
+                        consequence_elements = self._extract_claim_elements(consequence)
+                        claims.append(
+                            AtomicClaim(
+                                id=f"claim_{claim_id_counter}",
+                                statement=consequence,
+                                contextual_brackets=self._extract_context_brackets(
+                                    consequence, context
+                                ),
+                                source_sentence=qualified_sentence,
+                                verification_requirements=["consequence_verification"],
+                                confidence=0.8,
+                                elements=consequence_elements,
+                            )
+                        )
                         claim_id_counter += 1
                     else:
                         # Simple if statement without explicit "then"
-                        clause_elements = self._extract_claim_elements(
-                            clean_clause)
-                        claims.append(AtomicClaim(
-                            id=f"claim_{claim_id_counter}",
-                            statement=clean_clause,
-                            contextual_brackets=self._extract_context_brackets(
-                                clean_clause, context),
-                            source_sentence=qualified_sentence,
-                            verification_requirements=[
-                                "conditional_verification"],
-                            confidence=0.7,
-                            elements=clause_elements
-                        ))
+                        clause_elements = self._extract_claim_elements(clean_clause)
+                        claims.append(
+                            AtomicClaim(
+                                id=f"claim_{claim_id_counter}",
+                                statement=clean_clause,
+                                contextual_brackets=self._extract_context_brackets(
+                                    clean_clause, context
+                                ),
+                                source_sentence=qualified_sentence,
+                                verification_requirements=["conditional_verification"],
+                                confidence=0.7,
+                                elements=clause_elements,
+                            )
+                        )
                         claim_id_counter += 1
                 else:
                     # Regular claim
                     # Add contextual brackets
-                    bracketed_claim = self.add_contextual_brackets(
-                        clean_clause, qualified_sentence)
+                    bracketed_claim = self.add_contextual_brackets(clean_clause, qualified_sentence)
 
                     claim_elements = self._extract_claim_elements(clean_clause)
 
-                    claims.append(AtomicClaim(
-                        id=f"claim_{claim_id_counter}",
-                        statement=bracketed_claim,
-                        contextual_brackets=self._extract_context_brackets(
-                            clean_clause, context),
-                        source_sentence=qualified_sentence,
-                        verification_requirements=self._extract_verification_requirements(
-                            clean_clause),
-                        confidence=0.9,
-                        elements=claim_elements
-                    ))
+                    claims.append(
+                        AtomicClaim(
+                            id=f"claim_{claim_id_counter}",
+                            statement=bracketed_claim,
+                            contextual_brackets=self._extract_context_brackets(
+                                clean_clause, context
+                            ),
+                            source_sentence=qualified_sentence,
+                            verification_requirements=self._extract_verification_requirements(
+                                clean_clause
+                            ),
+                            confidence=0.9,
+                            elements=claim_elements,
+                        )
+                    )
                     claim_id_counter += 1
 
         return claims
@@ -730,8 +812,7 @@ class AtomicClaimDecomposition:
 
         # Add code span context if claim mentions code
         if context.code_spans:
-            code_keywords = ['code', 'function', 'method',
-                             'class', 'variable', 'api', 'endpoint']
+            code_keywords = ["code", "function", "method", "class", "variable", "api", "endpoint"]
             if any(keyword in claim.lower() for keyword in code_keywords):
                 for code_span in context.code_spans[:2]:  # Limit to first 2
                     brackets.append(f"[code: {code_span[:50]}...]")
@@ -743,15 +824,15 @@ class AtomicClaimDecomposition:
         requirements = []
 
         # Check for dates (require date verification)
-        if re.search(r'\d{1,2}[/-]\d{1,2}[/-]\d{2,4}', claim):
+        if re.search(r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}", claim):
             requirements.append("date_verification")
 
         # Check for quantities (require quantity verification)
-        if re.search(r'\d+\s*(percent|%|dollars?|\$|units?)', claim, re.IGNORECASE):
+        if re.search(r"\d+\s*(percent|%|dollars?|\$|units?)", claim, re.IGNORECASE):
             requirements.append("quantity_verification")
 
         # Check for proper nouns (require entity verification)
-        proper_nouns = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', claim)
+        proper_nouns = re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b", claim)
         if proper_nouns:
             requirements.append("entity_verification")
 
@@ -767,11 +848,10 @@ class AtomicClaimDecomposition:
         # Look for entities, dates, or other contextual information
 
         # Find entities in context that aren't in claim
-        context_entities = re.findall(r'\b[A-Z][a-z]+\b', implied_context)
-        claim_entities = set(re.findall(r'\b[A-Z][a-z]+\b', claim))
+        context_entities = re.findall(r"\b[A-Z][a-z]+\b", implied_context)
+        claim_entities = set(re.findall(r"\b[A-Z][a-z]+\b", claim))
 
-        missing_entities = [
-            e for e in context_entities if e not in claim_entities]
+        missing_entities = [e for e in context_entities if e not in claim_entities]
 
         # Build bracketed claim
         bracketed = claim
@@ -783,10 +863,8 @@ class AtomicClaimDecomposition:
             bracketed = f"[{entity}] {bracketed}"
 
         # Add temporal context if present in implied_context but not in claim
-        temporal_words = ['today', 'yesterday',
-                          'tomorrow', 'now', 'then', 'recently']
-        context_temporal = [
-            w for w in temporal_words if w in implied_context.lower()]
+        temporal_words = ["today", "yesterday", "tomorrow", "now", "then", "recently"]
+        context_temporal = [w for w in temporal_words if w in implied_context.lower()]
         claim_temporal = [w for w in temporal_words if w in claim.lower()]
 
         if context_temporal and not claim_temporal:
@@ -831,7 +909,7 @@ class Decontextualizer:
         if claim.contextual_brackets:
             for bracket in claim.contextual_brackets:
                 # Extract entity from bracket format: "[Entity: description]" or "[Entity]"
-                bracket_match = re.match(r'\[([^\]:]+)', bracket)
+                bracket_match = re.match(r"\[([^\]:]+)", bracket)
                 if bracket_match:
                     entity = bracket_match.group(1).strip()
                     if entity not in extras:
@@ -839,14 +917,14 @@ class Decontextualizer:
 
         # Extract additional context from source_context
         # Look for entities, dates, or other contextual information
-        context_entities = re.findall(
-            r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', source_context)
-        claim_entities = set(re.findall(
-            r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', base))
+        context_entities = re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b", source_context)
+        claim_entities = set(re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b", base))
 
         # Add missing entities from context
         for entity in context_entities[:2]:  # Limit to first 2
-            if entity not in claim_entities and entity not in [e.split(':')[-1].strip() for e in extras if ':' in e]:
+            if entity not in claim_entities and entity not in [
+                e.split(":")[-1].strip() for e in extras if ":" in e
+            ]:
                 extras.append(f"context: {entity}")
 
         # Compose c_max: base claim with sorted, deduplicated extras
@@ -855,20 +933,20 @@ class Decontextualizer:
             seen = set()
             unique_extras = []
             for extra in extras:
-                extra_key = extra.split(':')[0] if ':' in extra else extra
+                extra_key = extra.split(":")[0] if ":" in extra else extra
                 if extra_key not in seen:
                     seen.add(extra_key)
                     unique_extras.append(extra)
 
-            extras_str = '; '.join(sorted(unique_extras))
+            extras_str = "; ".join(sorted(unique_extras))
             cmax = f"{base} ({extras_str})"
         else:
             cmax = base
 
         # Assert invariant: c_max tokens should include c tokens (monotonic entailment)
         # Cheap check: ensure claim tokens are subset of cmax tokens
-        base_tokens = set(re.findall(r'\b\w+\b', base.lower()))
-        cmax_tokens = set(re.findall(r'\b\w+\b', cmax.lower()))
+        base_tokens = set(re.findall(r"\b\w+\b", base.lower()))
+        cmax_tokens = set(re.findall(r"\b\w+\b", cmax.lower()))
 
         if not base_tokens.issubset(cmax_tokens):
             # Fall back to concatenation with brackets to preserve entailment
@@ -895,8 +973,8 @@ class ManifestEvidenceRetriever(EvidenceRetriever):
 
     def _jaccard_similarity(self, text1: str, text2: str) -> float:
         """Calculate Jaccard similarity between two texts."""
-        words1 = set(re.findall(r'\b\w+\b', text1.lower()))
-        words2 = set(re.findall(r'\b\w+\b', text2.lower()))
+        words1 = set(re.findall(r"\b\w+\b", text1.lower()))
+        words2 = set(re.findall(r"\b\w+\b", text2.lower()))
 
         if not words1 or not words2:
             return 0.0
@@ -908,8 +986,8 @@ class ManifestEvidenceRetriever(EvidenceRetriever):
 
     def _token_overlap_score(self, claim_text: str, evidence_text: str) -> float:
         """Crude relevance proxy: token overlap ratio."""
-        claim_words = set(re.findall(r'\b\w+\b', claim_text.lower()))
-        evidence_words = set(re.findall(r'\b\w+\b', evidence_text.lower()))
+        claim_words = set(re.findall(r"\b\w+\b", claim_text.lower()))
+        evidence_words = set(re.findall(r"\b\w+\b", evidence_text.lower()))
 
         if not claim_words:
             return 0.0
@@ -917,13 +995,14 @@ class ManifestEvidenceRetriever(EvidenceRetriever):
         overlap = len(claim_words & evidence_words)
         return overlap / len(claim_words)
 
-    def retrieve(self, claim_text: str, manifest: Dict, k: int = 6, lambda_div: float = 0.5) -> List[Dict]:
+    def retrieve(
+        self, claim_text: str, manifest: Dict, k: int = 6, lambda_div: float = 0.5
+    ) -> List[Dict]:
         """
         Maximal Marginal Relevance (MMR): argmax (1-λ)·Rel - λ·Redundancy
         Rel: token-overlap proxy; Redundancy: Jaccard vs. selected set.
         """
-        evidence_items = manifest.get(
-            "evidence_items", manifest.get("evidence", []))
+        evidence_items = manifest.get("evidence_items", manifest.get("evidence", []))
 
         if not evidence_items:
             return []
@@ -936,11 +1015,7 @@ class ManifestEvidenceRetriever(EvidenceRetriever):
             source = item.get("source", "unknown")
             quality = item.get("quality", item.get("quality_score", 0.5))
 
-            unified_evidence.append({
-                "text": text,
-                "source": source,
-                "quality": float(quality)
-            })
+            unified_evidence.append({"text": text, "source": source, "quality": float(quality)})
 
         # Relevance proxy (drop-in: replace with embeddings later)
         def rel(item):
@@ -958,9 +1033,11 @@ class ManifestEvidenceRetriever(EvidenceRetriever):
                 r = rel(item)
                 # Redundancy: max Jaccard similarity to already selected items
                 redundancy = max(
-                    (self._jaccard_similarity(item.get("text", ""), s.get("text", ""))
-                     for s in selected),
-                    default=0.0
+                    (
+                        self._jaccard_similarity(item.get("text", ""), s.get("text", ""))
+                        for s in selected
+                    ),
+                    default=0.0,
                 )
                 # MMR score: (1-λ)·relevance - λ·redundancy
                 score = (1 - lambda_div) * r - lambda_div * redundancy
@@ -1012,7 +1089,7 @@ class PlaceholderEntailmentJudge(EntailmentJudge):
         prior: Optional[Dict[str, float]] = None,
         eps: float = 1e-6,
         calibration_path: Optional[str] = None,
-        warn_on_init: bool = True
+        warn_on_init: bool = True,
     ):
         """
         Initialize with temperature, priors, and optional calibration.
@@ -1026,18 +1103,18 @@ class PlaceholderEntailmentJudge(EntailmentJudge):
         """
         if warn_on_init:
             import warnings
+
             warnings.warn(
                 "PlaceholderEntailmentJudge is a placeholder implementation using "
                 "lexical overlap heuristics. For production use, replace with a "
                 "trained NLI model. This judge has limited accuracy compared to "
                 "trained models.",
                 UserWarning,
-                stacklevel=2
+                stacklevel=2,
             )
 
         self.temperature = temperature
-        self.prior = prior or {"support": 0.45,
-                               "contradict": 0.1, "insufficient": 0.45}
+        self.prior = prior or {"support": 0.45, "contradict": 0.1, "insufficient": 0.45}
         self.bias = {"support": 0.0, "contradict": 0.0, "insufficient": 0.0}
         self.eps = eps
         self._memo: Dict[str, Dict[str, float]] = {}
@@ -1048,8 +1125,7 @@ class PlaceholderEntailmentJudge(EntailmentJudge):
                 with open(calibration_path, "r") as f:
                     data = json.load(f)
                 calib = data.get("calibration", {})
-                self.temperature = float(
-                    calib.get("temperature", self.temperature))
+                self.temperature = float(calib.get("temperature", self.temperature))
                 self.prior = calib.get("priors", self.prior)
                 self.bias = calib.get("bias", self.bias)
             except Exception:
@@ -1061,10 +1137,12 @@ class PlaceholderEntailmentJudge(EntailmentJudge):
         combined = f"{evidence_chunk}|||{claim_text}"
         return hashlib.sha256(combined.encode()).hexdigest()
 
-    def _raw_overlap_logits(self, evidence_chunk: str, claim_text: str) -> Tuple[float, float, float]:
+    def _raw_overlap_logits(
+        self, evidence_chunk: str, claim_text: str
+    ) -> Tuple[float, float, float]:
         """Compute raw logits from lexical overlap (placeholder)."""
-        evidence_words = set(re.findall(r'\b\w+\b', evidence_chunk.lower()))
-        claim_words = set(re.findall(r'\b\w+\b', claim_text.lower()))
+        evidence_words = set(re.findall(r"\b\w+\b", evidence_chunk.lower()))
+        claim_words = set(re.findall(r"\b\w+\b", claim_text.lower()))
 
         if not claim_words:
             return (-1.0, -2.0, 1.0)  # insufficient logits
@@ -1074,8 +1152,8 @@ class PlaceholderEntailmentJudge(EntailmentJudge):
 
         # Check for explicit contradictions
         contradiction_indicators = [
-            r'\b(not|no|never|false|incorrect|wrong|disproves?|refutes?|contradicts?)\b',
-            r'\b(doesn\'t|don\'t|didn\'t|won\'t|can\'t|cannot)\b'
+            r"\b(not|no|never|false|incorrect|wrong|disproves?|refutes?|contradicts?)\b",
+            r"\b(doesn\'t|don\'t|didn\'t|won\'t|can\'t|cannot)\b",
         ]
         has_contradiction = False
         for pattern in contradiction_indicators:
@@ -1111,8 +1189,7 @@ class PlaceholderEntailmentJudge(EntailmentJudge):
             return self._memo[cache_key]
 
         # Crude logits from overlaps (placeholder)
-        s_raw, c_raw, i_raw = self._raw_overlap_logits(
-            evidence_chunk, claim_text)
+        s_raw, c_raw, i_raw = self._raw_overlap_logits(evidence_chunk, claim_text)
 
         # Temperature scaling + bias
         s = (s_raw / self.temperature) + self.bias.get("support", 0.0)
@@ -1126,8 +1203,7 @@ class PlaceholderEntailmentJudge(EntailmentJudge):
         labels = ["support", "contradict", "insufficient"]
 
         # Prior smoothing to dampen spikes
-        smoothed = {lbl: 0.5 * probs[idx] + 0.5 * self.prior[lbl]
-                    for idx, lbl in enumerate(labels)}
+        smoothed = {lbl: 0.5 * probs[idx] + 0.5 * self.prior[lbl] for idx, lbl in enumerate(labels)}
 
         # Renormalize
         norm = sum(smoothed.values()) + self.eps
@@ -1140,8 +1216,8 @@ class PlaceholderEntailmentJudge(EntailmentJudge):
 def _detect_negation(text: str) -> bool:
     """Simple negation detector."""
     negation_patterns = [
-        r'\b(not|no|never|none|nobody|nothing|nowhere)\b',
-        r'\b(doesn\'t|don\'t|didn\'t|won\'t|can\'t|cannot|isn\'t|aren\'t)\b'
+        r"\b(not|no|never|none|nobody|nothing|nowhere)\b",
+        r"\b(doesn\'t|don\'t|didn\'t|won\'t|can\'t|cannot|isn\'t|aren\'t)\b",
     ]
     for pattern in negation_patterns:
         if re.search(pattern, text.lower()):
@@ -1163,7 +1239,7 @@ class ElementCoverageScorer:
             "predicate": False,
             "object": False,
             "qualifiers": {},
-            "negation_mismatch": False
+            "negation_mismatch": False,
         }
 
         # Cheap phrase hits; keep your dependency parser hook in place if available
@@ -1206,14 +1282,16 @@ def classify_outcome(
     triage_cmax: Dict[str, float],
     triage_c_to_cmax: Dict[str, float],
     thresholds: Dict[str, float],
-    precedence: List[str]
+    precedence: List[str],
 ) -> int:
     """Return 1–7 outcome with contradiction precedence and explicit thresholds."""
     # Check for contradiction FIRST (highest precedence)
     contradict_min = thresholds.get("contradict_min", 0.5)
-    if (triage_c.get("contradict", 0.0) >= contradict_min or
-        triage_cmax.get("contradict", 0.0) >= contradict_min or
-            triage_c_to_cmax.get("contradict", 0.0) >= contradict_min):
+    if (
+        triage_c.get("contradict", 0.0) >= contradict_min
+        or triage_cmax.get("contradict", 0.0) >= contradict_min
+        or triage_c_to_cmax.get("contradict", 0.0) >= contradict_min
+    ):
         return 5  # contradiction case
 
     # Helper: choose highest-precedence label above its threshold
@@ -1248,19 +1326,22 @@ def classify_outcome(
         # Check if all are insufficient
         if l_c == "insufficient" and l_cmax == "insufficient" and l_map == "insufficient":
             return 7  # no usable evidence
-        return 6   # insufficient evidence (mixed)
-    return 6       # conservative default
+        return 6  # insufficient evidence (mixed)
+    return 6  # conservative default
 
 
 # Regex patterns for claim category classification
 _RE_NUM = re.compile(
-    r"(?P<num>-?\d+(?:\.\d+)?)(?P<unit>\s?(?:%|ms|s|tok/s|tokens/s|items|cases)?)", re.I)
+    r"(?P<num>-?\d+(?:\.\d+)?)(?P<unit>\s?(?:%|ms|s|tok/s|tokens/s|items|cases)?)", re.I
+)
 _RE_STATUS = re.compile(
-    r"\b(production[-\s]?ready|enterprise[-\s]?grade|battle[-\s]?tested|deployed|released)\b", re.I)
-_RE_BENCH = re.compile(
-    r"\b(p50|p95|ttft|tps|throughput|latency|tokens\s?per\s?second)\b", re.I)
+    r"\b(production[-\s]?ready|enterprise[-\s]?grade|battle[-\s]?tested|deployed|released)\b", re.I
+)
+_RE_BENCH = re.compile(r"\b(p50|p95|ttft|tps|throughput|latency|tokens\s?per\s?second)\b", re.I)
 _RE_SUPERL = re.compile(
-    r"\b(best|leading|state[-\s]?of[-\s]?the[-\s]?art|next[-\s]?generation|revolutionary|breakthrough)\b", re.I)
+    r"\b(best|leading|state[-\s]?of[-\s]?the[-\s]?art|next[-\s]?generation|revolutionary|breakthrough)\b",
+    re.I,
+)
 
 
 def classify_claim_categories(text: str) -> Set[ClaimCategory]:
@@ -1277,7 +1358,9 @@ def classify_claim_categories(text: str) -> Set[ClaimCategory]:
     return cats
 
 
-def _evidence_has_required_artifacts(evidence_manifest: Dict, category: ClaimCategory, req: Dict[str, Any]) -> Tuple[bool, List[str]]:
+def _evidence_has_required_artifacts(
+    evidence_manifest: Dict, category: ClaimCategory, req: Dict[str, Any]
+) -> Tuple[bool, List[str]]:
     """
     Require structured artifacts for certain categories.
     Manifest may include typed entries, e.g.:
@@ -1316,7 +1399,9 @@ def _load_json_field(path: str, dotted_key: str) -> Optional[Any]:
         return None
 
 
-def _validate_numeric_claim_against_artifact(text: str, allowlist: List[str], artifacts: List[Dict[str, Any]]) -> Tuple[bool, List[str]]:
+def _validate_numeric_claim_against_artifact(
+    text: str, allowlist: List[str], artifacts: List[Dict[str, Any]]
+) -> Tuple[bool, List[str]]:
     """
     For QUANT/BENCHMARK text, attempt to match numeric mentions to allowed JSON fields in artifacts.
     If any number is present in text and no corresponding field can be read and compared, flag as missing.
@@ -1349,7 +1434,7 @@ class CAWSClaimVerification:
         entailment: Optional[EntailmentJudge] = None,
         coverage: Optional[ElementCoverageScorer] = None,
         policy: Optional[ClaimsPolicy] = None,
-        decontextualizer: Optional[Decontextualizer] = None
+        decontextualizer: Optional[Decontextualizer] = None,
     ):
         """Initialize verification components with defaults for backward compatibility."""
         self.retriever = retriever or ManifestEvidenceRetriever()
@@ -1362,8 +1447,7 @@ class CAWSClaimVerification:
         except Exception:
             pass
         self.entailment = entailment or PlaceholderEntailmentJudge(
-            temperature=0.8,
-            calibration_path=calibration_path
+            temperature=0.8, calibration_path=calibration_path
         )
         self.coverage = coverage or ElementCoverageScorer()
         self.policy = policy or ClaimsPolicy(
@@ -1372,25 +1456,34 @@ class CAWSClaimVerification:
                 ClaimCategory.BENCHMARK: {"types": ["bench_json"]},
                 ClaimCategory.QUANT: {"types": ["eval_report", "bench_json"]},
             },
-            banned_terms=["state-of-the-art", "revolutionary",
-                          "best", "leading", "next-generation", "breakthrough"],
+            banned_terms=[
+                "state-of-the-art",
+                "revolutionary",
+                "best",
+                "leading",
+                "next-generation",
+                "breakthrough",
+            ],
             numeric_fields_allow=[
                 "summary.avg_integration_f1_macro_lax",
                 "summary.privacy_ok_rate",
                 "summary.controls_with_integration",
-                "perf.ttft_ms.p50", "perf.ttft_ms.p95", "perf.tps.p50", "perf.tps.p95"
+                "perf.ttft_ms.p50",
+                "perf.ttft_ms.p95",
+                "perf.tps.p50",
+                "perf.tps.p95",
             ],
             thresholds={"coverage_min": 0.70},
-            version="2025-11-12"
+            version="2025-11-12",
         )
         self.decontextualizer = decontextualizer or Decontextualizer()
         # Centralized thresholds + precedence for determinism
         self.thresholds = {
-            "support_min": 0.6,        # probability threshold for support
-            "contradict_min": 0.55,    # probability threshold for contradiction
+            "support_min": 0.6,  # probability threshold for support
+            "contradict_min": 0.55,  # probability threshold for contradiction
             "insufficient_min": 0.55,  # probability threshold for insufficient
             # element coverage score for VERIFIED
-            "coverage_min": self.policy.thresholds.get("coverage_min", 0.7)
+            "coverage_min": self.policy.thresholds.get("coverage_min", 0.7),
         }
         # Contradiction > Support > Insufficient precedence
         self.precedence = ["contradict", "support", "insufficient"]
@@ -1403,11 +1496,11 @@ class CAWSClaimVerification:
             "coverage": type(self.coverage).__name__,
             "decontextualizer": type(self.decontextualizer).__name__,
             "thresholds": self.thresholds,
-            "precedence": self.precedence
+            "precedence": self.precedence,
         }
 
         # Add temperature if available
-        if hasattr(self.entailment, 'temperature'):
+        if hasattr(self.entailment, "temperature"):
             config["entailment_temperature"] = self.entailment.temperature
 
         # Add policy version
@@ -1416,12 +1509,11 @@ class CAWSClaimVerification:
         config_json = json.dumps(config, sort_keys=True)
         fingerprint = hashlib.sha256(config_json.encode()).hexdigest()
 
-        return {
-            "operator_config": fingerprint,
-            "config": config
-        }
+        return {"operator_config": fingerprint, "config": config}
 
-    def verify_claim_evidence(self, claim: AtomicClaim, evidence_manifest: Dict) -> VerificationResult:
+    def verify_claim_evidence(
+        self, claim: AtomicClaim, evidence_manifest: Dict
+    ) -> VerificationResult:
         """Verify claim against evidence manifest using entailment and coverage."""
         verification_trail = []
 
@@ -1437,18 +1529,20 @@ class CAWSClaimVerification:
         for cat in (ClaimCategory.STATUS, ClaimCategory.BENCHMARK, ClaimCategory.QUANT):
             if cat in categories:
                 ok, missing = _evidence_has_required_artifacts(
-                    evidence_manifest, cat, self.policy.require_artifacts.get(cat, {
-                    })
+                    evidence_manifest, cat, self.policy.require_artifacts.get(cat, {})
                 )
                 if not ok:
                     policy_violations.extend(missing)
 
         # numeric claims must be backed by an allowed field in artifacts
         # Skip if numeric_fields_allow is empty (permissive policy for tests)
-        if (ClaimCategory.QUANT in categories or ClaimCategory.BENCHMARK in categories) and self.policy.numeric_fields_allow:
+        if (
+            ClaimCategory.QUANT in categories or ClaimCategory.BENCHMARK in categories
+        ) and self.policy.numeric_fields_allow:
             ok_num, miss_num = _validate_numeric_claim_against_artifact(
-                claim.statement, self.policy.numeric_fields_allow, evidence_manifest.get(
-                    "artifacts", [])
+                claim.statement,
+                self.policy.numeric_fields_allow,
+                evidence_manifest.get("artifacts", []),
             )
             if not ok_num:
                 policy_violations.extend(miss_num)
@@ -1461,17 +1555,17 @@ class CAWSClaimVerification:
                 status="INSUFFICIENT_EVIDENCE",
                 evidence_quality=0.0,
                 caws_compliance=False,
-                verification_trail=[{
-                    "step": "policy_gate",
-                    "policy_violations": policy_violations,
-                    "rationale": "Policy-required artifacts missing or banned terminology detected."
-                }],
+                verification_trail=[
+                    {
+                        "step": "policy_gate",
+                        "policy_violations": policy_violations,
+                        "rationale": "Policy-required artifacts missing or banned terminology detected.",
+                    }
+                ],
                 outcome_id=6,
-                element_coverage={"score": 0.0, "detail": {
-                    "policy_violations": policy_violations}},
-                entailment_triage={"support": 0.0,
-                                   "contradict": 0.0, "insufficient": 1.0},
-                fingerprints=fingerprints
+                element_coverage={"score": 0.0, "detail": {"policy_violations": policy_violations}},
+                entailment_triage={"support": 0.0, "contradict": 0.0, "insufficient": 1.0},
+                fingerprints=fingerprints,
             )
 
         # --- existing pipeline continues (decontextualize, retrieve, triage, coverage, 7-way outcome) ---
@@ -1479,21 +1573,15 @@ class CAWSClaimVerification:
         c_text = claim.statement
         cmax_text = self.decontextualizer.to_cmax(claim, claim.source_sentence)
 
-        verification_trail.append({
-            "step": "decontextualization",
-            "c": c_text,
-            "c_max": cmax_text
-        })
+        verification_trail.append({"step": "decontextualization", "c": c_text, "c_max": cmax_text})
 
         # Retrieve evidence for both c and c_max
         Ec = self.retriever.retrieve(c_text, evidence_manifest)
         Emax = self.retriever.retrieve(cmax_text, evidence_manifest)
 
-        verification_trail.append({
-            "step": "evidence_retrieval",
-            "Ec_count": len(Ec),
-            "Emax_count": len(Emax)
-        })
+        verification_trail.append(
+            {"step": "evidence_retrieval", "Ec_count": len(Ec), "Emax_count": len(Emax)}
+        )
 
         if not Ec and not Emax:
             fingerprints = self._compute_fingerprints()
@@ -1504,15 +1592,13 @@ class CAWSClaimVerification:
                 verification_trail=verification_trail,
                 outcome_id=7,
                 element_coverage={"score": 0.0, "detail": {}},
-                entailment_triage={"support": 0.0,
-                                   "contradict": 0.0, "insufficient": 1.0},
-                fingerprints=fingerprints
+                entailment_triage={"support": 0.0, "contradict": 0.0, "insufficient": 1.0},
+                fingerprints=fingerprints,
             )
 
         # Calculate entailment triads: max over evidence chunks by support score
         tri_Ec_c = {"support": 0.0, "contradict": 0.0, "insufficient": 1.0}
-        tri_Emax_cmax = {"support": 0.0,
-                         "contradict": 0.0, "insufficient": 1.0}
+        tri_Emax_cmax = {"support": 0.0, "contradict": 0.0, "insufficient": 1.0}
         tri_Ec_cmax = {"support": 0.0, "contradict": 0.0, "insufficient": 1.0}
 
         # Calculate tri_Ec_c (max support from Ec for c)
@@ -1533,27 +1619,27 @@ class CAWSClaimVerification:
             if tri["support"] > tri_Ec_cmax["support"]:
                 tri_Ec_cmax = tri
 
-        verification_trail.append({
-            "step": "entailment_triage",
-            "tri_Ec_c": tri_Ec_c,
-            "tri_Emax_cmax": tri_Emax_cmax,
-            "tri_Ec_cmax": tri_Ec_cmax
-        })
+        verification_trail.append(
+            {
+                "step": "entailment_triage",
+                "tri_Ec_c": tri_Ec_c,
+                "tri_Emax_cmax": tri_Emax_cmax,
+                "tri_Ec_cmax": tri_Ec_cmax,
+            }
+        )
 
         # Classify outcome (1-7) with thresholds and precedence
         outcome_id = classify_outcome(
-            c_text, cmax_text,
+            c_text,
+            cmax_text,
             triage_c=tri_Ec_c,
             triage_cmax=tri_Emax_cmax,
             triage_c_to_cmax=tri_Ec_cmax,
             thresholds=self.thresholds,
-            precedence=self.precedence
+            precedence=self.precedence,
         )
 
-        verification_trail.append({
-            "step": "outcome_classification",
-            "outcome_id": outcome_id
-        })
+        verification_trail.append({"step": "outcome_classification", "outcome_id": outcome_id})
 
         # Calculate binding-aware coverage: best sentence score from all Ec
         best_coverage_score = 0.0
@@ -1570,18 +1656,23 @@ class CAWSClaimVerification:
             best_coverage_score = 0.5  # Neutral score
             best_coverage_detail = {}
 
-        verification_trail.append({
-            "step": "element_coverage",
-            "coverage_score": best_coverage_score,
-            "coverage_detail": best_coverage_detail
-        })
+        verification_trail.append(
+            {
+                "step": "element_coverage",
+                "coverage_score": best_coverage_score,
+                "coverage_detail": best_coverage_detail,
+            }
+        )
 
         # Decide final status from outcome + coverage using configured thresholds
         # Block VERIFIED if negation mismatch detected
-        has_negation_mismatch = best_coverage_detail.get(
-            "negation_mismatch", False)
+        has_negation_mismatch = best_coverage_detail.get("negation_mismatch", False)
 
-        if outcome_id in (1, 2, 4) and best_coverage_score >= self.thresholds["coverage_min"] and not has_negation_mismatch:
+        if (
+            outcome_id in (1, 2, 4)
+            and best_coverage_score >= self.thresholds["coverage_min"]
+            and not has_negation_mismatch
+        ):
             status = "VERIFIED"
             caws_compliance = True
         elif outcome_id == 5:
@@ -1597,14 +1688,17 @@ class CAWSClaimVerification:
         # Aggregate entailment triads (use max support as primary)
         aggregate_triad = {
             "support": max(tri_Ec_c["support"], tri_Emax_cmax["support"], tri_Ec_cmax["support"]),
-            "contradict": max(tri_Ec_c["contradict"], tri_Emax_cmax["contradict"], tri_Ec_cmax["contradict"]),
-            "insufficient": min(tri_Ec_c["insufficient"], tri_Emax_cmax["insufficient"], tri_Ec_cmax["insufficient"])
+            "contradict": max(
+                tri_Ec_c["contradict"], tri_Emax_cmax["contradict"], tri_Ec_cmax["contradict"]
+            ),
+            "insufficient": min(
+                tri_Ec_c["insufficient"], tri_Emax_cmax["insufficient"], tri_Ec_cmax["insufficient"]
+            ),
         }
         # Normalize
         total = sum(aggregate_triad.values())
         if total > 0:
-            aggregate_triad = {k: v / total for k,
-                               v in aggregate_triad.items()}
+            aggregate_triad = {k: v / total for k, v in aggregate_triad.items()}
 
         return VerificationResult(
             status=status,
@@ -1612,12 +1706,9 @@ class CAWSClaimVerification:
             caws_compliance=caws_compliance,
             verification_trail=verification_trail,
             outcome_id=outcome_id,
-            element_coverage={
-                "score": best_coverage_score,
-                "detail": best_coverage_detail
-            },
+            element_coverage={"score": best_coverage_score, "detail": best_coverage_detail},
             entailment_triage=aggregate_triad,
-            fingerprints=fingerprints
+            fingerprints=fingerprints,
         )
 
     def validate_claim_scope(self, claim: AtomicClaim, working_spec: Dict) -> Dict:
@@ -1639,14 +1730,15 @@ class CAWSClaimVerification:
 
         # Check if claim mentions out-of-scope items
         for out_item in scope_out:
-            out_pattern = out_item.lower().replace(
-                '/', r'[/\\]').replace('*', r'.*')
+            out_pattern = out_item.lower().replace("/", r"[/\\]").replace("*", r".*")
             if re.search(out_pattern, claim_text, re.IGNORECASE):
-                violations.append({
-                    "type": "out_of_scope_reference",
-                    "item": out_item,
-                    "claim": claim.statement[:100]
-                })
+                violations.append(
+                    {
+                        "type": "out_of_scope_reference",
+                        "item": out_item,
+                        "claim": claim.statement[:100],
+                    }
+                )
                 within_scope = False
 
         # Check if claim mentions modules not in blast_radius
@@ -1654,27 +1746,27 @@ class CAWSClaimVerification:
             # Extract module names from claim
             claim_modules = []
             for module in allowed_modules:
-                module_name = module.split(
-                    '/')[-1].replace('.py', '').replace('_', ' ')
+                module_name = module.split("/")[-1].replace(".py", "").replace("_", " ")
                 if module_name.lower() in claim_text:
                     claim_modules.append(module)
 
             # Check if claim mentions code/files but no allowed modules match
-            code_keywords = ['file', 'module', 'function',
-                             'class', 'code', 'implementation']
+            code_keywords = ["file", "module", "function", "class", "code", "implementation"]
             if any(keyword in claim_text for keyword in code_keywords):
                 if not claim_modules:
                     # Claim mentions code but doesn't match any allowed module
-                    violations.append({
-                        "type": "module_not_in_blast_radius",
-                        "claim": claim.statement[:100],
-                        "allowed_modules": allowed_modules
-                    })
+                    violations.append(
+                        {
+                            "type": "module_not_in_blast_radius",
+                            "claim": claim.statement[:100],
+                            "allowed_modules": allowed_modules,
+                        }
+                    )
                     # Don't mark as out of scope if it's just a general code reference
                     # within_scope = False  # Commented out - too strict
 
         # Check if claim references files/paths
-        file_path_pattern = r'[\w/\\]+\.(py|js|ts|yaml|yml|json|md)'
+        file_path_pattern = r"[\w/\\]+\.(py|js|ts|yaml|yml|json|md)"
         file_paths = re.findall(file_path_pattern, claim.statement)
 
         if file_paths:
@@ -1682,24 +1774,22 @@ class CAWSClaimVerification:
                 # Check if path is in scope
                 path_in_scope = False
                 for scope_item in scope_in:
-                    scope_pattern = scope_item.lower().replace(
-                        '/', r'[/\\]').replace('*', r'.*')
+                    scope_pattern = scope_item.lower().replace("/", r"[/\\]").replace("*", r".*")
                     if re.search(scope_pattern, file_path, re.IGNORECASE):
                         path_in_scope = True
                         break
 
                 if not path_in_scope:
-                    violations.append({
-                        "type": "file_path_out_of_scope",
-                        "path": file_path,
-                        "claim": claim.statement[:100]
-                    })
+                    violations.append(
+                        {
+                            "type": "file_path_out_of_scope",
+                            "path": file_path,
+                            "claim": claim.statement[:100],
+                        }
+                    )
                     within_scope = False
 
-        return {
-            "within_scope": within_scope,
-            "violations": violations
-        }
+        return {"within_scope": within_scope, "violations": violations}
 
 
 def calculate_desirable_outcome_rate(outcomes: List[int]) -> float:
@@ -1740,11 +1830,7 @@ def calculate_coverage_stats(coverage_scores: List[float]) -> Dict[str, float]:
     p95_idx = int(n * 0.95)
     p95 = sorted_scores[min(p95_idx, n - 1)] if n > 0 else 0.0
 
-    return {
-        "mean": mean,
-        "p50": p50,
-        "p95": p95
-    }
+    return {"mean": mean, "p50": p50, "p95": p95}
 
 
 def count_rationale_regressions(outcomes: List[int]) -> int:
@@ -1760,8 +1846,7 @@ def count_rationale_regressions(outcomes: List[int]) -> int:
 
 
 def summarize_verifications(
-    results: List[VerificationResult],
-    hw_profile_key: str = ""
+    results: List[VerificationResult], hw_profile_key: str = ""
 ) -> Dict[str, Any]:
     """Summarize verification results with outcome distribution and metrics.
 
@@ -1780,7 +1865,7 @@ def summarize_verifications(
             "coverage_p50": 0.0,
             "coverage_p95": 0.0,
             "rationale_regressions": 0,
-            "hw_profile_key": hw_profile_key
+            "hw_profile_key": hw_profile_key,
         }
 
     # Build outcome histogram
@@ -1810,7 +1895,7 @@ def summarize_verifications(
         "coverage_p95": coverage_stats["p95"],
         "rationale_regressions": rationale_regressions,
         "total_claims": len(results),
-        "hw_profile_key": hw_profile_key
+        "hw_profile_key": hw_profile_key,
     }
 
 
@@ -1823,25 +1908,20 @@ class ClaimifyPipeline:
         self.decomposition = AtomicClaimDecomposition()
         self.verification = CAWSClaimVerification()
 
-    def process(self, text: str, context: ConversationContext,
-                evidence_manifest: Optional[Dict] = None) -> Dict:
+    def process(
+        self, text: str, context: ConversationContext, evidence_manifest: Optional[Dict] = None
+    ) -> Dict:
         """Run complete pipeline on input text.
 
         Returns:
             Dictionary with extracted claims and verification results
         """
-        results = {
-            "disambiguation": None,
-            "qualification": None,
-            "claims": [],
-            "verification": []
-        }
+        results = {"disambiguation": None, "qualification": None, "claims": [], "verification": []}
 
         # Stage 1: Disambiguation
         ambiguities = self.disambiguation.detect_ambiguities(text, context)
         if ambiguities:
-            disambig_result = self.disambiguation.resolve_ambiguity(
-                text, context)
+            disambig_result = self.disambiguation.resolve_ambiguity(text, context)
             if not disambig_result.success:
                 # Hard gate: skip if cannot disambiguate
                 results["disambiguation"] = disambig_result
@@ -1849,8 +1929,7 @@ class ClaimifyPipeline:
             text = disambig_result.disambiguated_sentence
 
         # Stage 2: Qualification
-        qual_result = self.qualification.detect_verifiable_content(
-            text, context)
+        qual_result = self.qualification.detect_verifiable_content(text, context)
         if not qual_result.has_verifiable_content:
             # Hard gate: skip if no verifiable content
             results["qualification"] = qual_result
@@ -1858,17 +1937,14 @@ class ClaimifyPipeline:
 
         # Stage 3: Decomposition
         claims = self.decomposition.extract_atomic_claims(
-            qual_result.rewritten_sentence or text, context)
+            qual_result.rewritten_sentence or text, context
+        )
         results["claims"] = claims
 
         # Stage 4: Verification (if evidence provided)
         if evidence_manifest:
             for claim in claims:
-                verif_result = self.verification.verify_claim_evidence(
-                    claim, evidence_manifest)
-                results["verification"].append({
-                    "claim_id": claim.id,
-                    "verification": verif_result
-                })
+                verif_result = self.verification.verify_claim_evidence(claim, evidence_manifest)
+                results["verification"].append({"claim_id": claim.id, "verification": verif_result})
 
         return results

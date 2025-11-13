@@ -5,6 +5,7 @@ Validates dataset provenance, licensing, and PII handling.
 Ensures all samples have proper source, license, and PII flags.
 @author: @darianrosebrook
 """
+
 import json
 import sys
 from pathlib import Path
@@ -76,12 +77,13 @@ def validate_provenance(
 
         # PLACEHOLDER: Check for common PII patterns (simplified check - would use proper PII detection library in production)
         pii_patterns = [
-            r'\b\d{3}-\d{2}-\d{4}\b',  # SSN
-            r'\b\d{3}\.\d{3}\.\d{4}\b',  # Phone
-            r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',  # Email
+            r"\b\d{3}-\d{2}-\d{4}\b",  # SSN
+            r"\b\d{3}\.\d{3}\.\d{4}\b",  # Phone
+            r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",  # Email
         ]
 
         import re
+
         has_pii = False
         for pattern in pii_patterns:
             if re.search(pattern, prompt) or re.search(pattern, teacher_text):
@@ -117,7 +119,7 @@ def validate_dataset_provenance(
     total_errors = 0
     error_details = defaultdict(int)
 
-    with open(jsonl_path, 'r') as f:
+    with open(jsonl_path, "r") as f:
         for line_num, line in enumerate(f, start=1):
             if not line.strip():
                 continue
@@ -167,8 +169,7 @@ def validate_dataset_provenance(
 def main(
     input_path: str = typer.Argument(..., help="Path to dataset JSONL file"),
     strict: bool = typer.Option(True, help="Fail on any provenance error"),
-    output_path: Optional[str] = typer.Option(
-        None, help="Output path for validation report"),
+    output_path: Optional[str] = typer.Option(None, help="Output path for validation report"),
 ):
     """
     Validate data provenance for a dataset.
@@ -176,8 +177,7 @@ def main(
     jsonl_path = Path(input_path)
 
     if not jsonl_path.exists():
-        print(
-            f"[validate_provenance] ERROR: Dataset file not found: {jsonl_path}")
+        print(f"[validate_provenance] ERROR: Dataset file not found: {jsonl_path}")
         sys.exit(1)
 
     print(f"[validate_provenance] Validating provenance for: {jsonl_path}")
@@ -190,20 +190,20 @@ def main(
     print(f"Invalid samples: {results['invalid_samples']}")
     print(f"Total errors: {results['total_errors']}")
 
-    if results['error_summary']:
+    if results["error_summary"]:
         print("\nError Details:")
-        for error, count in results['error_summary'].items():
+        for error, count in results["error_summary"].items():
             print(f"  - {error}: {count} occurrences")
 
     # Save report if requested
     if output_path:
         report_path = Path(output_path)
         report_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(report_path, 'w') as f:
+        with open(report_path, "w") as f:
             json.dump(results, f, indent=2)
         print(f"\n[validate_provenance] Report saved to: {report_path}")
 
-    if results['pass']:
+    if results["pass"]:
         print("\n[validate_provenance] ✅ Provenance validation PASSED")
         sys.exit(0)
     else:

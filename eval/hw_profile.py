@@ -16,7 +16,8 @@ def _soc_string() -> str:
     if platform.system() == "Darwin":
         try:
             out = subprocess.check_output(
-                ["/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string"], text=True).strip()
+                ["/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string"], text=True
+            ).strip()
             if out:
                 return out
         except Exception:

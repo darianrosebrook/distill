@@ -15,18 +15,21 @@ from eval.runners.base import Runner
 # Import runners conditionally to avoid requiring all dependencies for smoke testing
 try:
     from eval.runners.openai_http import OpenAIHTTPRunner
+
     OPENAI_RUNNER_AVAILABLE = True
 except ImportError:
     OPENAI_RUNNER_AVAILABLE = False
 
 try:
     from eval.runners.hf_local import HFLocalRunner
+
     HF_RUNNER_AVAILABLE = True
 except ImportError:
     HF_RUNNER_AVAILABLE = False
 
 try:
     from eval.runners.orchestrator import OrchestratorRunner
+
     ORCHESTRATOR_RUNNER_AVAILABLE = True
 except ImportError:
     ORCHESTRATOR_RUNNER_AVAILABLE = False
@@ -46,7 +49,11 @@ class MockRunner(Runner):
             "text": f"[MOCK] Response to: {prompt[:50]}...",
             "finish_reason": "stop",
             "tool_calls": [],
-            "usage": {"prompt_tokens": len(prompt.split()), "completion_tokens": 10, "total_tokens": len(prompt.split()) + 10}
+            "usage": {
+                "prompt_tokens": len(prompt.split()),
+                "completion_tokens": 10,
+                "total_tokens": len(prompt.split()) + 10,
+            },
         }
 
     def fingerprint(self) -> Dict[str, Any]:
@@ -91,8 +98,7 @@ def sha256_file_excluding_header(path: str) -> str:
         first = f.readline()
         try:
             obj = json.loads(first)
-            has_header = isinstance(obj, dict) and obj.get(
-                "__header__") is True
+            has_header = isinstance(obj, dict) and obj.get("__header__") is True
         except Exception:
             has_header = False
         if not has_header:
@@ -116,13 +122,15 @@ def stable_shard(sample_id: str, num_shards: int) -> int:
     Returns:
         Shard index (0 to num_shards-1)
     """
-    h = hashlib.sha256(sample_id.encode('utf-8')).digest()
+    h = hashlib.sha256(sample_id.encode("utf-8")).digest()
     # Use first 8 bytes as little-endian to reduce modulo bias
-    val = int.from_bytes(h[:8], 'little')
+    val = int.from_bytes(h[:8], "little")
     return val % num_shards
 
 
-def select_shard(items: List[Dict[str, Any]], shard_index: int, num_shards: int) -> List[Dict[str, Any]]:
+def select_shard(
+    items: List[Dict[str, Any]], shard_index: int, num_shards: int
+) -> List[Dict[str, Any]]:
     """
     Select items for a specific shard using stable hash partitioning.
 
@@ -151,8 +159,7 @@ def select_shard(items: List[Dict[str, Any]], shard_index: int, num_shards: int)
             # If no sample_id, synthesize stable ID from row
             if not sample_id:
                 row_json = json.dumps(item, sort_keys=True, ensure_ascii=False)
-                sample_id = hashlib.sha256(
-                    row_json.encode('utf-8')).hexdigest()
+                sample_id = hashlib.sha256(row_json.encode("utf-8")).hexdigest()
 
         if sample_id:
             assigned_shard = stable_shard(sample_id, num_shards)
@@ -165,16 +172,16 @@ def select_shard(items: List[Dict[str, Any]], shard_index: int, num_shards: int)
 def main() -> None:
     ap = argparse.ArgumentParser("Tool-Integration Evaluation Harness")
     ap.add_argument("--runner", required=True, choices=RUNNERS.keys())
-    ap.add_argument("--model", required=True,
-                    help="Model name or local checkpoint path")
-    ap.add_argument("--in", dest="inp", required=True,
-                    help="Input dataset JSONL (verified)")
+    ap.add_argument("--model", required=True, help="Model name or local checkpoint path")
+    ap.add_argument("--in", dest="inp", required=True, help="Input dataset JSONL (verified)")
     ap.add_argument("--out", required=True, help="Output results JSONL")
     ap.add_argument("--report", required=True, help="Summary report JSON")
-    ap.add_argument("--fixtures", required=True,
-                    help="Fixtures directory for ToolBroker")
-    ap.add_argument("--prompt-wrapper", default=None,
-                    help="Path to prompt wrapper template (Jinja2 or string.Template)")
+    ap.add_argument("--fixtures", required=True, help="Fixtures directory for ToolBroker")
+    ap.add_argument(
+        "--prompt-wrapper",
+        default=None,
+        help="Path to prompt wrapper template (Jinja2 or string.Template)",
+    )
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--temperature", type=float, default=0.0)
     ap.add_argument("--max-tokens", type=int, default=1024)
@@ -182,30 +189,51 @@ def main() -> None:
     ap.add_argument("--shard-index", type=int, default=0)
     ap.add_argument("--min-eligible-for-gates", type=int, default=15)
     ap.add_argument("--fail-on-fingerprint-mismatch", action="store_true")
-    ap.add_argument("--no-fail-on-fingerprint-mismatch",
-                    dest="fail_on_fingerprint_mismatch", action="store_false")
+    ap.add_argument(
+        "--no-fail-on-fingerprint-mismatch",
+        dest="fail_on_fingerprint_mismatch",
+        action="store_false",
+    )
     ap.set_defaults(fail_on_fingerprint_mismatch=True)
     ap.add_argument("--fail-on-gate-failure", action="store_true")
-    ap.add_argument("--no-fail-on-gate-failure",
-                    dest="fail_on_gate_failure", action="store_false")
+    ap.add_argument("--no-fail-on-gate-failure", dest="fail_on_gate_failure", action="store_false")
     ap.set_defaults(fail_on_gate_failure=True)
-    ap.add_argument("--determinism-mode", action="store_true",
-                    help="Determinism mode: temp=0, top_p=1, no retries, fail on any retry")
-    ap.add_argument("--baseline-report", type=str, default=None,
-                    help="Path to baseline report for speed gate comparison")
-    ap.add_argument("--baseline-dir", type=str, default="eval/baselines",
-                    help="Directory for latent efficiency baseline artifacts")
-    ap.add_argument("--save-baseline", action="store_true",
-                    help="Save current run as baseline (for direct CoT)")
-    ap.add_argument("--workload-type", type=str, default="interactive",
-                    choices=["interactive", "offline"],
-                    help="Workload type: 'interactive' (batch=1) or 'offline' (batch 2-4)")
+    ap.add_argument(
+        "--determinism-mode",
+        action="store_true",
+        help="Determinism mode: temp=0, top_p=1, no retries, fail on any retry",
+    )
+    ap.add_argument(
+        "--baseline-report",
+        type=str,
+        default=None,
+        help="Path to baseline report for speed gate comparison",
+    )
+    ap.add_argument(
+        "--baseline-dir",
+        type=str,
+        default="eval/baselines",
+        help="Directory for latent efficiency baseline artifacts",
+    )
+    ap.add_argument(
+        "--save-baseline", action="store_true", help="Save current run as baseline (for direct CoT)"
+    )
+    ap.add_argument(
+        "--workload-type",
+        type=str,
+        default="interactive",
+        choices=["interactive", "offline"],
+        help="Workload type: 'interactive' (batch=1) or 'offline' (batch 2-4)",
+    )
     args = ap.parse_args()
 
     # Load dataset
     raw_items = list(read_jsonl(args.inp))
-    header = raw_items[0] if raw_items and isinstance(
-        raw_items[0], dict) and raw_items[0].get("__header__") else None
+    header = (
+        raw_items[0]
+        if raw_items and isinstance(raw_items[0], dict) and raw_items[0].get("__header__")
+        else None
+    )
     items = raw_items[1:] if header else raw_items
 
     # Fingerprints
@@ -227,10 +255,10 @@ def main() -> None:
         hardware_profile = {"key": profile.key, "config": profile.config}
 
         batch_policy = BatchPolicy(hardware_profile=hardware_profile)
-        selected_batch = batch_policy.select_batch_size(
-            workload_type=args.workload_type)
+        selected_batch = batch_policy.select_batch_size(workload_type=args.workload_type)
         print(
-            f"[eval/cli] Batch policy: workload_type={args.workload_type}, batch_size={selected_batch}")
+            f"[eval/cli] Batch policy: workload_type={args.workload_type}, batch_size={selected_batch}"
+        )
     except ImportError:
         # Skip batch policy if dependencies not available (for smoke testing)
         pass
@@ -246,8 +274,10 @@ def main() -> None:
         try:
             from runtime.config import RuntimeConfig
             from pathlib import Path
+
             try:
                 import yaml
+
                 YAML_AVAILABLE = True
             except ImportError:
                 YAML_AVAILABLE = False
@@ -261,30 +291,30 @@ def main() -> None:
 
             # Override with config files if they exist
             if eval_latent and latent_config_path.exists() and YAML_AVAILABLE:
-                with open(latent_config_path, 'r') as f:
+                with open(latent_config_path, "r") as f:
                     latent_config = yaml.safe_load(f)
                     gates = latent_config.get("gates", {})
                     efficiency = gates.get("efficiency", {})
                     runtime_config.latent_mode_enabled = True
-                    runtime_config.max_refinement_loops = efficiency.get(
-                        "max_loop_increase", 5) or 5
+                    runtime_config.max_refinement_loops = (
+                        efficiency.get("max_loop_increase", 5) or 5
+                    )
                     runtime_config.curriculum_probability = 1.0  # Full curriculum for evaluation
             elif eval_latent and latent_config_path.exists() and not YAML_AVAILABLE:
-                print(
-                    "[eval/cli] WARN: YAML not available, skipping latent config loading")
+                print("[eval/cli] WARN: YAML not available, skipping latent config loading")
 
             if eval_code_mode and code_mode_config_path.exists() and YAML_AVAILABLE:
-                with open(code_mode_config_path, 'r') as f:
+                with open(code_mode_config_path, "r") as f:
                     code_mode_config = yaml.safe_load(f)
                     gates = code_mode_config.get("gates", {})
                     runtime_config.latent_mode_enabled = False  # Code mode doesn't use latent
             elif eval_code_mode and code_mode_config_path.exists() and not YAML_AVAILABLE:
-                print(
-                    "[eval/cli] WARN: YAML not available, skipping code mode config loading")
+                print("[eval/cli] WARN: YAML not available, skipping code mode config loading")
                 # Code mode settings would go here if needed
 
             print(
-                f"[eval/cli] Runtime config loaded: latent={runtime_config.latent_mode_enabled}, halt={runtime_config.halt_head_enabled}")
+                f"[eval/cli] Runtime config loaded: latent={runtime_config.latent_mode_enabled}, halt={runtime_config.halt_head_enabled}"
+            )
         except Exception as e:
             print(f"[eval/cli] WARN: Failed to load runtime config: {e}")
             runtime_config = None
@@ -349,11 +379,13 @@ def main() -> None:
                 tool_name = call.get("name", "")
                 schema = reg.get(tool_name)
                 if schema:
-                    tools.append({
-                        "name": tool_name,
-                        "description": schema.get("description", ""),
-                        "parameters": schema.get("parameters", {}),
-                    })
+                    tools.append(
+                        {
+                            "name": tool_name,
+                            "description": schema.get("description", ""),
+                            "parameters": schema.get("parameters", {}),
+                        }
+                    )
 
         # 1) Generate with tools enabled (runner emits tool_trace without results)
         gen = runner.generate(
@@ -370,8 +402,7 @@ def main() -> None:
             name = call.get("name")
             args_obj = call.get("arguments", {})
             result = broker.call(name, args_obj)
-            tool_trace.append(
-                {"name": name, "arguments": args_obj, "result": result})
+            tool_trace.append({"name": name, "arguments": args_obj, "result": result})
 
         # 3) Score using verifier-parity scorer
         scores = score_item(
@@ -384,16 +415,22 @@ def main() -> None:
             halt_logits=gen.get("halt_logits"),
         )
 
-        results.append({
-            "sample_id": meta.get("sample_id"),
-            "prompt": prompt,
-            "model_output": gen.get("model_output", ""),
-            "tool_trace": tool_trace,
-            "scores": scores,
-            "runner_fingerprint": runner.fingerprint(),
-            "model_fingerprint": runner.model_fingerprint(),
-            "decoding": {"seed": args.seed, "temperature": args.temperature, "max_tokens": args.max_tokens},
-        })
+        results.append(
+            {
+                "sample_id": meta.get("sample_id"),
+                "prompt": prompt,
+                "model_output": gen.get("model_output", ""),
+                "tool_trace": tool_trace,
+                "scores": scores,
+                "runner_fingerprint": runner.fingerprint(),
+                "model_fingerprint": runner.model_fingerprint(),
+                "decoding": {
+                    "seed": args.seed,
+                    "temperature": args.temperature,
+                    "max_tokens": args.max_tokens,
+                },
+            }
+        )
 
     # Write per-item results
     write_jsonl(args.out, results)
@@ -401,11 +438,10 @@ def main() -> None:
     # Load speed metrics if available (from CoreML speed report)
     speed_metrics = None
     hardware = None
-    speed_report_path = os.path.join(
-        os.path.dirname(args.report), "speed_coreml.json")
+    speed_report_path = os.path.join(os.path.dirname(args.report), "speed_coreml.json")
     if os.path.exists(speed_report_path):
         try:
-            with open(speed_report_path, 'r') as f:
+            with open(speed_report_path, "r") as f:
                 speed_report = json.load(f)
                 speed_metrics = speed_report.get("speed_metrics")
                 hardware = speed_report.get("hardware")
@@ -439,8 +475,7 @@ def main() -> None:
             "determinism_mode": args.determinism_mode,
         },
         wall_time_sec=time.time() - t0,
-        gates_overrides={
-            "min_eligible_for_gates": args.min_eligible_for_gates},
+        gates_overrides={"min_eligible_for_gates": args.min_eligible_for_gates},
         speed_metrics=speed_metrics,
         hardware=hardware,
         baseline_report_path=args.baseline_report,

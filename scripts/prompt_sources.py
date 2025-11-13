@@ -6,6 +6,7 @@ Provides prompts from different categories:
 - Domain-specific (coding, math, etc.)
 - Tool traces (JSON tool calls)
 """
+
 from typing import List
 import json
 
@@ -34,7 +35,7 @@ def get_general_prompts(n: int = 100) -> List[str]:
         "How does encryption work?",
         "What is the difference between a stack and a queue?",
     ]
-    
+
     # Extend with variations
     base_prompts = prompts[:]
     while len(prompts) < n:
@@ -42,7 +43,7 @@ def get_general_prompts(n: int = 100) -> List[str]:
             if len(prompts) >= n:
                 break
             prompts.append(p)
-    
+
     return prompts[:n]
 
 
@@ -60,7 +61,7 @@ def get_domain_specific_prompts(n: int = 50) -> List[str]:
         "Write a function to find all permutations of a string.",
         "Implement a graph data structure with adjacency list.",
     ]
-    
+
     math_prompts = [
         "Solve the quadratic equation: x^2 + 5x + 6 = 0",
         "What is the derivative of f(x) = x^3 + 2x^2 - 5x + 1?",
@@ -73,13 +74,13 @@ def get_domain_specific_prompts(n: int = 50) -> List[str]:
         "Find the roots of the polynomial x^3 - 6x^2 + 11x - 6 = 0",
         "What is the Taylor series expansion of e^x?",
     ]
-    
+
     prompts = coding_prompts + math_prompts
-    
+
     # Extend if needed
     while len(prompts) < n:
-        prompts.extend(coding_prompts[:min(len(coding_prompts), n - len(prompts))])
-    
+        prompts.extend(coding_prompts[: min(len(coding_prompts), n - len(prompts))])
+
     return prompts[:n]
 
 
@@ -127,11 +128,11 @@ def get_tool_trace_prompts(n: int = 30) -> List[str]:
             "expected_tools": ["read_file", "validate"],
         },
     ]
-    
+
     # Extend if needed
     while len(prompts) < n:
-        prompts.extend(prompts[:min(len(prompts), n - len(prompts))])
-    
+        prompts.extend(prompts[: min(len(prompts), n - len(prompts))])
+
     # Return just the prompt strings
     return [p["prompt"] if isinstance(p, dict) else p for p in prompts[:n]]
 
@@ -139,7 +140,7 @@ def get_tool_trace_prompts(n: int = 30) -> List[str]:
 def load_prompts_from_file(file_path: str) -> List[str]:
     """Load prompts from a JSONL file."""
     prompts = []
-    with open(file_path, 'r', encoding='utf-8') as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         for line in f:
             if line.strip():
                 data = json.loads(line)
@@ -158,35 +159,27 @@ def get_prompt_mix(
 ) -> List[str]:
     """
     Generate a mixed set of prompts according to ratios.
-    
+
     Args:
         general_ratio: Ratio of general prompts
         domain_ratio: Ratio of domain-specific prompts
         tool_ratio: Ratio of tool trace prompts
         total: Total number of prompts
-        
+
     Returns:
         List of prompts
     """
     n_general = int(total * general_ratio)
     n_domain = int(total * domain_ratio)
     n_tool = int(total * tool_ratio)
-    
+
     prompts = []
     prompts.extend(get_general_prompts(n_general))
     prompts.extend(get_domain_specific_prompts(n_domain))
     prompts.extend(get_tool_trace_prompts(n_tool))
-    
+
     # Fill remaining with general prompts
     while len(prompts) < total:
         prompts.extend(get_general_prompts(min(100, total - len(prompts))))
-    
+
     return prompts[:total]
-
-
-
-
-
-
-
-

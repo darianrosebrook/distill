@@ -9,6 +9,7 @@ Minimal parity probe between ONNX and CoreML for the toy model.
 Usage:
   python -m coreml.probes.compare_probes --onnx onnx/toy.onnx --ml coreml/artifacts/toy/model.mlpackage --seq 128 --dmodel 64
 """
+
 import argparse
 import sys
 
@@ -19,25 +20,26 @@ def run_onnx(onnx_path, input_ids):
     try:
         import onnxruntime as ort
     except Exception:
-        print('[probes] onnxruntime not installed; skipping ONNX run (PASS)')
+        print("[probes] onnxruntime not installed; skipping ONNX run (PASS)")
         return None
 
-    sess = ort.InferenceSession(onnx_path, providers=['CPUExecutionProvider'])
+    sess = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
     mask = np.ones_like(input_ids).astype(np.int32)
-    out = sess.run([sess.get_outputs()[0].name], {
-        'input_ids': input_ids.astype(np.int32), 'attention_mask': mask
-    })[0]
+    out = sess.run(
+        [sess.get_outputs()[0].name],
+        {"input_ids": input_ids.astype(np.int32), "attention_mask": mask},
+    )[0]
     return out
 
 
 def run_coreml(mlpackage_path, input_ids):
     """Run CoreML model inference. Assumes placeholder check already done in main()."""
     import coremltools as ct
-    
+
     try:
         ml = ct.models.MLModel(mlpackage_path)
         mask = np.ones_like(input_ids).astype(np.int32)
-        out = ml.predict({'input_ids': input_ids.astype(np.int32), 'attention_mask': mask})
+        out = ml.predict({"input_ids": input_ids.astype(np.int32), "attention_mask": mask})
         key = list(out.keys())[0]
         return out[key]
     except Exception as e:
@@ -46,21 +48,23 @@ def run_coreml(mlpackage_path, input_ids):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--onnx', required=False)
-    ap.add_argument('--ml', required=False)
-    ap.add_argument('--pt', required=False, help='PyTorch probe npz file')
-    ap.add_argument('--seq', type=int, default=128)
-    ap.add_argument('--dmodel', type=int, default=64)
-    ap.add_argument('--rel_err_tol', type=float, default=0.02)
-    ap.add_argument('--mse_tol', type=float, default=1e-3)
+    ap.add_argument("--onnx", required=False)
+    ap.add_argument("--ml", required=False)
+    ap.add_argument("--pt", required=False, help="PyTorch probe npz file")
+    ap.add_argument("--seq", type=int, default=128)
+    ap.add_argument("--dmodel", type=int, default=64)
+    ap.add_argument("--rel_err_tol", type=float, default=0.02)
+    ap.add_argument("--mse_tol", type=float, default=1e-3)
     args = ap.parse_args()
 
     # Check for placeholder marker
     from pathlib import Path
-    
+
     if args.ml:
         ml_path = Path(args.ml)
-        is_placeholder = (ml_path.parent / ".placeholder").exists() or (ml_path / ".placeholder").exists()
+        is_placeholder = (ml_path.parent / ".placeholder").exists() or (
+            ml_path / ".placeholder"
+        ).exists()
         if is_placeholder:
             print("[probes] SKIP parity – placeholder model detected")
             # Write results JSON
@@ -74,7 +78,7 @@ def main():
         a = np.load(args.pt)
         b = np.load(args.ml)
         keys = sorted(set(a.files) & set(b.files))
-        
+
         if not keys:
             print("[probes] WARN: No matching keys found between PyTorch and CoreML probes")
             print(f"[probes] PyTorch keys: {list(a.files)}")
@@ -110,21 +114,25 @@ def main():
             max_abs_y = np.max(np.abs(y))
             max_abs = max(max_abs_x, max_abs_y, 1e-6)
             rel = mae / max_abs
-            
+
             # Also compute max relative error per-element (for debugging)
             denom = np.maximum(np.abs(y), 1e-6)
             rel_max_per_element = np.max(np.abs((x - y) / denom))
-            
-            print(f"{k_display:16s}  mse={mse:.3e}  mae={mae:.3e}  rel={rel:.3e}  rel_max={rel_max_per_element:.3e}")
+
+            print(
+                f"{k_display:16s}  mse={mse:.3e}  mae={mae:.3e}  rel={rel:.3e}  rel_max={rel_max_per_element:.3e}"
+            )
             if rel > worst[1]:
                 worst = (k_display, rel, mse)
-            
+
             # Use looser tolerance for toy models, stricter for production
             # For toy blocks, allow higher relative error if MSE is very small
             tol_rel = args.rel_err_tol * 10 if mse < 1e-6 else args.rel_err_tol
-            
+
             if rel > tol_rel and mse > args.mse_tol:
-                print(f"FAIL {k_display}: rel={rel:.3e} mse={mse:.3e} > tol (rel_tol={tol_rel:.3e}, mse_tol={args.mse_tol:.3e})")
+                print(
+                    f"FAIL {k_display}: rel={rel:.3e} mse={mse:.3e} > tol (rel_tol={tol_rel:.3e}, mse_tol={args.mse_tol:.3e})"
+                )
                 results_path = Path(args.ml).parent / "results.json"
                 write_results_json(str(results_path), passed=0, skipped=0, failed=1)
                 return 1
@@ -141,7 +149,9 @@ def main():
         y_coreml = run_coreml(args.ml, input_ids)
 
         if y_onnx is None:
-            print('[probes] SKIP onnx→coreml parity (onnxruntime missing); treating as PASS for smoke')
+            print(
+                "[probes] SKIP onnx→coreml parity (onnxruntime missing); treating as PASS for smoke"
+            )
             return 0
 
         # Ensure same dtype/shape
@@ -160,12 +170,12 @@ def main():
 
         # Very loose thresholds for smoke
         if np.isnan(mse) or np.isnan(rel) or rel > 0.2:
-            print('[probes] FAIL thresholds')
+            print("[probes] FAIL thresholds")
             results_path = Path(args.ml).parent / "results.json"
             write_results_json(str(results_path), passed=0, skipped=0, failed=1)
             return 2
 
-        print('[probes] PASS')
+        print("[probes] PASS")
         results_path = Path(args.ml).parent / "results.json"
         write_results_json(str(results_path), passed=1, skipped=0, failed=0)
         return 0
@@ -178,17 +188,18 @@ def write_results_json(results_path: str, passed: int, skipped: int, failed: int
     """Write machine-readable results JSON."""
     import json
     from pathlib import Path
+
     results = {
         "passed": passed,
         "skipped": skipped,
         "failed": failed,
-        "total": passed + skipped + failed
+        "total": passed + skipped + failed,
     }
     Path(results_path).parent.mkdir(parents=True, exist_ok=True)
-    with open(results_path, 'w') as f:
+    with open(results_path, "w") as f:
         json.dump(results, f, indent=2)
     return results
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

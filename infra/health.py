@@ -23,6 +23,7 @@ import torch
 
 try:
     import psutil
+
     HAS_PSUTIL = True
 except ImportError:
     HAS_PSUTIL = False
@@ -30,6 +31,7 @@ except ImportError:
 
 class HealthStatus(Enum):
     """Health check status levels."""
+
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     UNHEALTHY = "unhealthy"
@@ -38,6 +40,7 @@ class HealthStatus(Enum):
 @dataclass
 class HealthCheckResult:
     """Result of a health check."""
+
     status: HealthStatus
     message: str
     details: Dict[str, Any] = field(default_factory=dict)
@@ -47,6 +50,7 @@ class HealthCheckResult:
 @dataclass
 class SystemMetrics:
     """System resource metrics."""
+
     cpu_percent: float
     memory_percent: float
     memory_used_gb: float
@@ -110,6 +114,7 @@ class HealthChecker:
 
     def _setup_signal_handlers(self):
         """Setup signal handlers for graceful shutdown."""
+
         def signal_handler(signum, frame):
             print(f"[health] Received signal {signum}, initiating graceful shutdown...")
             self.initiate_graceful_shutdown()
@@ -144,7 +149,7 @@ class HealthChecker:
             cpu_percent = psutil.cpu_percent(interval=1.0)
             memory = psutil.virtual_memory()
             memory_percent = memory.percent
-            memory_used_gb = memory.used / (1024 ** 3)
+            memory_used_gb = memory.used / (1024**3)
         else:
             # Fallback values when psutil is not available
             cpu_percent = 50.0  # Placeholder
@@ -158,7 +163,7 @@ class HealthChecker:
             try:
                 gpu_memory = torch.cuda.get_device_properties(0).total_memory
                 gpu_memory_allocated = torch.cuda.memory_allocated(0)
-                gpu_memory_used_gb = gpu_memory_allocated / (1024 ** 3)
+                gpu_memory_used_gb = gpu_memory_allocated / (1024**3)
                 gpu_memory_percent = (gpu_memory_allocated / gpu_memory) * 100
             except Exception:
                 pass
@@ -181,13 +186,13 @@ class HealthChecker:
             return HealthCheckResult(
                 status=HealthStatus.UNHEALTHY,
                 message=f"CPU usage critically high: {metrics.cpu_percent:.1f}%",
-                details={"cpu_percent": metrics.cpu_percent}
+                details={"cpu_percent": metrics.cpu_percent},
             )
         elif metrics.cpu_percent >= self.degraded_thresholds["cpu_percent"]:
             return HealthCheckResult(
                 status=HealthStatus.DEGRADED,
                 message=f"CPU usage high: {metrics.cpu_percent:.1f}%",
-                details={"cpu_percent": metrics.cpu_percent}
+                details={"cpu_percent": metrics.cpu_percent},
             )
 
         # Check memory
@@ -195,13 +200,13 @@ class HealthChecker:
             return HealthCheckResult(
                 status=HealthStatus.UNHEALTHY,
                 message=f"Memory usage critically high: {metrics.memory_percent:.1f}%",
-                details={"memory_percent": metrics.memory_percent}
+                details={"memory_percent": metrics.memory_percent},
             )
         elif metrics.memory_percent >= self.degraded_thresholds["memory_percent"]:
             return HealthCheckResult(
                 status=HealthStatus.DEGRADED,
                 message=f"Memory usage high: {metrics.memory_percent:.1f}%",
-                details={"memory_percent": metrics.memory_percent}
+                details={"memory_percent": metrics.memory_percent},
             )
 
         # Check GPU memory
@@ -210,13 +215,13 @@ class HealthChecker:
                 return HealthCheckResult(
                     status=HealthStatus.UNHEALTHY,
                     message=f"GPU memory usage critically high: {metrics.gpu_memory_percent:.1f}%",
-                    details={"gpu_memory_percent": metrics.gpu_memory_percent}
+                    details={"gpu_memory_percent": metrics.gpu_memory_percent},
                 )
             elif metrics.gpu_memory_percent >= self.degraded_thresholds["gpu_memory_percent"]:
                 return HealthCheckResult(
                     status=HealthStatus.DEGRADED,
                     message=f"GPU memory usage high: {metrics.gpu_memory_percent:.1f}%",
-                    details={"gpu_memory_percent": metrics.gpu_memory_percent}
+                    details={"gpu_memory_percent": metrics.gpu_memory_percent},
                 )
 
         return HealthCheckResult(
@@ -226,16 +231,13 @@ class HealthChecker:
                 "cpu_percent": metrics.cpu_percent,
                 "memory_percent": metrics.memory_percent,
                 "gpu_memory_percent": metrics.gpu_memory_percent,
-            }
+            },
         )
 
     def check_model_health(self) -> HealthCheckResult:
         """Check model-specific health (if model provided)."""
         if not self.model:
-            return HealthCheckResult(
-                status=HealthStatus.HEALTHY,
-                message="No model to check"
-            )
+            return HealthCheckResult(status=HealthStatus.HEALTHY, message="No model to check")
 
         try:
             # Basic model check: ensure it can do a forward pass
@@ -243,7 +245,7 @@ class HealthChecker:
                 # Create a small test input
                 test_input = torch.randint(0, 1000, (1, 10))
 
-                if hasattr(self.model, 'eval'):
+                if hasattr(self.model, "eval"):
                     self.model.eval()
 
                 start_time = time.time()
@@ -255,21 +257,23 @@ class HealthChecker:
                     return HealthCheckResult(
                         status=HealthStatus.UNHEALTHY,
                         message="Model producing NaN or inf values",
-                        details={"has_nan": torch.isnan(output).any().item(),
-                               "has_inf": torch.isinf(output).any().item()}
+                        details={
+                            "has_nan": torch.isnan(output).any().item(),
+                            "has_inf": torch.isinf(output).any().item(),
+                        },
                     )
 
                 return HealthCheckResult(
                     status=HealthStatus.HEALTHY,
                     message="Model responding normally",
-                    details={"inference_time_ms": inference_time * 1000}
+                    details={"inference_time_ms": inference_time * 1000},
                 )
 
         except Exception as e:
             return HealthCheckResult(
                 status=HealthStatus.UNHEALTHY,
                 message=f"Model health check failed: {e}",
-                details={"error": str(e)}
+                details={"error": str(e)},
             )
 
     def run_comprehensive_health_check(self) -> Dict[str, HealthCheckResult]:
@@ -297,7 +301,7 @@ class HealthChecker:
         results["overall"] = HealthCheckResult(
             status=overall_status,
             message=overall_message,
-            details={"component_count": len(results)}
+            details={"component_count": len(results)},
         )
 
         # Store in history
@@ -320,7 +324,7 @@ class HealthChecker:
             "message": self.last_health_check["overall"].message,
             "timestamp": self.last_health_check["overall"].timestamp,
             "uptime_seconds": time.time() - self.start_time,
-            "components": {}
+            "components": {},
         }
 
         for component_name, result in self.last_health_check.items():
@@ -328,13 +332,14 @@ class HealthChecker:
                 health_data["components"][component_name] = {
                     "status": result.status.value,
                     "message": result.message,
-                    "details": result.details
+                    "details": result.details,
                 }
 
         return health_data
 
     def start_monitoring_thread(self):
         """Start background monitoring thread."""
+
         def monitoring_loop():
             while not self.is_shutting_down:
                 try:
@@ -362,15 +367,15 @@ def create_production_health_checker(model=None, **kwargs) -> HealthChecker:
     """
     # Production-optimized thresholds
     degraded_thresholds = {
-        "cpu_percent": 70.0,      # More conservative CPU threshold
-        "memory_percent": 80.0,   # More conservative memory threshold
-        "gpu_memory_percent": 85.0, # More conservative GPU threshold
+        "cpu_percent": 70.0,  # More conservative CPU threshold
+        "memory_percent": 80.0,  # More conservative memory threshold
+        "gpu_memory_percent": 85.0,  # More conservative GPU threshold
     }
 
     unhealthy_thresholds = {
-        "cpu_percent": 90.0,      # Critical CPU threshold
-        "memory_percent": 90.0,   # Critical memory threshold
-        "gpu_memory_percent": 95.0, # Critical GPU threshold
+        "cpu_percent": 90.0,  # Critical CPU threshold
+        "memory_percent": 90.0,  # Critical memory threshold
+        "gpu_memory_percent": 95.0,  # Critical GPU threshold
     }
 
     return HealthChecker(
@@ -379,7 +384,7 @@ def create_production_health_checker(model=None, **kwargs) -> HealthChecker:
         health_check_interval=30,  # Check every 30 seconds
         degraded_thresholds=degraded_thresholds,
         unhealthy_thresholds=unhealthy_thresholds,
-        **kwargs
+        **kwargs,
     )
 
 

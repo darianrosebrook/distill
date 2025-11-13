@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 class ModelRole(str, Enum):
     """Model roles in the CAWS arbiter stack."""
+
     WORKER = "worker"  # Primary generator (~9B)
     JUDGE = "judge"  # Constitutional arbiter (3-4B or 7B)
     DRAFTER = "drafter"  # Speculative decoding (~4B, optional)
@@ -17,6 +18,7 @@ class ModelRole(str, Enum):
 @dataclass
 class RoleConfig:
     """Configuration for a model role."""
+
     role: ModelRole
     target_size: str  # e.g., "9B", "4B", "7B"
     seq_lengths: list[int]
@@ -33,7 +35,7 @@ ROLE_CONFIGS: Dict[ModelRole, RoleConfig] = {
         seq_lengths=[4096, 8192, 16384],
         precision_path="int8_weights_fp16_acts",
         primary_use="code_edits_tool_use_long_ctx",
-        export_shapes=[4096, 8192, 16384]
+        export_shapes=[4096, 8192, 16384],
     ),
     ModelRole.JUDGE: RoleConfig(
         role=ModelRole.JUDGE,
@@ -41,7 +43,7 @@ ROLE_CONFIGS: Dict[ModelRole, RoleConfig] = {
         seq_lengths=[512, 1024, 2048],
         precision_path="int8_weights_fp16_acts",
         primary_use="adjudication_clause_mapping_claim_verification",
-        export_shapes=[512, 1024, 2048]
+        export_shapes=[512, 1024, 2048],
     ),
     ModelRole.DRAFTER: RoleConfig(
         role=ModelRole.DRAFTER,
@@ -49,7 +51,7 @@ ROLE_CONFIGS: Dict[ModelRole, RoleConfig] = {
         seq_lengths=[2048, 4096],
         precision_path="int8_weights_fp16_acts",
         primary_use="speculative_decoding_fast_tokens",
-        export_shapes=[2048, 4096]
+        export_shapes=[2048, 4096],
     ),
 }
 
@@ -57,4 +59,3 @@ ROLE_CONFIGS: Dict[ModelRole, RoleConfig] = {
 def get_role_config(role: ModelRole) -> Optional[RoleConfig]:
     """Get configuration for a model role."""
     return ROLE_CONFIGS.get(role)
-

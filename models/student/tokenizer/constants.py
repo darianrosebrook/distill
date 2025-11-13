@@ -20,4 +20,3 @@ EOT_TOKEN_ID = 4  # End of latent span
 # Token strings
 BOT_TOKEN = "<bot>"
 EOT_TOKEN = "<eot>"
-

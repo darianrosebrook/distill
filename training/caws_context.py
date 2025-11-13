@@ -22,6 +22,7 @@ from dataclasses import dataclass
 @dataclass
 class CAWSContext:
     """Structured CAWS context for prompt augmentation"""
+
     spec_id: str
     title: str
     risk_tier: int
@@ -84,14 +85,14 @@ def _load_spec_context(spec_path: Path, project_root: Path) -> CAWSContext:
     Returns:
         CAWSContext object
     """
-    with open(spec_path, 'r') as f:
+    with open(spec_path, "r") as f:
         spec = yaml.safe_load(f)
 
     # Load policy for budget derivation
     policy_path = project_root / ".caws" / "policy.yaml"
     policy = {}
     if policy_path.exists():
-        with open(policy_path, 'r') as f:
+        with open(policy_path, "r") as f:
             policy = yaml.safe_load(f)
 
     # Derive budget from policy
@@ -155,6 +156,7 @@ def format_caws_compact(working_spec: Dict[str, Any]) -> str:
     """
     # Import here to avoid circular dependency
     from training.prompt_templates import format_caws_compact as _format_compact
+
     return _format_compact(working_spec)
 
 
@@ -210,19 +212,23 @@ def format_caws_context_for_prompt(context: Optional[CAWSContext], compact: bool
     else:
         lines.append("- Out of Scope: (not specified)")
 
-    lines.extend([
-        "",
-        "### Quality Gates",
-        f"- Coverage Threshold: {context.quality.get('coverage_threshold')}%",
-        f"- Mutation Threshold: {context.quality.get('mutation_threshold')}%",
-    ])
+    lines.extend(
+        [
+            "",
+            "### Quality Gates",
+            f"- Coverage Threshold: {context.quality.get('coverage_threshold')}%",
+            f"- Mutation Threshold: {context.quality.get('mutation_threshold')}%",
+        ]
+    )
 
     # Acceptance Criteria
     if context.acceptance_summary:
-        lines.extend([
-            "",
-            "### Acceptance Criteria",
-        ])
+        lines.extend(
+            [
+                "",
+                "### Acceptance Criteria",
+            ]
+        )
         for ac in context.acceptance_summary[:5]:
             lines.append(f"- {ac}")
         if len(context.acceptance_summary) > 5:
@@ -230,10 +236,12 @@ def format_caws_context_for_prompt(context: Optional[CAWSContext], compact: bool
 
     # Invariants
     if context.invariants:
-        lines.extend([
-            "",
-            "### Invariants",
-        ])
+        lines.extend(
+            [
+                "",
+                "### Invariants",
+            ]
+        )
         for inv in context.invariants[:5]:
             lines.append(f"- {inv}")
         if len(context.invariants) > 5:
@@ -287,7 +295,7 @@ def _load_policy_cached(policy_path: str) -> Dict[str, Any]:
     if not os.path.exists(policy_path):
         return {}
 
-    with open(policy_path, 'r') as f:
+    with open(policy_path, "r") as f:
         return yaml.safe_load(f) or {}
 
 
@@ -335,7 +343,7 @@ def derive_budget(
     for waiver_id in waiver_ids:
         waiver_path = project_path / ".caws" / "waivers" / f"{waiver_id}.yaml"
         if waiver_path.exists():
-            with open(waiver_path, 'r') as f:
+            with open(waiver_path, "r") as f:
                 waiver = yaml.safe_load(f)
 
             if waiver.get("status") == "active":

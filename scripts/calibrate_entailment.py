@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 
 import argparse
@@ -7,14 +6,17 @@ import math
 import sys
 import statistics
 
+
 def _tokenize(s):
     return [t for t in s.lower().split() if t.strip()]
 
+
 def _overlap(a, b):
     A, B = set(_tokenize(a)), set(_tokenize(b))
-    if not A: 
+    if not A:
         return 0.0
     return len(A & B) / len(A)
+
 
 def raw_overlap_logits(evidence, claim):
     """
@@ -32,6 +34,7 @@ def raw_overlap_logits(evidence, claim):
     insufficient = 0.6 if 0.05 <= ov <= 0.35 else 0.2
     return {"support": support, "contradict": contradict, "insufficient": insufficient}
 
+
 def softmax(logits):
     xs = list(logits.values())
     m = max(xs)
@@ -40,24 +43,27 @@ def softmax(logits):
     out = {}
     i = 0
     for k in logits.keys():
-        out[k] = ex[i]/Z
+        out[k] = ex[i] / Z
         i += 1
     return out
+
 
 def apply_calibration(logits, T, bias, priors):
     # Temperature scaling + additive bias + prior smoothing (mixture)
     scaled = {k: (logits[k] / T) + bias.get(k, 0.0) for k in logits.keys()}
     probs = softmax(scaled)
     # prior smoothing: average with empirical priors
-    smoothed = {k: 0.5*probs[k] + 0.5*priors[k] for k in probs.keys()}
+    smoothed = {k: 0.5 * probs[k] + 0.5 * priors[k] for k in probs.keys()}
     # renormalize
     Z = sum(smoothed.values())
-    return {k: smoothed[k]/Z for k in smoothed.keys()}
+    return {k: smoothed[k] / Z for k in smoothed.keys()}
+
 
 def nll(probs, gold_label, eps=1e-9):
     p = probs.get(gold_label, 0.0)
     p = max(min(p, 1.0 - eps), eps)
     return -math.log(p)
+
 
 def load_ndjson(path):
     rows = []
@@ -67,12 +73,14 @@ def load_ndjson(path):
                 rows.append(json.loads(line))
     return rows
 
+
 def empirical_priors(rows):
-    counts = {"support":0, "contradict":0, "insufficient":0}
+    counts = {"support": 0, "contradict": 0, "insufficient": 0}
     for r in rows:
         counts[r["label"]] += 1
     total = sum(counts.values())
-    return {k: counts[k]/total for k in counts.keys()}
+    return {k: counts[k] / total for k in counts.keys()}
+
 
 def grid_search(rows, T_grid, bias_vals):
     best = None
@@ -89,15 +97,18 @@ def grid_search(rows, T_grid, bias_vals):
                         logits = raw_overlap_logits(r["evidence"], r["claim"])
                         probs = apply_calibration(logits, T, bias, priors)
                         losses.append(nll(probs, r["label"]))
-                    mean_nll = sum(losses)/len(losses)
+                    mean_nll = sum(losses) / len(losses)
                     if (best is None) or (mean_nll < best["mean_nll"]):
                         best = {
-                            "T": T, "bias": bias, "priors": priors,
+                            "T": T,
+                            "bias": bias,
+                            "priors": priors,
                             "mean_nll": mean_nll,
                             "p50_nll": statistics.median(losses),
-                            "p95_nll": sorted(losses)[int(0.95*len(losses))-1]
+                            "p95_nll": sorted(losses)[int(0.95 * len(losses)) - 1],
                         }
     return best
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -111,26 +122,31 @@ def main():
         sys.exit(2)
 
     # Define search grids (small for determinism and speed)
-    T_grid = [round(x,2) for x in [0.6, 0.8, 1.0, 1.2, 1.5, 2.0]]
+    T_grid = [round(x, 2) for x in [0.6, 0.8, 1.0, 1.2, 1.5, 2.0]]
     bias_vals = [-0.5, -0.25, 0.0, 0.25, 0.5]
 
     best = grid_search(rows, T_grid, bias_vals)
     with open(args.out, "w") as f:
-        json.dump({
-            "report": {
-                "rows": len(rows),
-                "mean_nll": best["mean_nll"],
-                "p50_nll": best["p50_nll"],
-                "p95_nll": best["p95_nll"]
+        json.dump(
+            {
+                "report": {
+                    "rows": len(rows),
+                    "mean_nll": best["mean_nll"],
+                    "p50_nll": best["p50_nll"],
+                    "p95_nll": best["p95_nll"],
+                },
+                "calibration": {
+                    "temperature": best["T"],
+                    "bias": best["bias"],
+                    "priors": best["priors"],
+                    "labels": ["support", "contradict", "insufficient"],
+                },
             },
-            "calibration": {
-                "temperature": best["T"],
-                "bias": best["bias"],
-                "priors": best["priors"],
-                "labels": ["support", "contradict", "insufficient"]
-            }
-        }, f, indent=2)
+            f,
+            indent=2,
+        )
     print(f"Wrote calibration to {args.out} (T={best['T']}, bias={best['bias']})")
+
 
 if __name__ == "__main__":
     main()

@@ -3,6 +3,7 @@ Configuration validation and schema enforcement.
 
 Provides JSON schema validation for training configurations.
 """
+
 import json
 import jsonschema
 from pathlib import Path
@@ -27,7 +28,7 @@ TRAINING_CONFIG_SCHEMA = {
                 "rope_scaling": {"type": "string", "enum": ["dynamic", "linear", "yarn"]},
                 "dropout": {"type": "number", "minimum": 0, "maximum": 1},
             },
-            "required": ["d_model", "n_layers", "n_heads", "vocab_size"]
+            "required": ["d_model", "n_layers", "n_heads", "vocab_size"],
         },
         "training": {
             "type": "object",
@@ -41,16 +42,21 @@ TRAINING_CONFIG_SCHEMA = {
                 "save_every": {"type": "integer", "minimum": 1},
                 "val_every": {"type": "integer", "minimum": 1},
             },
-            "required": ["steps", "batch_size"]
+            "required": ["steps", "batch_size"],
         },
         "optimizer": {
             "type": "object",
             "properties": {
                 "type": {"type": "string", "enum": ["adam", "adamw", "sgd"]},
                 "lr": {"type": "number", "minimum": 0},
-                "betas": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+                "betas": {
+                    "type": "array",
+                    "items": {"type": "number"},
+                    "minItems": 2,
+                    "maxItems": 2,
+                },
                 "weight_decay": {"type": "number", "minimum": 0},
-            }
+            },
         },
         "distillation": {
             "type": "object",
@@ -59,7 +65,7 @@ TRAINING_CONFIG_SCHEMA = {
                 "temperature": {"type": "number", "minimum": 0},
                 "kl_weight": {"type": "number", "minimum": 0},
                 "ce_weight": {"type": "number", "minimum": 0},
-            }
+            },
         },
         "latent": {
             "type": "object",
@@ -68,7 +74,7 @@ TRAINING_CONFIG_SCHEMA = {
                 "m": {"type": "integer", "minimum": 1},
                 "c": {"type": "integer", "minimum": 1},
                 "p": {"type": "number", "minimum": 0, "maximum": 1},
-            }
+            },
         },
         "quant": {
             "type": "object",
@@ -76,10 +82,10 @@ TRAINING_CONFIG_SCHEMA = {
                 "enabled": {"type": "boolean"},
                 "start_fraction": {"type": "number", "minimum": 0, "maximum": 1},
                 "lr_multiplier": {"type": "number", "minimum": 0},
-            }
+            },
         },
     },
-    "required": ["model", "training"]
+    "required": ["model", "training"],
 }
 
 
@@ -115,8 +121,8 @@ def validate_config_file(config_path: Path) -> List[str]:
 
     try:
         # Load configuration
-        with open(config_path, 'r') as f:
-            if config_path.suffix.lower() in ['.yaml', '.yml']:
+        with open(config_path, "r") as f:
+            if config_path.suffix.lower() in [".yaml", ".yml"]:
                 config = yaml.safe_load(f)
             else:
                 config = json.load(f)
@@ -203,8 +209,8 @@ def save_config_template(output_path: Path) -> None:
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(output_path, 'w') as f:
-        if output_path.suffix.lower() in ['.yaml', '.yml']:
+    with open(output_path, "w") as f:
+        if output_path.suffix.lower() in [".yaml", ".yml"]:
             yaml.dump(config, f, default_flow_style=False, sort_keys=False)
         else:
             json.dump(config, f, indent=2)
@@ -235,12 +241,11 @@ def merge_configs(config_files: List[str]) -> Dict[str, Any]:
         # Validate individual config
         errors = validate_config_file(config_path)
         if errors:
-            raise ValueError(
-                f"Invalid configuration in {config_path}: {'; '.join(errors)}")
+            raise ValueError(f"Invalid configuration in {config_path}: {'; '.join(errors)}")
 
         # Load and merge
-        with open(config_path, 'r') as f:
-            if config_path.suffix.lower() in ['.yaml', '.yml']:
+        with open(config_path, "r") as f:
+            if config_path.suffix.lower() in [".yaml", ".yml"]:
                 config = yaml.safe_load(f)
             else:
                 config = json.load(f)
@@ -277,8 +282,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Configuration validation")
     parser.add_argument("config_file", help="Configuration file to validate")
-    parser.add_argument("--template", action="store_true",
-                        help="Generate template config")
+    parser.add_argument("--template", action="store_true", help="Generate template config")
 
     args = parser.parse_args()
 

@@ -1,2 +1,1 @@
 """Report summarization module."""
-

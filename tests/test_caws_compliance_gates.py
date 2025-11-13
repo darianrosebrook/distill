@@ -9,13 +9,11 @@ Tests that CAWS gates properly catch violations:
 - Integration F1 gate
 @author: @darianrosebrook
 """
+
 import pytest
-import json
-from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 from eval.scoring.scorer import _evaluate_caws_compliance
-from eval.reports.summarize import summarize_results
 
 
 def create_test_result(
@@ -69,8 +67,7 @@ def test_control_integration_gate():
         ),
         create_test_result(
             model_output="Control with integration span: <tool_result>data</tool_result>",
-            metadata={"is_control": True,
-                      "has_integration": True},  # Violation
+            metadata={"is_control": True, "has_integration": True},  # Violation
         ),
     ]
 
@@ -85,13 +82,12 @@ def test_json_validity_gate():
     """Test that JSON validity gate catches invalid JSON in tool calls."""
     results = [
         create_test_result(
-            model_output="Valid tool call: {\"name\": \"web.search\", \"arguments\": {\"q\": \"test\"}}",
+            model_output='Valid tool call: {"name": "web.search", "arguments": {"q": "test"}}',
             tool_trace=[{"name": "web.search", "arguments": {"q": "test"}}],
         ),
         create_test_result(
-            model_output="Invalid JSON: {\"name\": \"web.search\", \"arguments\": {invalid}}",
-            tool_trace=[{"name": "web.search",
-                         "arguments": "invalid"}],  # Invalid
+            model_output='Invalid JSON: {"name": "web.search", "arguments": {invalid}}',
+            tool_trace=[{"name": "web.search", "arguments": "invalid"}],  # Invalid
         ),
     ]
 
@@ -132,6 +128,7 @@ def test_broker_fixtures_hit_rate():
     try:
         from eval.scoring.scorer import _evaluate_caws_compliance
         from eval.tool_broker.fixtures import FixtureManager
+
         print("✅ Successfully imported CAWS scorer and fixture manager")
         # Basic test that import works
         assert _evaluate_caws_compliance is not None
@@ -172,8 +169,16 @@ def test_gate_thresholds_documented():
         "privacy_ok_rate": {"threshold": 1.0, "policy": "hard_fail"},
         "controls_with_integration": {"threshold": 0, "policy": "hard_fail"},
         "json_args_valid_rate": {"threshold": 0.98, "policy": "hard_fail"},
-        "integration_f1_macro_lax": {"threshold": 0.90, "policy": "count_based_misses", "misses_allowed_pct": 0.05},
-        "multi_call_parity_rate": {"threshold": 0.95, "policy": "count_based_misses", "misses_allowed_pct": 0.05},
+        "integration_f1_macro_lax": {
+            "threshold": 0.90,
+            "policy": "count_based_misses",
+            "misses_allowed_pct": 0.05,
+        },
+        "multi_call_parity_rate": {
+            "threshold": 0.95,
+            "policy": "count_based_misses",
+            "misses_allowed_pct": 0.05,
+        },
     }
 
     # Verify all gates have thresholds
@@ -182,8 +187,7 @@ def test_gate_thresholds_documented():
         assert "policy" in gate_config, f"Gate {gate_name} missing policy"
 
     # Verify hard_fail gates have strict thresholds
-    hard_fail_gates = [name for name,
-                       cfg in gates.items() if cfg["policy"] == "hard_fail"]
+    hard_fail_gates = [name for name, cfg in gates.items() if cfg["policy"] == "hard_fail"]
     for gate_name in hard_fail_gates:
         gate_config = gates[gate_name]
         if gate_name == "privacy_ok_rate":

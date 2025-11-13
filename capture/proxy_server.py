@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 import json
 import uuid
@@ -14,8 +13,10 @@ import uvicorn
 app = FastAPI()
 CONFIG = {"upstream": "", "out_dir": "capture/raw"}
 
+
 def now() -> float:
     return time.time()
+
 
 async def stream_upstream(req: Request, path: str) -> StreamingResponse:
     # Construct upstream URL: base + path + query string
@@ -23,7 +24,7 @@ async def stream_upstream(req: Request, path: str) -> StreamingResponse:
     upstream_path = f"/{path}" if path else ""
     query_string = str(req.url.query)
     url = f"{upstream_base}{upstream_path}" + (f"?{query_string}" if query_string else "")
-    
+
     method = req.method
     headers = dict(req.headers)
     # Remove host header to avoid conflicts
@@ -37,6 +38,7 @@ async def stream_upstream(req: Request, path: str) -> StreamingResponse:
 
     async with httpx.AsyncClient(timeout=None) as client:
         upstream = await client.stream(method, url, headers=headers, content=body)
+
         async def agen() -> AsyncIterator[bytes]:
             async for chunk in upstream.aiter_raw():
                 if chunk:
@@ -44,24 +46,32 @@ async def stream_upstream(req: Request, path: str) -> StreamingResponse:
                     yield chunk
                     # also write to disk line-by-line for later normalization
                     with open(raw_path, "ab") as f:
-                        f.write(json.dumps({"raw": chunk.decode("utf-8", errors="ignore")}).encode("utf-8"))
+                        f.write(
+                            json.dumps({"raw": chunk.decode("utf-8", errors="ignore")}).encode(
+                                "utf-8"
+                            )
+                        )
                         f.write(b"\n")
 
-        resp = StreamingResponse(agen(), status_code=upstream.status_code, headers=dict(upstream.headers))
+        resp = StreamingResponse(
+            agen(), status_code=upstream.status_code, headers=dict(upstream.headers)
+        )
 
     meta = {
         "trace_id": trace_id,
         "timestamps": {"start": start, "end": now()},
-        "request": {"method": method, "headers": headers, "body_len": len(body)}
+        "request": {"method": method, "headers": headers, "body_len": len(body)},
     }
     with open(raw_path + ".meta.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
 
     return resp
 
-@app.api_route("/{path:path}", methods=["GET","POST","PUT","PATCH","DELETE"])
+
+@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def handle(req: Request, path: str):
     return await stream_upstream(req, path)
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -72,6 +82,7 @@ def main():
     args = ap.parse_args()
     CONFIG.update({"upstream": args.upstream, "out_dir": args.out_dir})
     uvicorn.run(app, host=args.bind, port=args.port)
+
 
 if __name__ == "__main__":
     main()

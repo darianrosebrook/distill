@@ -6,6 +6,7 @@ Implements:
 - Tool selection loss (correct tool name)
 - Argument validation loss (correct argument structure)
 """
+
 import json
 import re
 from typing import Dict, Optional, List
@@ -18,8 +19,8 @@ def validate_json(text: str) -> bool:
     """Check if text contains valid JSON."""
     # Try to find JSON in text
     json_patterns = [
-        r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}',  # Simple JSON object
-        r'\[[^\[\]]*(?:\[[^\[\]]*\][^\[\]]*)*\]',  # JSON array
+        r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}",  # Simple JSON object
+        r"\[[^\[\]]*(?:\[[^\[\]]*\][^\[\]]*)*\]",  # JSON array
     ]
 
     for pattern in json_patterns:
@@ -49,13 +50,13 @@ def extract_tool_call(text: str, tool_names: List[str]) -> Optional[Dict]:
         Dict with 'name' and 'arguments' if found, None otherwise
     """
     # Look for JSON tool call
-    json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+    json_pattern = r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}"
     matches = re.findall(json_pattern, text)
 
     for match in matches:
         try:
             obj = json.loads(match)
-            if isinstance(obj, dict) and 'name' in obj:
+            if isinstance(obj, dict) and "name" in obj:
                 return obj
         except json.JSONDecodeError:
             continue
@@ -63,7 +64,7 @@ def extract_tool_call(text: str, tool_names: List[str]) -> Optional[Dict]:
     # Try parsing entire text
     try:
         obj = json.loads(text.strip())
-        if isinstance(obj, dict) and 'name' in obj:
+        if isinstance(obj, dict) and "name" in obj:
             return obj
     except json.JSONDecodeError:
         pass
@@ -72,9 +73,7 @@ def extract_tool_call(text: str, tool_names: List[str]) -> Optional[Dict]:
 
 
 def json_validity_loss(
-    logits: torch.Tensor,
-    generated_texts: List[str],
-    ignore_index: int = -100
+    logits: torch.Tensor, generated_texts: List[str], ignore_index: int = -100
 ) -> torch.Tensor:
     """
     Compute loss that penalizes invalid JSON generation.
@@ -94,8 +93,7 @@ def json_validity_loss(
         validity_scores.append(1.0 if is_valid else 0.0)
 
     # Convert to tensor
-    validity_tensor = torch.tensor(
-        validity_scores, device=logits.device, dtype=logits.dtype)
+    validity_tensor = torch.tensor(validity_scores, device=logits.device, dtype=logits.dtype)
 
     # Loss: 1 - validity (penalize invalid JSON)
     loss = (1.0 - validity_tensor).mean()
@@ -132,13 +130,11 @@ def tool_selection_loss(
         tool_call = extract_tool_call(text, tool_names)
 
         if tool_call and target_tool:
-            predicted_tool = tool_call.get('name', '')
+            predicted_tool = tool_call.get("name", "")
 
             # Encode tool names
-            target_tokens = tokenizer.encode(
-                target_tool, add_special_tokens=False)
-            pred_tokens = tokenizer.encode(
-                predicted_tool, add_special_tokens=False)
+            target_tokens = tokenizer.encode(target_tool, add_special_tokens=False)
+            pred_tokens = tokenizer.encode(predicted_tool, add_special_tokens=False)
 
             # Find where tool name appears in sequence
             # Extract tool name from generated text and find its position
@@ -157,7 +153,7 @@ def tool_selection_loss(
                 pos = None
                 for j in range(seq_len - len(target_tokens) + 1):
                     # Check if target tokens match at this position
-                    if pred_token_ids[j:j+len(target_tokens)] == target_tokens:
+                    if pred_token_ids[j : j + len(target_tokens)] == target_tokens:
                         pos = j
                         break
 
@@ -167,21 +163,15 @@ def tool_selection_loss(
 
                 # Extract logits for this position and ensure proper shape
                 # Metal/MPS requires contiguous tensors and proper shapes
-                logits_slice = logits[i, pos, :].unsqueeze(
-                    0)  # [1, vocab_size]
-                targets = torch.tensor(
-                    [target_token_id], device=logits.device, dtype=torch.long)
+                logits_slice = logits[i, pos, :].unsqueeze(0)  # [1, vocab_size]
+                targets = torch.tensor([target_token_id], device=logits.device, dtype=torch.long)
 
                 # Ensure logits are contiguous for Metal compatibility
                 if not logits_slice.is_contiguous():
                     logits_slice = logits_slice.contiguous()
 
                 # Cross-entropy loss
-                ce_loss = F.cross_entropy(
-                    logits_slice,
-                    targets,
-                    ignore_index=ignore_index
-                )
+                ce_loss = F.cross_entropy(logits_slice, targets, ignore_index=ignore_index)
                 losses.append(ce_loss)
 
     if losses:
@@ -250,24 +240,19 @@ def tool_selection_loss_from_ids(
         tool_name_pos = None
         for j in range(seq_len - len(target_tokens) + 1):
             # Check if target tokens match at this position
-            if pred_token_ids[j:j+len(target_tokens)] == target_tokens:
+            if pred_token_ids[j : j + len(target_tokens)] == target_tokens:
                 tool_name_pos = j
                 break
 
         # If tool name found, compute loss at that position
         if tool_name_pos is not None:
             logits_slice = logits[i, tool_name_pos, :].unsqueeze(0)
-            targets = torch.tensor(
-                [target_token_id], device=device, dtype=torch.long)
+            targets = torch.tensor([target_token_id], device=device, dtype=torch.long)
 
             if not logits_slice.is_contiguous():
                 logits_slice = logits_slice.contiguous()
 
-            ce_loss = F.cross_entropy(
-                logits_slice,
-                targets,
-                ignore_index=ignore_index
-            )
+            ce_loss = F.cross_entropy(logits_slice, targets, ignore_index=ignore_index)
             losses.append(ce_loss)
             continue
 
@@ -278,19 +263,14 @@ def tool_selection_loss_from_ids(
             best_loss = None
 
             for pos in range(start_pos, min(start_pos + 20, seq_len)):
-                logits_slice = logits[i, pos, :].unsqueeze(
-                    0)  # [1, vocab_size]
-                targets = torch.tensor(
-                    [target_token_id], device=device, dtype=torch.long)
+                logits_slice = logits[i, pos, :].unsqueeze(0)  # [1, vocab_size]
+                targets = torch.tensor([target_token_id], device=device, dtype=torch.long)
 
                 if not logits_slice.is_contiguous():
                     logits_slice = logits_slice.contiguous()
 
                 ce_loss = F.cross_entropy(
-                    logits_slice,
-                    targets,
-                    ignore_index=ignore_index,
-                    reduction='none'
+                    logits_slice, targets, ignore_index=ignore_index, reduction="none"
                 )
 
                 if best_loss is None or ce_loss.item() < best_loss.item():
@@ -302,17 +282,12 @@ def tool_selection_loss_from_ids(
             # For short sequences, use middle position
             pos = seq_len // 2
             logits_slice = logits[i, pos, :].unsqueeze(0)
-            targets = torch.tensor(
-                [target_token_id], device=device, dtype=torch.long)
+            targets = torch.tensor([target_token_id], device=device, dtype=torch.long)
 
             if not logits_slice.is_contiguous():
                 logits_slice = logits_slice.contiguous()
 
-            ce_loss = F.cross_entropy(
-                logits_slice,
-                targets,
-                ignore_index=ignore_index
-            )
+            ce_loss = F.cross_entropy(logits_slice, targets, ignore_index=ignore_index)
             losses.append(ce_loss)
 
     if losses:
@@ -365,8 +340,7 @@ def json_validity_loss_from_ids(
 
         # Decode JSON tokens to text
         try:
-            json_text = tokenizer.decode(
-                valid_json_tokens.tolist(), skip_special_tokens=True)
+            json_text = tokenizer.decode(valid_json_tokens.tolist(), skip_special_tokens=True)
             # Validate JSON structure
             is_valid = validate_json(json_text)
             validity_scores.append(1.0 if is_valid else 0.0)
@@ -378,8 +352,7 @@ def json_validity_loss_from_ids(
         return torch.tensor(0.0, device=device, requires_grad=True)
 
     # Convert to tensor
-    validity_tensor = torch.tensor(
-        validity_scores, device=device, dtype=torch.float32)
+    validity_tensor = torch.tensor(validity_scores, device=device, dtype=torch.float32)
 
     # Loss: 1 - validity (penalize invalid JSON)
     loss = (1.0 - validity_tensor).mean()
@@ -421,17 +394,14 @@ def process_supervision_loss(
         Dictionary with individual losses and total
     """
     losses = {}
-    total_loss = torch.tensor(
-        0.0, device=logits.device, dtype=logits.dtype, requires_grad=True)
+    total_loss = torch.tensor(0.0, device=logits.device, dtype=logits.dtype, requires_grad=True)
 
     # JSON validity loss - prefer token ID-based if available
     if json_validity_weight > 0:
         if gold_json_text_ids is not None and mask_valid_json_tokens is not None and tokenizer:
             # Use efficient token ID-based loss
             json_loss = json_validity_loss_from_ids(
-                gold_json_text_ids,
-                mask_valid_json_tokens,
-                tokenizer
+                gold_json_text_ids, mask_valid_json_tokens, tokenizer
             )
         else:
             # Fall back to text-based extraction (backward compatibility)
@@ -444,10 +414,7 @@ def process_supervision_loss(
         if tool_name_ids is not None and tool_name_mask is not None:
             # Use efficient token ID-based loss
             tool_loss = tool_selection_loss_from_ids(
-                logits,
-                tool_name_ids,
-                tool_name_mask,
-                tokenizer
+                logits, tool_name_ids, tool_name_mask, tokenizer
             )
         elif target_tool_names and tool_names:
             # Fall back to text-based extraction (backward compatibility)
@@ -455,8 +422,7 @@ def process_supervision_loss(
                 logits, generated_texts, target_tool_names, tool_names, tokenizer
             )
         else:
-            tool_loss = torch.tensor(
-                0.0, device=logits.device, requires_grad=True)
+            tool_loss = torch.tensor(0.0, device=logits.device, requires_grad=True)
 
         losses["tool_selection"] = tool_loss
         total_loss = total_loss + tool_select_weight * tool_loss

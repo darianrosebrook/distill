@@ -268,9 +268,9 @@ Small deterministic slice enforcing fixture coverage and CAWS gates before merge
 ### Toy Test Suite
 
 <p align="center">
-  <img src="8-ball.png" alt="Magic 8 Ball" width="100" height="100">
+  <img src="8-ball.png" alt="8-ball" width="100" height="100">
   <br>
-  <em>🎱 Our toy models include a hyper-optimized Magic 8 Ball for mystical testing! 🎱</em>
+  <em>🎱 Our toy models include a hyper-optimized 8-ball for mystical testing! 🎱</em>
 </p>
 
 **Comprehensive lightweight testing without large language models or expensive compute** - validates the complete distillation pipeline using deterministic, optimized test doubles. Enables fast iteration during development while ensuring production-ready integration.
@@ -287,10 +287,10 @@ Small deterministic slice enforcing fixture coverage and CAWS gates before merge
 
 Our toy models deliver **production-grade inference speeds**:
 
-| Model               | TTFT       | TPS                  | Parameters | Training Data | Training Cost | Inference Cost (1M queries) |
-| ------------------- | ---------- | -------------------- | ---------- | ------------- | ------------- | --------------------------- |
-| **🎱 Magic 8 Ball** | **1.22ms** | **1,090 tokens/sec** | **~623K**  | 128 samples   | **$0.00003**  | **$0.0025**                 |
-| **Toy Baseline**    | ~5-10ms    | ~500-800 tokens/sec  | ~623K      | 128 samples   | $0.00003      | $0.005                      |
+| Model            | TTFT       | TPS                  | Parameters | Training Data | Training Cost | Inference Cost (1M queries) |
+| ---------------- | ---------- | -------------------- | ---------- | ------------- | ------------- | --------------------------- |
+| **🎱 8-ball**    | **1.22ms** | **1,090 tokens/sec** | **~623K**  | 128 samples   | **$0.00003**  | **$0.0025**                 |
+| **Toy Baseline** | ~5-10ms    | ~500-800 tokens/sec  | ~623K      | 128 samples   | $0.00003      | $0.005                      |
 
 **Key Metrics:**
 
@@ -305,22 +305,22 @@ Our toy models deliver **production-grade inference speeds**:
 
 _Benchmarks measured on CPU. TTFT = Time to First Token, TPS = Tokens per Second. Costs estimated for AWS CPU instances. Training cost is effectively free - less than 1/100th of a penny!_
 
-**🎱 Ollama Integration**: Convert the Magic 8 Ball to GGUF format for Ollama deployment:
+**🎱 Ollama Integration**: Convert the 8-ball to GGUF format for Ollama deployment:
 
 ```bash
 # Convert PyTorch checkpoint to GGUF
-python convert_to_gguf.py --checkpoint /tmp/magic_8_ball.ckpt --out magic-8-ball.gguf
+python convert_to_gguf.py --checkpoint /tmp/8_ball.ckpt --out 8-ball.gguf
 
 # Create Ollama model
-ollama create magic-8-ball -f Modelfile.magic-8-ball
+ollama create 8-ball -f Modelfile.8-ball
 
 # Run mystical queries
-ollama run magic-8-ball "Will this work?"
+ollama run 8-ball "Will this work?"
 ```
 
 The conversion script handles: PyTorch → HuggingFace → GGUF → Ollama Modelfile generation.
 
-**✅ Model Validation**: The Magic 8 Ball successfully learned its training patterns! It generates appropriate mystical responses with Magic 8 Ball phrases like "Concentrate and ask again", "Very doubtful", and "It is decidedly so" ✨🔮
+**✅ Model Validation**: The 8-ball successfully learned its training patterns! It generates appropriate mystical responses with 8-ball phrases like "Concentrate and ask again", "Very doubtful", and "It is decidedly so" ✨🔮
 
 ### Conversion Process Learnings
 

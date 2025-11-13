@@ -7,6 +7,7 @@ Saves checkpoint with unified schema compatible with export_pytorch.py --toy.
 Usage:
     python -m training.run_toy_distill --in toy_kd.jsonl --out toy.ckpt --epochs 2
 """
+
 from training.utils import sha256_state_dict
 import argparse
 import subprocess
@@ -19,17 +20,15 @@ from torch.utils.data import DataLoader
 from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
 from training.dataset import KDDataset, collate_kd_batch
 from training.losses import combined_kd_loss
-from training.teacher_stub_toy import teacher_logits, magic_8_ball_teacher_logits
+from training.teacher_stub_toy import teacher_logits
+from training.teacher_stub_toy import magic_8_ball_teacher_logits
 
 
 def get_git_sha() -> str:
     """Get current git commit SHA."""
     try:
         result = subprocess.run(
-            ['git', 'rev-parse', 'HEAD'],
-            capture_output=True,
-            text=True,
-            check=True
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
         )
         return result.stdout.strip()[:8]  # Short SHA
     except Exception:
@@ -41,37 +40,48 @@ def get_git_sha() -> str:
 
 def main():
     ap = argparse.ArgumentParser(description="Toy distillation training")
-    ap.add_argument('--in', '--input', dest='input_path', required=True,
-                    help='Input KD dataset JSONL path')
-    ap.add_argument('--out', '--output', dest='output_path', required=True,
-                    help='Output checkpoint path')
-    ap.add_argument('--epochs', type=int, default=2, help='Number of epochs')
-    ap.add_argument('--mps', type=int, default=0, choices=[0, 1],
-                    help='Use MPS (Metal Performance Shaders) if available (0=no, 1=yes)')
-    ap.add_argument('--micro-batch-size', type=int,
-                    default=4, help='Micro batch size')
-    ap.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
-    ap.add_argument('--vocab-size', type=int,
-                    default=512, help='Vocabulary size')
-    ap.add_argument('--d-model', type=int, default=128, help='Model dimension')
-    ap.add_argument('--n-layers', type=int, default=2, help='Number of layers')
-    ap.add_argument('--n-heads', type=int, default=4,
-                    help='Number of attention heads')
-    ap.add_argument('--n-kv-heads', type=int, default=2,
-                    help='Number of KV heads (GQA)')
-    ap.add_argument('--max-seq-len', type=int, default=256,
-                    help='Maximum sequence length')
-    ap.add_argument('--tokenizer', type=str, default='models/student/tokenizer',
-                    help='Tokenizer path')
-    ap.add_argument('--magic-8-ball', action='store_true',
-                    help='Train a Magic 8 Ball model that gives mystical fortune-telling responses')
+    ap.add_argument(
+        "--in", "--input", dest="input_path", required=True, help="Input KD dataset JSONL path"
+    )
+    ap.add_argument(
+        "--out", "--output", dest="output_path", required=True, help="Output checkpoint path"
+    )
+    ap.add_argument("--epochs", type=int, default=2, help="Number of epochs")
+    ap.add_argument(
+        "--mps",
+        type=int,
+        default=0,
+        choices=[0, 1],
+        help="Use MPS (Metal Performance Shaders) if available (0=no, 1=yes)",
+    )
+    ap.add_argument("--micro-batch-size", type=int,
+                    default=4, help="Micro batch size")
+    ap.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
+    ap.add_argument("--vocab-size", type=int,
+                    default=512, help="Vocabulary size")
+    ap.add_argument("--d-model", type=int, default=128, help="Model dimension")
+    ap.add_argument("--n-layers", type=int, default=2, help="Number of layers")
+    ap.add_argument("--n-heads", type=int, default=4,
+                    help="Number of attention heads")
+    ap.add_argument("--n-kv-heads", type=int, default=2,
+                    help="Number of KV heads (GQA)")
+    ap.add_argument("--max-seq-len", type=int, default=256,
+                    help="Maximum sequence length")
+    ap.add_argument(
+        "--tokenizer", type=str, default="models/student/tokenizer", help="Tokenizer path"
+    )
+    ap.add_argument(
+        "--magic-8-ball",
+        action="store_true",
+        help="Train a Magic 8 Ball model that gives mystical fortune-telling responses",
+    )
     args = ap.parse_args()
 
     # Setup device
     if args.mps and torch.backends.mps.is_available():
-        device = torch.device('mps')
+        device = torch.device("mps")
     else:
-        device = torch.device('cpu')
+        device = torch.device("cpu")
 
     print("[run_toy_distill] Starting toy distillation training")
     print(f"  Device: {device}")
@@ -98,13 +108,26 @@ def main():
     # Create optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
+    # Load tokenizer
+    try:
+        from training.dataset import load_tokenizer
+        tokenizer = load_tokenizer(args.tokenizer)
+        print(f"[run_toy_distill] Loaded tokenizer from: {args.tokenizer}")
+    except Exception as e:
+        print(f"[run_toy_distill] ERROR: Failed to load tokenizer: {e}")
+        sys.exit(1)
+
     # Create dataset
     try:
+        # Check if dataset might have teacher_logits (for 8-ball or future ndjson support)
+        # For now, assume 8-ball datasets may have them
+        teacher_logits_available = args.magic_8_ball
+
         dataset = KDDataset(
             jsonl_path=args.input_path,
             tokenizer_path=args.tokenizer,
             max_seq_length=args.max_seq_len,
-            teacher_logits_available=False,  # We'll generate on-the-fly
+            teacher_logits_available=teacher_logits_available,
         )
     except Exception as e:
         print(f"[run_toy_distill] ERROR: Failed to load dataset: {e}")
@@ -129,6 +152,21 @@ def main():
     print(f"[run_toy_distill] Steps per epoch: {steps_per_epoch}")
     print(f"[run_toy_distill] Total steps: {total_steps}")
 
+    # Create learning rate scheduler with warmup
+    warmup_steps = min(10, steps_per_epoch // 4)  # Warmup for first 10 steps or 25% of epoch
+    total_training_steps = steps_per_epoch * args.epochs
+
+    def lr_lambda(step):
+        if step < warmup_steps:
+            # Linear warmup
+            return step / max(1, warmup_steps)
+        else:
+            # Cosine annealing
+            progress = (step - warmup_steps) / max(1, total_training_steps - warmup_steps)
+            return 0.5 * (1 + torch.cos(torch.tensor(progress * 3.14159)))
+
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
     step = 0
     for epoch in range(args.epochs):
         for batch_idx, batch in enumerate(dataloader):
@@ -143,18 +181,35 @@ def main():
             labels = torch.clamp(labels, 0, args.vocab_size - 1)
             if pre_violate and step % 50 == 0:
                 print(
-                    f"[run_toy_distill] ⚠ clamped token ids to vocab_size={args.vocab_size}", flush=True)
+                    f"[run_toy_distill] ⚠ clamped token ids to vocab_size={args.vocab_size}",
+                    flush=True,
+                )
 
             # Forward pass
             student_logits = model(input_ids)
 
-            # Generate teacher logits on-the-fly
-            if args.magic_8_ball:
-                teacher_logits_tensor = magic_8_ball_teacher_logits(
-                    input_ids, vocab_size=args.vocab_size).to(device)
+            # Get teacher logits: prefer pre-computed from dataset, fallback to stub
+            if "teacher_logits" in batch and batch["teacher_logits"] is not None:
+                # Use pre-computed teacher logits from ndjson dataset
+                teacher_logits_tensor = batch["teacher_logits"].to(device)
+                if batch_idx == 0 and epoch == 0:
+                    print(
+                        f"[run_toy_distill] Using pre-computed teacher logits from dataset")
             else:
-                teacher_logits_tensor = teacher_logits(
-                    input_ids, vocab_size=args.vocab_size).to(device)
+                # Generate teacher logits on-the-fly with improved stub
+                if args.magic_8_ball:
+                    teacher_logits_tensor = magic_8_ball_teacher_logits(
+                        input_ids, vocab_size=args.vocab_size, tokenizer=tokenizer
+                    ).to(device)
+                    if batch_idx == 0 and epoch == 0:
+                        print(
+                            f"[run_toy_distill] Generated 8-ball teacher logits with tokenizer")
+                else:
+                    teacher_logits_tensor = teacher_logits(input_ids, vocab_size=args.vocab_size).to(
+                        device
+                    )
+                    if batch_idx == 0 and epoch == 0:
+                        print(f"[run_toy_distill] Generated toy teacher logits")
 
             # Compute loss
             loss_dict = combined_kd_loss(
@@ -174,12 +229,14 @@ def main():
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            scheduler.step()  # Update learning rate
 
             step += 1
 
             if step % 10 == 0:
+                current_lr = optimizer.param_groups[0]['lr']
                 print(
-                    f"[run_toy_distill] Step {step}/{total_steps}: loss={loss.item():.4f}")
+                    f"[run_toy_distill] Step {step}/{total_steps}: loss={loss.item():.4f}, lr={current_lr:.2e}")
 
     # Save checkpoint with unified schema
     model.eval()
@@ -231,5 +288,5 @@ def main():
     print(f"  Git SHA: {git_sha}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

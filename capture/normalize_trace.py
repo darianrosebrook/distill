@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 import os
 import json
@@ -8,17 +7,18 @@ import time
 from typing import Dict, Any, List
 from capture.validators import validate_trace, redact
 
+
 def parse_raw_lines(lines: List[str]) -> List[dict]:
     events = []
     for ln in lines:
         s = ln.strip()
-        if not s: 
+        if not s:
             continue
         # Try JSON payload first
         try:
             obj = json.loads(s)
             t = obj.get("type")
-            if t in ("assistant.delta","assistant.final","assistant.tool_call","tool.result"):
+            if t in ("assistant.delta", "assistant.final", "assistant.tool_call", "tool.result"):
                 events.append(obj)
                 continue
         except Exception:
@@ -29,15 +29,21 @@ def parse_raw_lines(lines: List[str]) -> List[dict]:
             try:
                 obj = json.loads(payload)
                 t = obj.get("type")
-                if t in ("assistant.delta","assistant.final","assistant.tool_call","tool.result"):
+                if t in (
+                    "assistant.delta",
+                    "assistant.final",
+                    "assistant.tool_call",
+                    "tool.result",
+                ):
                     events.append(obj)
                     continue
             except Exception:
-                events.append({"type":"assistant.delta","text":payload})
+                events.append({"type": "assistant.delta", "text": payload})
                 continue
         # Fallback: treat line as free-text delta
-        events.append({"type":"assistant.delta","text": s})
+        events.append({"type": "assistant.delta", "text": s})
     return events
+
 
 def build_trace(raw_file: str, schema: Dict[str, Any]) -> Dict[str, Any]:
     meta_file = raw_file + ".meta.json"
@@ -55,7 +61,12 @@ def build_trace(raw_file: str, schema: Dict[str, Any]) -> Dict[str, Any]:
         "context": {"system": "", "tools": []},
         "history": [],
         "events": [],
-        "telemetry": {"prompt_tokens": 0, "completion_tokens": 0, "tool_calls": 0, "json_validity_errors": 0}
+        "telemetry": {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "tool_calls": 0,
+            "json_validity_errors": 0,
+        },
     }
 
     tool_calls = 0
@@ -73,6 +84,7 @@ def build_trace(raw_file: str, schema: Dict[str, Any]) -> Dict[str, Any]:
         trace["_validation_error"] = str(ex)
     return trace
 
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="indir", required=True)
@@ -89,6 +101,7 @@ def main():
         for fp in files:
             trace = build_trace(fp, schema)
             out.write(json.dumps(trace, ensure_ascii=False) + "\n")
+
 
 if __name__ == "__main__":
     main()

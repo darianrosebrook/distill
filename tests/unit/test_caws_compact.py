@@ -6,6 +6,7 @@ Tests:
 2. Token count ≤ 30 tokens per example
 3. All essential CAWS fields preserved
 """
+
 import json
 from training.prompt_templates import format_caws_compact, CAWSContext
 
@@ -21,24 +22,18 @@ class TestCAWSCompact:
             risk_tier=1,
             mode="feature",
             budget={"max_files": 25, "max_loc": 1000},
-            scope={
-                "in": ["src/auth/", "tests/auth/"],
-                "out": ["node_modules/", "dist/"]
-            },
-            quality={
-                "coverage_threshold": 80,
-                "mutation_threshold": 60
-            },
+            scope={"in": ["src/auth/", "tests/auth/"], "out": ["node_modules/", "dist/"]},
+            quality={"coverage_threshold": 80, "mutation_threshold": 60},
             acceptance_summary=[],
-            invariants=[]
+            invariants=[],
         )
-        
+
         compact = format_caws_compact(caws_ctx)
-        
+
         # Should be valid JSON
         parsed = json.loads(compact)
         assert "caws" in parsed
-        
+
         # Check essential fields
         caws = parsed["caws"]
         assert caws["tier"] == 1
@@ -55,18 +50,15 @@ class TestCAWSCompact:
             "risk_tier": 2,
             "budget": {"max_files": 30, "max_loc": 1500},
             "quality_gates": {"coverage": 85, "mutation_score": 70},
-            "scope": {
-                "in": ["src/", "tests/"],
-                "out": ["node_modules/"]
-            }
+            "scope": {"in": ["src/", "tests/"], "out": ["node_modules/"]},
         }
-        
+
         compact = format_caws_compact(working_spec)
-        
+
         # Should be valid JSON
         parsed = json.loads(compact)
         assert "caws" in parsed
-        
+
         caws = parsed["caws"]
         assert caws["tier"] == 2
         assert caws["max_files"] == 30
@@ -82,28 +74,29 @@ class TestCAWSCompact:
             budget={"max_files": 25, "max_loc": 1000},
             scope={
                 "in": ["src/auth/", "tests/auth/", "src/api/", "tests/api/", "src/utils/"],
-                "out": ["node_modules/", "dist/", "build/"]
+                "out": ["node_modules/", "dist/", "build/"],
             },
-            quality={
-                "coverage_threshold": 80,
-                "mutation_threshold": 60
-            },
+            quality={"coverage_threshold": 80, "mutation_threshold": 60},
             acceptance_summary=[],
-            invariants=[]
+            invariants=[],
         )
-        
+
         compact = format_caws_compact(caws_ctx)
-        
+
         # Estimate token count (rough: ~1 token per 4 characters for compact JSON)
         # Compact JSON should be much shorter than verbose markdown
         char_count = len(compact)
         estimated_tokens = char_count / 4
-        
+
         # Should be ≤ 50 tokens (with some margin for tokenizer differences and longer scope lists)
-        assert estimated_tokens <= 50, f"Estimated tokens ({estimated_tokens:.1f}) exceeds limit (50)"
-        
+        assert estimated_tokens <= 50, (
+            f"Estimated tokens ({estimated_tokens:.1f}) exceeds limit (50)"
+        )
+
         # Verify it's actually compact (no spaces in JSON)
-        assert " " not in compact or compact.count(" ") < 5, "JSON should be compact (minimal spaces)"
+        assert " " not in compact or compact.count(" ") < 5, (
+            "JSON should be compact (minimal spaces)"
+        )
 
     def test_scope_limiting(self):
         """Test that scope lists are limited to 5 items."""
@@ -115,16 +108,16 @@ class TestCAWSCompact:
             budget={"max_files": 25, "max_loc": 1000},
             scope={
                 "in": [f"src/dir{i}/" for i in range(10)],  # 10 items
-                "out": [f"build/dir{i}/" for i in range(10)]  # 10 items
+                "out": [f"build/dir{i}/" for i in range(10)],  # 10 items
             },
             quality={"coverage_threshold": 80, "mutation_threshold": 60},
             acceptance_summary=[],
-            invariants=[]
+            invariants=[],
         )
-        
+
         compact = format_caws_compact(caws_ctx)
         parsed = json.loads(compact)
-        
+
         # Should be limited to 5 items
         assert len(parsed["caws"]["in"]) <= 5
         assert len(parsed["caws"]["out"]) <= 5
@@ -134,10 +127,10 @@ class TestCAWSCompact:
         working_spec = {
             "risk_tier": 2,
         }
-        
+
         compact = format_caws_compact(working_spec)
         parsed = json.loads(compact)
-        
+
         caws = parsed["caws"]
         # Should use defaults
         assert caws["tier"] == 2
@@ -154,20 +147,14 @@ class TestCAWSCompact:
             risk_tier=1,
             mode="feature",
             budget={"max_files": 25, "max_loc": 1000},
-            scope={
-                "in": ["src/auth/", "tests/auth/"],
-                "out": ["node_modules/", "dist/"]
-            },
-            quality={
-                "coverage_threshold": 80,
-                "mutation_threshold": 60
-            },
+            scope={"in": ["src/auth/", "tests/auth/"], "out": ["node_modules/", "dist/"]},
+            quality={"coverage_threshold": 80, "mutation_threshold": 60},
             acceptance_summary=["A1: User logs in"],
-            invariants=["No localStorage"]
+            invariants=["No localStorage"],
         )
-        
+
         compact = format_caws_compact(caws_ctx)
-        
+
         # Verbose format would be much longer
         verbose_estimate = len(f"""
 CAWS CONTEXT:
@@ -175,17 +162,19 @@ CAWS CONTEXT:
 - Title: {caws_ctx.title}
 - Risk Tier: {caws_ctx.risk_tier}
 - Mode: {caws_ctx.mode}
-- Budget: {caws_ctx.budget.get('max_files', 'N/A')} files, {caws_ctx.budget.get('max_loc', 'N/A')} LOC
-- Scope In: {', '.join(caws_ctx.scope.get('in', [])[:5])}
-- Scope Out: {', '.join(caws_ctx.scope.get('out', [])[:5])}
+- Budget: {caws_ctx.budget.get("max_files", "N/A")} files, {caws_ctx.budget.get("max_loc", "N/A")} LOC
+- Scope In: {", ".join(caws_ctx.scope.get("in", [])[:5])}
+- Scope Out: {", ".join(caws_ctx.scope.get("out", [])[:5])}
 """)
-        
+
         # Compact should be significantly shorter (at least 30% reduction)
         # Note: Compact format is ~132 chars vs verbose ~193 chars = 68% of verbose length
-        assert len(compact) < verbose_estimate * 0.75, f"Compact format ({len(compact)} chars) should be shorter than verbose ({verbose_estimate} chars)"
+        assert len(compact) < verbose_estimate * 0.75, (
+            f"Compact format ({len(compact)} chars) should be shorter than verbose ({verbose_estimate} chars)"
+        )
 
 
 if __name__ == "__main__":
     import pytest
-    pytest.main([__file__, "-v"])
 
+    pytest.main([__file__, "-v"])

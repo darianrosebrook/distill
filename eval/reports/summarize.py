@@ -1,4 +1,5 @@
 """Summarize evaluation results into report."""
+
 from __future__ import annotations
 import math
 from collections import defaultdict
@@ -82,8 +83,9 @@ def per_tool_deltas(results: List[Dict[str, Any]]) -> Dict[str, Dict[str, float]
     buckets: Dict[str, List[Dict[str, Any]]] = {}
     for r in results:
         tool_trace = r.get("tool_trace", [])
-        tool_names = {tc.get("name") for tc in tool_trace if isinstance(
-            tc, dict) and tc.get("name")}
+        tool_names = {
+            tc.get("name") for tc in tool_trace if isinstance(tc, dict) and tc.get("name")
+        }
         for t in tool_names:
             buckets.setdefault(t, []).append(r)
 
@@ -143,23 +145,17 @@ def summarize_results(
 
     # Count controls and negative controls
     num_controls = sum(
-        1 for r in results
-        if r.get("scores", {}).get("controls_with_integration", 0) > 0
+        1 for r in results if r.get("scores", {}).get("controls_with_integration", 0) > 0
     )
     num_negative_controls = sum(
-        1 for r in results
-        if r.get("scores", {}).get("negative_control_ok", True) is False
+        1 for r in results if r.get("scores", {}).get("negative_control_ok", True) is False
     )
 
     # Integration F1 metrics
-    avg_integration_f1_macro_lax = macro_f1(
-        results, mode="lax") if eligible_results else None
-    avg_integration_f1_micro_lax = micro_f1(
-        results, mode="lax") if eligible_results else None
-    avg_integration_f1_macro_strict = macro_f1(
-        results, mode="strict") if eligible_results else None
-    avg_integration_f1_micro_strict = micro_f1(
-        results, mode="strict") if eligible_results else None
+    avg_integration_f1_macro_lax = macro_f1(results, mode="lax") if eligible_results else None
+    avg_integration_f1_micro_lax = micro_f1(results, mode="lax") if eligible_results else None
+    avg_integration_f1_macro_strict = macro_f1(results, mode="strict") if eligible_results else None
+    avg_integration_f1_micro_strict = micro_f1(results, mode="strict") if eligible_results else None
 
     # Integration span histogram
     integration_span_count_histogram = defaultdict(int)
@@ -172,37 +168,49 @@ def summarize_results(
             integration_spans_over_cap_count += 1
 
     # Multi-call parity
-    multi_call_parity_ok = sum(1 for r in results if r.get(
-        "scores", {}).get("multi_call_parity_ok", True))
+    multi_call_parity_ok = sum(
+        1 for r in results if r.get("scores", {}).get("multi_call_parity_ok", True)
+    )
     multi_call_parity_total = total
-    multi_call_parity_rate = round(
-        multi_call_parity_ok / multi_call_parity_total, 3) if multi_call_parity_total > 0 else None
+    multi_call_parity_rate = (
+        round(multi_call_parity_ok / multi_call_parity_total, 3)
+        if multi_call_parity_total > 0
+        else None
+    )
 
     # JSON args validity
-    json_args_valid_count = sum(1 for r in results if r.get(
-        "scores", {}).get("json_args_valid", True))
-    json_args_valid_rate = round(
-        json_args_valid_count / total, 3) if total > 0 else None
+    json_args_valid_count = sum(
+        1 for r in results if r.get("scores", {}).get("json_args_valid", True)
+    )
+    json_args_valid_rate = round(json_args_valid_count / total, 3) if total > 0 else None
 
     # Controls with integration
-    controls_with_integration = sum(1 for r in results if r.get(
-        "scores", {}).get("controls_with_integration", 0) > 0)
+    controls_with_integration = sum(
+        1 for r in results if r.get("scores", {}).get("controls_with_integration", 0) > 0
+    )
 
     # Privacy
-    privacy_ok_count = sum(1 for r in results if r.get(
-        "scores", {}).get("privacy_ok", True))
+    privacy_ok_count = sum(1 for r in results if r.get("scores", {}).get("privacy_ok", True))
     privacy_ok_rate = round(privacy_ok_count / total, 3) if total > 0 else None
 
     # Per-tool deltas
     per_tool = per_tool_deltas(results)
 
     # Define gates (mirror verifier gates)
-    min_eligible = gates_overrides.get(
-        "min_eligible_for_gates", 15) if gates_overrides else 15
+    min_eligible = gates_overrides.get("min_eligible_for_gates", 15) if gates_overrides else 15
     gates = {
-        "integration_f1_macro_lax": {"threshold": 0.90, "policy": "count_based_misses", "misses_allowed_pct": 0.05, "min_eligible": min_eligible},
+        "integration_f1_macro_lax": {
+            "threshold": 0.90,
+            "policy": "count_based_misses",
+            "misses_allowed_pct": 0.05,
+            "min_eligible": min_eligible,
+        },
         "integration_f1_macro_strict": {"threshold": 0.75, "policy": "warning_only"},
-        "multi_call_parity_rate": {"threshold": 0.95, "policy": "count_based_misses", "misses_allowed_pct": 0.05},
+        "multi_call_parity_rate": {
+            "threshold": 0.95,
+            "policy": "count_based_misses",
+            "misses_allowed_pct": 0.05,
+        },
         "json_args_valid_rate": {"threshold": 0.98, "policy": "hard_fail"},
         "controls_with_integration": {"threshold": 0, "policy": "hard_fail"},
         "privacy_ok_rate": {"threshold": 1.0, "policy": "hard_fail"},
@@ -219,10 +227,13 @@ def summarize_results(
         misses_allowed = max(1, math.ceil(misses_allowed_pct * num_eligible))
 
         # Count misses (items with F1 < threshold)
-        misses_count = sum(1 for r in eligible_results if (
-            _f1(r, "lax") or 0.0) < f1_threshold)
+        misses_count = sum(1 for r in eligible_results if (_f1(r, "lax") or 0.0) < f1_threshold)
 
-        if avg_integration_f1_macro_lax and avg_integration_f1_macro_lax < f1_threshold and misses_count > misses_allowed:
+        if (
+            avg_integration_f1_macro_lax
+            and avg_integration_f1_macro_lax < f1_threshold
+            and misses_count > misses_allowed
+        ):
             gates_ok = False
     elif num_eligible > 0:
         inconclusive = True
@@ -236,7 +247,10 @@ def summarize_results(
         gates_ok = False
 
     # Multi-call parity gate
-    if multi_call_parity_rate and multi_call_parity_rate < gates["multi_call_parity_rate"]["threshold"]:
+    if (
+        multi_call_parity_rate
+        and multi_call_parity_rate < gates["multi_call_parity_rate"]["threshold"]
+    ):
         misses_allowed_pct = gates["multi_call_parity_rate"]["misses_allowed_pct"]
         misses_allowed = max(1, math.ceil(misses_allowed_pct * total))
         misses_count = total - multi_call_parity_ok
@@ -250,10 +264,18 @@ def summarize_results(
         "num_controls": num_controls,
         "num_negative_controls": num_negative_controls,
         "controls_with_integration": controls_with_integration,
-        "avg_integration_f1_macro_lax": round(avg_integration_f1_macro_lax, 3) if avg_integration_f1_macro_lax is not None else None,
-        "avg_integration_f1_micro_lax": round(avg_integration_f1_micro_lax, 3) if avg_integration_f1_micro_lax is not None else None,
-        "avg_integration_f1_macro_strict": round(avg_integration_f1_macro_strict, 3) if avg_integration_f1_macro_strict is not None else None,
-        "avg_integration_f1_micro_strict": round(avg_integration_f1_micro_strict, 3) if avg_integration_f1_micro_strict is not None else None,
+        "avg_integration_f1_macro_lax": round(avg_integration_f1_macro_lax, 3)
+        if avg_integration_f1_macro_lax is not None
+        else None,
+        "avg_integration_f1_micro_lax": round(avg_integration_f1_micro_lax, 3)
+        if avg_integration_f1_micro_lax is not None
+        else None,
+        "avg_integration_f1_macro_strict": round(avg_integration_f1_macro_strict, 3)
+        if avg_integration_f1_macro_strict is not None
+        else None,
+        "avg_integration_f1_micro_strict": round(avg_integration_f1_micro_strict, 3)
+        if avg_integration_f1_micro_strict is not None
+        else None,
         "multi_call_parity_rate": multi_call_parity_rate,
         "json_args_valid_rate": json_args_valid_rate,
         "privacy_ok_rate": privacy_ok_rate,
@@ -279,6 +301,7 @@ def summarize_results(
         # Get current hardware profile key
         try:
             from eval.hw_profile import load_profiles, match_profile
+
             profiles = load_profiles(Path("configs/hardware_profiles.yaml"))
             current_profile = match_profile(profiles)
             current_hw_profile_key = current_profile.key
@@ -290,10 +313,12 @@ def summarize_results(
             # Load baseline report and extract speed_metrics
             try:
                 from pathlib import Path
+
                 baseline_path = Path(baseline_report_path)
                 if baseline_path.exists():
                     import json
-                    with open(baseline_path, 'r') as f:
+
+                    with open(baseline_path, "r") as f:
                         baseline_report = json.load(f)
                     # Extract speed_metrics from header
                     baseline_header = baseline_report.get("header", {})
@@ -301,14 +326,16 @@ def summarize_results(
                     baseline_hw = baseline_header.get("hardware", {})
                     # Extract ANE residency if available
                     baseline_ane_residency = baseline_header.get(
-                        "ane_residency") or baseline_report.get("ane_residency")
+                        "ane_residency"
+                    ) or baseline_report.get("ane_residency")
                     # Check hardware match (compare soc if available)
                     if baseline_hw and hardware:
                         if baseline_hw.get("soc") != hardware.get("soc"):
                             hardware_match = False
                     # Extract hardware profile key if available
                     baseline_hw_profile_key = baseline_report.get(
-                        "hardware_profile_key") or baseline_header.get("hardware_profile_key")
+                        "hardware_profile_key"
+                    ) or baseline_header.get("hardware_profile_key")
             except Exception as e:
                 print(f"[summarize] WARN: Failed to load baseline report: {e}")
 
@@ -340,10 +367,11 @@ def summarize_results(
         "config": config,
         "gates": gates,
     }
-    
+
     # Add code-mode metadata if evaluation was run with code-mode enabled
     # Config is single source of truth (env var kept for backward compatibility)
     import os
+
     eval_code_mode_cfg = config.get("eval", {}).get("code_mode", {}).get("enabled", False)
     eval_code_mode = eval_code_mode_cfg or os.getenv("EVAL_CODE_MODE", "0") == "1"
     if eval_code_mode:
@@ -355,8 +383,7 @@ def summarize_results(
     # Add speed metrics and hardware to header if provided
     if speed_metrics is not None:
         # Remove ANE residency from speed_metrics if present (it's stored separately)
-        speed_metrics_copy = {
-            k: v for k, v in speed_metrics.items() if k != "ane_residency"}
+        speed_metrics_copy = {k: v for k, v in speed_metrics.items() if k != "ane_residency"}
         report_header["speed_metrics"] = speed_metrics_copy
     if hardware is not None:
         report_header["hardware"] = hardware
@@ -371,53 +398,59 @@ def summarize_results(
     code_mode_gates_ok = True
     code_mode_gates_result = None
     import os
+
     eval_code_mode = os.getenv("EVAL_CODE_MODE", "0") == "1"
-    
+
     if eval_code_mode:
         from eval.scoring.scorer import evaluate_code_mode_gates
         import yaml
         from pathlib import Path
-        
+
         # Load code-mode config
         code_mode_config = {}
         code_mode_config_path = Path("eval/configs/code_mode.yaml")
         if code_mode_config_path.exists():
             try:
-                with open(code_mode_config_path, 'r') as f:
+                with open(code_mode_config_path, "r") as f:
                     code_mode_config = yaml.safe_load(f) or {}
             except Exception as e:
                 print(f"[summarize] WARN: Failed to load code-mode config: {e}")
-        
+
         # Get baseline summary for CES comparison
         baseline_summary_for_ces = None
         if baseline_report_path:
             try:
                 import json
                 from pathlib import Path
+
                 baseline_path = Path(baseline_report_path)
                 if baseline_path.exists():
-                    with open(baseline_path, 'r') as f:
+                    with open(baseline_path, "r") as f:
                         baseline_report = json.load(f)
                     baseline_summary_for_ces = baseline_report.get("summary", {})
             except Exception as e:
                 print(f"[summarize] WARN: Failed to load baseline summary for CES: {e}")
-        
+
         code_mode_gates_result = evaluate_code_mode_gates(
             results=results,
             config=code_mode_config,
             baseline_summary=baseline_summary_for_ces,
         )
         code_mode_gates_ok = code_mode_gates_result.get("gates_passed", True)
-        
+
         # Add code-mode metrics to summary (absolute CES and %Δ vs baseline)
         summary["ces_tokens_total"] = code_mode_gates_result.get("ces_tokens_total", 0)
         summary["ces_tokens_direct_tool"] = code_mode_gates_result.get("ces_tokens_direct_tool", 0)
         summary["ces_tokens_code_mode"] = code_mode_gates_result.get("ces_tokens_code_mode", 0)
         summary["data_leak_events"] = code_mode_gates_result.get("data_leak_events", 0)
-        summary["code_mode_adoption_rate"] = code_mode_gates_result.get("code_mode_adoption_rate", 0.0)
-        
+        summary["code_mode_adoption_rate"] = code_mode_gates_result.get(
+            "code_mode_adoption_rate", 0.0
+        )
+
         # Add baseline comparison metrics
-        summary["abs_ces"] = code_mode_gates_result.get("abs_ces", code_mode_gates_result.get("ces_tokens_total", 0))
+        summary["abs_ces"] = code_mode_gates_result.get(
+            "abs_ces", code_mode_gates_result.get("ces_tokens_total", 0)
+        )
         summary["ces_delta_percent"] = code_mode_gates_result.get("ces_delta_percent")
         summary["ces_improvement_percent"] = code_mode_gates_result.get("ces_improvement_percent")
         summary["baseline_ces"] = code_mode_gates_result.get("baseline_ces")
@@ -433,7 +466,7 @@ def summarize_results(
     # Add speed gates result if available
     if speed_gates_result is not None:
         report["speed_gates"] = speed_gates_result
-    
+
     # Add code-mode gates result if available
     if code_mode_gates_result is not None:
         report["code_mode_gates"] = code_mode_gates_result

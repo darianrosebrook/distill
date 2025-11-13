@@ -6,6 +6,7 @@ Model: Embedding → Linear → RMSNorm → SwiGLU → Linear (attention stub)
 Usage:
   python -m conversion.make_toy_torch --seq 128 --vocab 256 --dmodel 64 --out models/toy_torch.pt
 """
+
 import argparse
 from pathlib import Path
 
@@ -39,6 +40,7 @@ class SwiGLU(nn.Module):
 
 class ToyTransformer(nn.Module):
     """Tiny transformer-like model for smoke testing PyTorch→CoreML."""
+
     def __init__(self, vocab_size: int = 256, d_model: int = 64):
         super().__init__()
         self.embed = nn.Embedding(vocab_size, d_model)
@@ -59,10 +61,12 @@ class ToyTransformer(nn.Module):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--seq', type=int, default=128, help='Sequence length')
-    ap.add_argument('--vocab', type=int, default=256, help='Vocabulary size')
-    ap.add_argument('--dmodel', type=int, default=64, help='Model dimension')
-    ap.add_argument('--out', type=str, default='models/toy_torch.pt', help='Output TorchScript path')
+    ap.add_argument("--seq", type=int, default=128, help="Sequence length")
+    ap.add_argument("--vocab", type=int, default=256, help="Vocabulary size")
+    ap.add_argument("--dmodel", type=int, default=64, help="Model dimension")
+    ap.add_argument(
+        "--out", type=str, default="models/toy_torch.pt", help="Output TorchScript path"
+    )
     args = ap.parse_args()
 
     model = ToyTransformer(vocab_size=args.vocab, d_model=args.dmodel)
@@ -79,9 +83,10 @@ def main():
     # Save TorchScript
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     traced.save(args.out)
-    print(f"[make_toy_torch] Saved TorchScript model: {args.out} (T={args.seq}, V={args.vocab}, D={args.dmodel})")
+    print(
+        f"[make_toy_torch] Saved TorchScript model: {args.out} (T={args.seq}, V={args.vocab}, D={args.dmodel})"
+    )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
-

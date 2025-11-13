@@ -8,6 +8,7 @@ Tests that both features work together in the same training run:
 
 Author: @darianrosebrook
 """
+
 import pytest
 import torch
 from unittest.mock import Mock
@@ -44,14 +45,16 @@ class TestCombinedMilestones:
     def mock_tokenizer(self):
         """Create mock tokenizer with sentinel tokens."""
         tokenizer = Mock()
-        tokenizer.convert_tokens_to_ids = Mock(side_effect=lambda x: {
-            BOT_TOKEN: 3,
-            EOT_TOKEN: 4,
-            "import": 10,
-            "from": 20,
-            "callMCPTool": 30,
-            "await": 40,
-        }.get(x, None))
+        tokenizer.convert_tokens_to_ids = Mock(
+            side_effect=lambda x: {
+                BOT_TOKEN: 3,
+                EOT_TOKEN: 4,
+                "import": 10,
+                "from": 20,
+                "callMCPTool": 30,
+                "await": 40,
+            }.get(x, None)
+        )
         tokenizer.encode = Mock(return_value=[1, 2, 3])
         tokenizer.decode = Mock(return_value="test output")
         return tokenizer
@@ -253,9 +256,7 @@ class TestCombinedMilestones:
         assert result["metadata"]["latent_curriculum_applied"] is True
         assert result["metadata"]["eligible_for_code_mode"] is True
 
-    def test_caws_budget_with_code_mode(
-        self, code_mode_loss_module
-    ):
+    def test_caws_budget_with_code_mode(self, code_mode_loss_module):
         """
         Test CAWS budget enforcement with code-mode scenarios.
 
@@ -385,12 +386,7 @@ class TestCombinedMilestones:
             },
             {
                 "prompt": "Analyze results:",
-                "teacher_text": (
-                    "Step 1: Load\n"
-                    "Step 2: Analyze\n"
-                    "Step 3: Report\n"
-                    "Answer: Complete"
-                ),
+                "teacher_text": ("Step 1: Load\nStep 2: Analyze\nStep 3: Report\nAnswer: Complete"),
                 "cot_steps": ["Step 1: Load", "Step 2: Analyze", "Step 3: Report"],
                 "answer": "Complete",
                 "metadata": {
@@ -463,6 +459,5 @@ class TestCombinedMilestones:
         assert student_logits.grad is not None
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

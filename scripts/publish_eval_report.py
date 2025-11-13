@@ -1,4 +1,5 @@
 """Publish evaluation report to Supabase dashboard."""
+
 from __future__ import annotations
 
 import json
@@ -13,7 +14,7 @@ def publish_report(
 ) -> None:
     """
     Publish evaluation report to Supabase.
-    
+
     Args:
         report_path: Path to evaluation report JSON
         supabase_url: Supabase REST URL (from env if not provided)
@@ -21,29 +22,31 @@ def publish_report(
     """
     supabase_url = supabase_url or os.environ.get("SUPABASE_REST_URL")
     supabase_key = supabase_key or os.environ.get("SUPABASE_SERVICE_KEY")
-    
+
     if not supabase_url or not supabase_key:
         print("⚠️ Supabase credentials not found. Set SUPABASE_REST_URL and SUPABASE_SERVICE_KEY")
         return
-    
+
     with open(report_path, "r", encoding="utf-8") as f:
         report = json.load(f)
-    
+
     # Handle merged reports (multiple shards)
     if "reports" in report:
         reports = report["reports"]
         checkpoint = report.get("checkpoint", "unknown")
     else:
         reports = [report]
-        checkpoint = report.get("checkpoint") or report.get("header", {}).get("model_fingerprint", "unknown")
-    
+        checkpoint = report.get("checkpoint") or report.get("header", {}).get(
+            "model_fingerprint", "unknown"
+        )
+
     # Extract metadata from first report
     first_report = reports[0]
     header = first_report.get("header", {})
-    
+
     # Determine gates_ok (all shards must pass)
     gates_ok = all(r.get("gates_ok", False) for r in reports)
-    
+
     payload = {
         "checkpoint": checkpoint,
         "report": report,
@@ -52,10 +55,10 @@ def publish_report(
         "tokenizer_fingerprint": header.get("tokenizer_fingerprint"),
         "tool_registry_sha256": header.get("tool_registry_sha256"),
     }
-    
+
     try:
         import requests
-        
+
         response = requests.post(
             f"{supabase_url}/eval_reports",
             headers={
@@ -68,11 +71,11 @@ def publish_report(
             timeout=30,
         )
         response.raise_for_status()
-        
+
         print(f"✅ Published evaluation report for checkpoint: {checkpoint}")
         print(f"   Gates OK: {gates_ok}")
         print(f"   Dataset SHA256: {header.get('dataset_sha256', 'N/A')}")
-        
+
     except ImportError:
         print("❌ requests library not available. Install with: pip install requests")
         sys.exit(1)
@@ -86,16 +89,15 @@ def main():
     if len(sys.argv) < 2:
         print("Usage: python -m scripts.publish_eval_report <report.json>")
         sys.exit(1)
-    
+
     report_path = sys.argv[1]
-    
+
     if not os.path.exists(report_path):
         print(f"❌ Report not found: {report_path}")
         sys.exit(1)
-    
+
     publish_report(report_path)
 
 
 if __name__ == "__main__":
     main()
-

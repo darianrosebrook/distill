@@ -7,13 +7,14 @@ training.distill_kd. Use the main KD training script instead.
 Usage:
     # OLD (deprecated):
     python -m training.distill_intermediate --config configs/student_7b_gqa.yaml
-    
+
     # NEW (use this instead):
     python -m training.distill_kd --config configs/worker_9b.yaml configs/kd_recipe.yaml
     # Intermediate layer loss is enabled via kd_recipe.yaml:
     # losses:
     #   intermediate_layer_weight: 0.1
 """
+
 import sys
 import typer
 
@@ -21,10 +22,10 @@ import typer
 def main(config: str = typer.Argument(...)):
     """
     DEPRECATED: Intermediate distillation training entry point.
-    
+
     This script is deprecated. Intermediate layer loss is now integrated
     into training.distill_kd. Use the main KD training script instead.
-    
+
     Args:
         config: Configuration file path (ignored, script is deprecated)
     """

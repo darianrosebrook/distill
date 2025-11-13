@@ -3,6 +3,7 @@ Performance monitoring and profiling utilities.
 
 Provides memory usage tracking, timing, and performance metrics.
 """
+
 import time
 import psutil
 import torch
@@ -16,6 +17,7 @@ import json
 @dataclass
 class PerformanceMetrics:
     """Container for performance metrics."""
+
     wall_time_seconds: float
     cpu_percent: float
     memory_mb: float
@@ -110,8 +112,9 @@ class TrainingProfiler:
         self.step_metrics = []
         self.start_time = time.time()
 
-    def log_step(self, step: int, loss: float, lr: float,
-                 tokens_processed: Optional[int] = None) -> None:
+    def log_step(
+        self, step: int, loss: float, lr: float, tokens_processed: Optional[int] = None
+    ) -> None:
         """Log metrics for a training step.
 
         Args:
@@ -134,17 +137,23 @@ class TrainingProfiler:
                 "gpu_memory_mb": metrics.gpu_memory_mb,
                 "tokens_processed": metrics.tokens_processed,
                 "throughput_tokens_per_sec": metrics.throughput_tokens_per_sec,
-            }
+            },
         }
 
         self.step_metrics.append(step_data)
 
         # Print summary
-        throughput_str = f"{metrics.throughput_tokens_per_sec:.1f} tok/s" if metrics.throughput_tokens_per_sec else "N/A"
+        throughput_str = (
+            f"{metrics.throughput_tokens_per_sec:.1f} tok/s"
+            if metrics.throughput_tokens_per_sec
+            else "N/A"
+        )
         gpu_str = f"{metrics.gpu_memory_mb:.1f}MB" if metrics.gpu_memory_mb else "N/A"
 
-        print(f"[STEP {step}] Loss: {loss:.4f}, LR: {lr:.2e}, "
-              f"Throughput: {throughput_str}, GPU: {gpu_str}")
+        print(
+            f"[STEP {step}] Loss: {loss:.4f}, LR: {lr:.2e}, "
+            f"Throughput: {throughput_str}, GPU: {gpu_str}"
+        )
 
     def save_profile(self, output_path: Optional[Path] = None) -> None:
         """Save profiling data to file.
@@ -163,7 +172,7 @@ class TrainingProfiler:
             "step_metrics": self.step_metrics,
         }
 
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             json.dump(profile_data, f, indent=2, default=str)
 
         print(f"[PROFILER] Profile saved to {output_path}")
@@ -178,16 +187,20 @@ class TrainingProfiler:
             return {}
 
         losses = [m["loss"] for m in self.step_metrics]
-        throughputs = [m["metrics"]["throughput_tokens_per_sec"]
-                       for m in self.step_metrics
-                       if m["metrics"]["throughput_tokens_per_sec"]]
+        throughputs = [
+            m["metrics"]["throughput_tokens_per_sec"]
+            for m in self.step_metrics
+            if m["metrics"]["throughput_tokens_per_sec"]
+        ]
 
         return {
             "total_steps": len(self.step_metrics),
             "total_time_seconds": time.time() - self.start_time,
             "final_loss": losses[-1] if losses else None,
             "min_loss": min(losses) if losses else None,
-            "avg_throughput_tok_per_sec": sum(throughputs) / len(throughputs) if throughputs else None,
+            "avg_throughput_tok_per_sec": sum(throughputs) / len(throughputs)
+            if throughputs
+            else None,
             "peak_memory_mb": max(m["metrics"]["memory_mb"] for m in self.step_metrics),
         }
 
@@ -198,6 +211,7 @@ def profile_memory_usage(func_name: str = "operation") -> None:
     Args:
         func_name: Name to use in profiling output
     """
+
     def decorator(func):
         def wrapper(*args, **kwargs):
             if torch.cuda.is_available():
@@ -217,5 +231,7 @@ def profile_memory_usage(func_name: str = "operation") -> None:
                 print(f"  Peak: {peak_memory / 1024 / 1024:.1f}MB")
 
             return result
+
         return wrapper
+
     return decorator

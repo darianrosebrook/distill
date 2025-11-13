@@ -3,6 +3,7 @@ Extract process-step supervision targets from teacher outputs and add token span
 
 Author: @darianrosebrook
 """
+
 from __future__ import annotations
 import argparse
 import json
@@ -45,7 +46,7 @@ def extract_process_step_targets(
 ) -> Dict[str, Any]:
     """
     Extract process-step supervision targets from teacher output.
-    
+
     Returns:
         Dictionary with:
         - tool_name_ids: Token IDs for tool name span (if found)
@@ -97,9 +98,7 @@ def extract_process_step_targets(
             json_bytes_spans.append([start_char, end_char])
 
             # Add token spans
-            token_span = bytes_to_token_span(
-                teacher_text, start_char, end_char, tokenizer
-            )
+            token_span = bytes_to_token_span(teacher_text, start_char, end_char, tokenizer)
             if token_span:
                 json_token_spans.append(list(token_span))
 
@@ -122,17 +121,13 @@ def extract_process_step_targets(
 
         for start_char, end_char in integration_spans:
             integration_text = teacher_text[start_char:end_char]
-            integration_ids = tokenizer.encode(
-                integration_text, add_special_tokens=False
-            )
+            integration_ids = tokenizer.encode(integration_text, add_special_tokens=False)
             all_integration_ids.extend(integration_ids)
             all_integration_mask.extend([1] * len(integration_ids))
             integration_bytes_spans.append([start_char, end_char])
 
             # Add token spans
-            token_span = bytes_to_token_span(
-                teacher_text, start_char, end_char, tokenizer
-            )
+            token_span = bytes_to_token_span(teacher_text, start_char, end_char, tokenizer)
             if token_span:
                 integration_token_spans.append(list(token_span))
 
@@ -155,7 +150,7 @@ def validate_json_args(
 ) -> Tuple[bool, Optional[str], Optional[Dict[str, Any]]]:
     """
     Validate JSON arguments against schema registry.
-    
+
     Returns:
         (is_valid, tool_name, arguments_dict) tuple
     """
@@ -193,7 +188,7 @@ def extract_integration_fields(
 ) -> List[str]:
     """
     Extract integration field names from tool results that appear in teacher text.
-    
+
     Returns:
         List of field names that were integrated
     """
@@ -224,21 +219,21 @@ def process_sample(
 ) -> Dict[str, Any]:
     """
     Process a single sample: extract targets, add token spans, validate.
-    
+
     Returns:
         Enhanced item dict with process-step targets
     """
     teacher_text = item.get("teacher_text", "")
     metadata = item.get("metadata", {})
     call_sequence = metadata.get("call_sequence", [])
-    
+
     # Normalize text to match format used when computing byte spans
     text_norm = metadata.get("text_norm")
     line_endings = metadata.get("line_endings")
     teacher_text_normalized = normalize_text_for_alignment(
         teacher_text, text_norm=text_norm, line_endings=line_endings
     )
-    
+
     # Determine which buffer spans target (default: teacher)
     spans_target = metadata.get("spans_target", "teacher")
 
@@ -274,11 +269,11 @@ def process_sample(
 
     # Add to metadata, but preserve existing tool_result_fields if present
     existing_tool_result_fields = metadata.get("tool_result_fields")
-    
+
     # For control cases, ensure no integration spans
     expected_behaviour = metadata.get("expected_behaviour", "normal")
     is_control = expected_behaviour in {"no_tool", "decline"}
-    
+
     if is_control:
         # Remove any integration spans that might have been extracted
         targets.pop("integration_spans_bytes", None)
@@ -288,16 +283,16 @@ def process_sample(
         targets.pop("integration_fields", None)
         # Ensure metadata has empty array
         targets["integration_spans_bytes"] = []
-    
+
     metadata.update(targets)
     if existing_tool_result_fields and isinstance(existing_tool_result_fields, dict):
         # Preserve the original tool_result_fields dict from generator
         metadata["tool_result_fields"] = existing_tool_result_fields
-    
+
     # Add spans_target metadata if not present
     if "spans_target" not in metadata:
         metadata["spans_target"] = spans_target
-    
+
     metadata["arg_semantics_valid"] = arg_semantics_valid
 
     # Update item
@@ -307,9 +302,7 @@ def process_sample(
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        description="Extract process-step targets and add token spans"
-    )
+    ap = argparse.ArgumentParser(description="Extract process-step targets and add token spans")
     ap.add_argument("--in", dest="input_file", required=True, help="Input JSONL file")
     ap.add_argument("--out", dest="output_file", required=True, help="Output JSONL file")
     ap.add_argument(
@@ -339,13 +332,13 @@ def main():
             if not line.strip():
                 continue
             item = json.loads(line)
-            
+
             # Check if this is the header line
             if item.get("__header__") is True:
                 dataset_header = item
                 # Preserve header, don't process it
                 continue
-            
+
             processed_item = process_sample(
                 item, tokenizer, reg, add_token_spans=args.add_token_spans
             )
@@ -360,11 +353,8 @@ def main():
         for item in processed:
             f.write(json.dumps(item, ensure_ascii=False, separators=(",", ":")) + "\n")
 
-    print(
-        f"[extract_process_targets] Processed {len(processed)} samples to {args.output_file}"
-    )
+    print(f"[extract_process_targets] Processed {len(processed)} samples to {args.output_file}")
 
 
 if __name__ == "__main__":
     main()
-

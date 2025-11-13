@@ -3,6 +3,7 @@ Unit tests for ANE residency monitoring.
 
 Tests ANE residency measurement and gating for M-series Apple Silicon optimization.
 """
+
 import pytest
 import numpy as np
 import time
@@ -10,6 +11,7 @@ from unittest.mock import Mock, patch
 
 try:
     from coreml.runtime.ane_monitor import ANEResidencyMonitor, measure_model_residency
+
     ANE_MONITOR_AVAILABLE = True
 except ImportError:
     ANE_MONITOR_AVAILABLE = False
@@ -52,8 +54,7 @@ class TestANEResidencyMonitor:
         def inference_fn():
             time.sleep(0.001)
 
-        residency = monitor.measure_residency(
-            inference_fn, num_samples=10, warmup_samples=2)
+        residency = monitor.measure_residency(inference_fn, num_samples=10, warmup_samples=2)
 
         assert "ane_time_pct" in residency
         assert "total_samples" in residency
@@ -69,8 +70,7 @@ class TestANEResidencyMonitor:
             "cpu_time_pct": 0.05,
         }
 
-        passed, message = monitor.check_residency_threshold(
-            residency, min_ane_pct=0.80)
+        passed, message = monitor.check_residency_threshold(residency, min_ane_pct=0.80)
 
         assert passed is True
         assert "meets threshold" in message.lower()
@@ -85,8 +85,7 @@ class TestANEResidencyMonitor:
             "cpu_time_pct": 0.10,
         }
 
-        passed, message = monitor.check_residency_threshold(
-            residency, min_ane_pct=0.80)
+        passed, message = monitor.check_residency_threshold(residency, min_ane_pct=0.80)
 
         assert passed is False
         assert "below threshold" in message.lower()
@@ -98,9 +97,7 @@ class TestANEResidencyMonitor:
         current = {"ane_time_pct": 0.85}
         baseline = {"ane_time_pct": 0.90}
 
-        passed, message = monitor.compare_with_baseline(
-            current, baseline, max_regression_pct=0.10
-        )
+        passed, message = monitor.compare_with_baseline(current, baseline, max_regression_pct=0.10)
 
         # Regression is 5.6% (5% / 90%), which is < 10%
         assert passed is True
@@ -113,9 +110,7 @@ class TestANEResidencyMonitor:
         current = {"ane_time_pct": 0.70}
         baseline = {"ane_time_pct": 0.90}
 
-        passed, message = monitor.compare_with_baseline(
-            current, baseline, max_regression_pct=0.10
-        )
+        passed, message = monitor.compare_with_baseline(current, baseline, max_regression_pct=0.10)
 
         # Regression is 22% (20% / 90%), which is > 10%
         assert passed is False
@@ -129,19 +124,23 @@ class TestANEResidencyMonitor:
 
         assert "error" in info
 
-    @patch('coreml.runtime.ane_monitor.COREML_AVAILABLE', True)
-    @patch('coreml.runtime.ane_monitor.ct')
+    @patch("coreml.runtime.ane_monitor.COREML_AVAILABLE", True)
+    @patch("coreml.runtime.ane_monitor.ct")
     def test_get_model_ops_info_with_model(self, mock_ct):
         """Test getting ops info with model."""
         # Mock CoreML model
         mock_spec = Mock()
         mock_spec.WhichOneof.return_value = "mlProgram"
         mock_spec.mlProgram.functions = {
-            "main": Mock(block=Mock(operations=[
-                Mock(type="matmul"),
-                Mock(type="add"),
-                Mock(type="layernorm"),
-            ]))
+            "main": Mock(
+                block=Mock(
+                    operations=[
+                        Mock(type="matmul"),
+                        Mock(type="add"),
+                        Mock(type="layernorm"),
+                    ]
+                )
+            )
         }
 
         mock_model = Mock()
@@ -151,7 +150,7 @@ class TestANEResidencyMonitor:
 
         monitor = ANEResidencyMonitor(model_mlpackage_path="test.mlpackage")
 
-        with patch('coreml.runtime.ane_monitor.ct', mock_ct):
+        with patch("coreml.runtime.ane_monitor.ct", mock_ct):
             info = monitor.get_model_ops_info()
 
         assert "total_ops" in info

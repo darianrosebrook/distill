@@ -1,4 +1,3 @@
-
 import json
 import subprocess
 import sys
@@ -41,7 +40,7 @@ def softmax(logits):
     out = {}
     i = 0
     for k in logits.keys():
-        out[k] = ex[i]/Z
+        out[k] = ex[i] / Z
         i += 1
     return out
 
@@ -49,9 +48,9 @@ def softmax(logits):
 def apply_calibration(logits, T, bias, priors):
     scaled = {k: (logits[k] / T) + bias.get(k, 0.0) for k in logits.keys()}
     probs = softmax(scaled)
-    smoothed = {k: 0.5*probs[k] + 0.5*priors[k] for k in probs.keys()}
+    smoothed = {k: 0.5 * probs[k] + 0.5 * priors[k] for k in probs.keys()}
     Z = sum(smoothed.values())
-    return {k: smoothed[k]/Z for k in smoothed.keys()}
+    return {k: smoothed[k] / Z for k in smoothed.keys()}
 
 
 def nll(probs, gold_label, eps=1e-9):
@@ -71,8 +70,11 @@ def load_rows(path):
 
 def test_calibration_script_reduces_mean_nll():
     # run calibration script
-    proc = subprocess.run([sys.executable, str(
-        SCRIPT), "--in", str(DATA), "--out", str(OUT)], capture_output=True, text=True)
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "--in", str(DATA), "--out", str(OUT)],
+        capture_output=True,
+        text=True,
+    )
     assert proc.returncode == 0, proc.stderr
 
     payload = json.loads(open(OUT, "r").read())
@@ -85,11 +87,12 @@ def test_calibration_script_reduces_mean_nll():
         logits = raw_overlap_logits(r["evidence"], r["claim"])
         base_probs = softmax(logits)
         base_losses.append(nll(base_probs, r["label"]))
-        cal_probs = apply_calibration(
-            logits, calib["temperature"], calib["bias"], calib["priors"])
+        cal_probs = apply_calibration(logits, calib["temperature"], calib["bias"], calib["priors"])
         cal_losses.append(nll(cal_probs, r["label"]))
 
-    base_mean = sum(base_losses)/len(base_losses)
-    cal_mean = sum(cal_losses)/len(cal_losses)
+    base_mean = sum(base_losses) / len(base_losses)
+    cal_mean = sum(cal_losses) / len(cal_losses)
 
-    assert cal_mean <= base_mean, f"calibrated NLL {cal_mean:.4f} should be <= baseline {base_mean:.4f}"
+    assert cal_mean <= base_mean, (
+        f"calibrated NLL {cal_mean:.4f} should be <= baseline {base_mean:.4f}"
+    )

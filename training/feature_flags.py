@@ -3,6 +3,7 @@ Feature flags and configuration management.
 
 Provides centralized feature flag management with environment variable support.
 """
+
 import os
 from typing import Dict, Any, Optional, Set, List
 from dataclasses import dataclass
@@ -11,6 +12,7 @@ from enum import Enum
 
 class FeatureFlag(Enum):
     """Available feature flags."""
+
     DISTILLATION = "distillation"
     CODE_MODE = "code_mode"
     LATENT_REASONING = "latent_reasoning"
@@ -26,6 +28,7 @@ class FeatureFlag(Enum):
 @dataclass
 class FeatureConfig:
     """Configuration for a feature flag."""
+
     enabled: bool
     env_var: str
     description: str
@@ -123,13 +126,15 @@ class FeatureManager:
             for dep in config.dependencies:
                 if dep not in self.features:
                     raise ValueError(
-                        f"Feature {feature.value} depends on unknown feature {dep.value}")
+                        f"Feature {feature.value} depends on unknown feature {dep.value}"
+                    )
 
             # Check for circular dependencies (basic check)
             for dep in config.dependencies:
                 if feature in self.features[dep].dependencies:
                     raise ValueError(
-                        f"Circular dependency detected between {feature.value} and {dep.value}")
+                        f"Circular dependency detected between {feature.value} and {dep.value}"
+                    )
 
     def load_from_environment(self) -> None:
         """Load feature flags from environment variables."""
@@ -169,13 +174,13 @@ class FeatureManager:
         for dep in self.features[feature].dependencies:
             if not self.features[dep].enabled:
                 raise ValueError(
-                    f"Cannot enable {feature.value}: dependency {dep.value} not enabled")
+                    f"Cannot enable {feature.value}: dependency {dep.value} not enabled"
+                )
 
         # Check conflicts
         for conflict in self.features[feature].conflicts:
             if self.features[conflict].enabled:
-                raise ValueError(
-                    f"Cannot enable {feature.value}: conflicts with {conflict.value}")
+                raise ValueError(f"Cannot enable {feature.value}: conflicts with {conflict.value}")
 
         self.features[feature].enabled = True
 
@@ -192,7 +197,8 @@ class FeatureManager:
             for other_feature, config in self.features.items():
                 if feature in config.dependencies:
                     print(
-                        f"WARNING: Disabling {other_feature.value} due to dependency on {feature.value}")
+                        f"WARNING: Disabling {other_feature.value} due to dependency on {feature.value}"
+                    )
                     config.enabled = False
 
     def is_enabled(self, feature: FeatureFlag) -> bool:
@@ -244,14 +250,12 @@ class FeatureManager:
                 # Check dependencies
                 for dep in config.dependencies:
                     if not self.features[dep].enabled:
-                        errors.append(
-                            f"Feature {feature.value} requires {dep.value} to be enabled")
+                        errors.append(f"Feature {feature.value} requires {dep.value} to be enabled")
 
                 # Check conflicts
                 for conflict in config.conflicts:
                     if self.features[conflict].enabled:
-                        errors.append(
-                            f"Feature {feature.value} conflicts with {conflict.value}")
+                        errors.append(f"Feature {feature.value} conflicts with {conflict.value}")
 
         return errors
 

@@ -3,6 +3,7 @@ Unit tests for batch policy enforcement.
 
 Tests automatic workload-aware batch size selection for M-series Apple Silicon optimization.
 """
+
 import pytest
 
 try:
@@ -11,6 +12,7 @@ try:
         BatchPolicyConfig,
         create_batch_policy,
     )
+
     BATCH_POLICY_AVAILABLE = True
 except ImportError:
     BATCH_POLICY_AVAILABLE = False
@@ -64,7 +66,7 @@ class TestBatchPolicy:
                     "interactive_default": 1,
                     "offline_allowed": [2, 4],
                 }
-            }
+            },
         }
 
         policy = BatchPolicy(hardware_profile=hardware_profile)
@@ -93,10 +95,7 @@ class TestBatchPolicy:
         """Test forced batch size override."""
         policy = BatchPolicy()
 
-        batch_size = policy.select_batch_size(
-            workload_type="interactive",
-            force_batch_size=4
-        )
+        batch_size = policy.select_batch_size(workload_type="interactive", force_batch_size=4)
 
         assert batch_size == 4
 
@@ -136,13 +135,11 @@ class TestBatchPolicy:
         """Test batch size validation for interactive workload."""
         policy = BatchPolicy()
 
-        allowed, reason = policy.should_use_batch(
-            1, workload_type="interactive")
+        allowed, reason = policy.should_use_batch(1, workload_type="interactive")
         assert allowed is True
         assert "interactive" in reason.lower()
 
-        allowed, reason = policy.should_use_batch(
-            2, workload_type="interactive")
+        allowed, reason = policy.should_use_batch(2, workload_type="interactive")
         assert allowed is False
         assert "must use batch=1" in reason.lower()
 
@@ -194,7 +191,7 @@ class TestCreateBatchPolicy:
                     "interactive_default": 1,
                     "offline_allowed": [2, 4],
                 }
-            }
+            },
         }
 
         policy = create_batch_policy(hardware_profile=hardware_profile)

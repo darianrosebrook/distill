@@ -29,25 +29,20 @@ class RuntimeConfig:
         # Core features
         latent_mode_enabled: bool = False,
         halt_head_enabled: bool = False,
-
         # CAWS budget settings
         caws_tier: CAWSBudgetTier = CAWSBudgetTier.TIER_2,
         max_refinement_loops: int = 5,
-
         # Halt head parameters
         judge_score_threshold: float = 0.8,
         halt_probability_threshold: float = 0.7,
-
         # Latent mode parameters
         curriculum_probability: float = 1.0,
         curriculum_slots: int = 1,
         max_latent_spans: int = 10,
         max_latent_length: int = 100,
-
         # Generation parameters
         temperature: float = 1.0,
         max_new_tokens: int = 256,
-
         # Efficiency tracking
         enable_efficiency_tracking: bool = True,
     ):
@@ -66,7 +61,7 @@ class RuntimeConfig:
         self.enable_efficiency_tracking = enable_efficiency_tracking
 
     @classmethod
-    def from_env(cls) -> 'RuntimeConfig':
+    def from_env(cls) -> "RuntimeConfig":
         """Create config from environment variables."""
         return cls(
             latent_mode_enabled=os.getenv("LATENT_MODE", "0") == "1",
@@ -85,9 +80,9 @@ class RuntimeConfig:
         )
 
     @classmethod
-    def from_file(cls, config_path: Union[str, Path]) -> 'RuntimeConfig':
+    def from_file(cls, config_path: Union[str, Path]) -> "RuntimeConfig":
         """Load config from JSON file."""
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             data = json.load(f)
 
         return cls(
@@ -136,7 +131,7 @@ class RuntimeConfig:
 
     def save(self, config_path: Union[str, Path]) -> None:
         """Save config to JSON file."""
-        with open(config_path, 'w') as f:
+        with open(config_path, "w") as f:
             json.dump(self.to_dict(), f, indent=2)
 
     def is_feature_enabled(self, feature: str) -> bool:
@@ -163,7 +158,9 @@ class RuntimeConfig:
         if self.latent_mode_enabled:
             features.append(f"latent(c={self.curriculum_slots}, p={self.curriculum_probability})")
         if self.halt_head_enabled:
-            features.append(f"halt(τ={self.judge_score_threshold}, p={self.halt_probability_threshold})")
+            features.append(
+                f"halt(τ={self.judge_score_threshold}, p={self.halt_probability_threshold})"
+            )
 
         feature_str = ", ".join(features) if features else "standard"
         return f"RuntimeConfig({feature_str}, tier={self.caws_tier.value}, loops≤{self.max_refinement_loops})"

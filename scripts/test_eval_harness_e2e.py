@@ -6,6 +6,7 @@ Tests the complete pipeline:
 3. Test sharding determinism (if model available)
 4. Validate fingerprints
 """
+
 from __future__ import annotations
 
 import argparse
@@ -30,7 +31,7 @@ def test_broker_smoke():
     print("\n[E2E] Testing broker fixture hit rate...")
     cmd = [sys.executable, "-m", "pytest", "tests/ci/test_broker_fixtures_hit_rate.py", "-v"]
     returncode, stdout, stderr = run_command(cmd)
-    
+
     if returncode == 0:
         print("✅ Broker smoke test passed")
         return True
@@ -44,7 +45,7 @@ def test_sharding_determinism():
     print("\n[E2E] Testing sharding determinism logic...")
     cmd = [sys.executable, "-m", "pytest", "tests/ci/test_sharding_determinism.py", "-v"]
     returncode, stdout, stderr = run_command(cmd)
-    
+
     if returncode == 0:
         print("✅ Sharding determinism tests passed")
         return True
@@ -58,7 +59,7 @@ def test_eval_cli_help():
     print("\n[E2E] Testing CLI imports and help...")
     cmd = [sys.executable, "-m", "eval.cli", "--help"]
     returncode, stdout, stderr = run_command(cmd)
-    
+
     if returncode == 0 and "Tool-Integration Evaluation Harness" in stdout:
         print("✅ CLI imports and help work")
         return True
@@ -72,7 +73,7 @@ def test_validation_script_help():
     print("\n[E2E] Testing validation script imports and help...")
     cmd = [sys.executable, "-m", "scripts.validate_sharding_determinism", "--help"]
     returncode, stdout, stderr = run_command(cmd)
-    
+
     if returncode == 0 and "validate sharding determinism" in stdout.lower():
         print("✅ Validation script imports and help work")
         return True
@@ -86,22 +87,22 @@ def test_fixture_loading():
     print("\n[E2E] Testing fixture loading...")
     try:
         from eval.tool_broker.broker import ToolBroker
-        
+
         fixtures_dir = Path("eval/tool_broker/fixtures")
         if not fixtures_dir.exists():
             print(f"❌ Fixtures directory not found: {fixtures_dir}")
             return False
-        
+
         broker = ToolBroker(str(fixtures_dir))
-        
+
         # Test a lookup
         result = broker.call("web.search", {"q": "test query", "top_k": 3})
-        
+
         if result.get("error") == "fixture_miss":
             print("⚠️  Fixture miss (expected for unknown query)")
         else:
             print("✅ Fixtures loaded successfully")
-        
+
         return True
     except Exception as e:
         print(f"❌ Fixture loading failed: {e}")
@@ -113,12 +114,12 @@ def test_prompt_wrapper_loading():
     print("\n[E2E] Testing prompt wrapper loading...")
     try:
         from eval.runners.openai_http import OpenAIHTTPRunner
-        
+
         wrapper_path = Path("eval/prompt_wrappers/minimal_system_user.j2")
         if not wrapper_path.exists():
             print(f"⚠️  Example wrapper not found: {wrapper_path}")
             return True  # Not a failure, just missing example
-        
+
         # Try to create runner with wrapper (won't actually run without model)
         try:
             OpenAIHTTPRunner(
@@ -140,53 +141,57 @@ def test_prompt_wrapper_loading():
 
 def main() -> int:
     """Run end-to-end integration tests."""
-    parser = argparse.ArgumentParser(description="End-to-end integration test for evaluation harness")
+    parser = argparse.ArgumentParser(
+        description="End-to-end integration test for evaluation harness"
+    )
     parser.add_argument("--skip-broker", action="store_true", help="Skip broker smoke test")
-    parser.add_argument("--skip-sharding", action="store_true", help="Skip sharding determinism test")
+    parser.add_argument(
+        "--skip-sharding", action="store_true", help="Skip sharding determinism test"
+    )
     parser.add_argument("--skip-fixtures", action="store_true", help="Skip fixture loading test")
     args = parser.parse_args()
-    
+
     print("=" * 70)
     print("Evaluation Harness End-to-End Integration Test")
     print("=" * 70)
-    
+
     results = []
-    
+
     # Test 1: CLI imports
     results.append(("CLI Imports", test_eval_cli_help()))
-    
+
     # Test 2: Validation script imports
     results.append(("Validation Script", test_validation_script_help()))
-    
+
     # Test 3: Fixture loading
     if not args.skip_fixtures:
         results.append(("Fixture Loading", test_fixture_loading()))
-    
+
     # Test 4: Prompt wrapper loading
     results.append(("Prompt Wrapper Loading", test_prompt_wrapper_loading()))
-    
+
     # Test 5: Broker smoke test
     if not args.skip_broker:
         results.append(("Broker Smoke Test", test_broker_smoke()))
-    
+
     # Test 6: Sharding determinism logic
     if not args.skip_sharding:
         results.append(("Sharding Determinism Logic", test_sharding_determinism()))
-    
+
     # Summary
     print("\n" + "=" * 70)
     print("Test Summary")
     print("=" * 70)
-    
+
     passed = sum(1 for _, result in results if result)
     total = len(results)
-    
+
     for name, result in results:
         status = "✅ PASS" if result else "❌ FAIL"
         print(f"{status}: {name}")
-    
+
     print(f"\nTotal: {passed}/{total} tests passed")
-    
+
     if passed == total:
         print("\n🎉 All end-to-end integration tests passed!")
         return 0
@@ -197,4 +202,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

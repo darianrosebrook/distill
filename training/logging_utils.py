@@ -3,6 +3,7 @@ Structured logging utilities for training and inference.
 
 Provides consistent logging format, levels, and structured data output.
 """
+
 import logging
 import sys
 from pathlib import Path
@@ -88,13 +89,31 @@ class StructuredFormatter(logging.Formatter):
         }
 
         # Add any extra fields from the record
-        if hasattr(record, '__dict__'):
+        if hasattr(record, "__dict__"):
             for key, value in record.__dict__.items():
-                if key not in ['name', 'msg', 'args', 'levelname', 'levelno',
-                               'pathname', 'filename', 'module', 'exc_info',
-                               'exc_text', 'stack_info', 'lineno', 'funcName',
-                               'created', 'msecs', 'relativeCreated', 'thread',
-                               'threadName', 'processName', 'process', 'message']:
+                if key not in [
+                    "name",
+                    "msg",
+                    "args",
+                    "levelname",
+                    "levelno",
+                    "pathname",
+                    "filename",
+                    "module",
+                    "exc_info",
+                    "exc_text",
+                    "stack_info",
+                    "lineno",
+                    "funcName",
+                    "created",
+                    "msecs",
+                    "relativeCreated",
+                    "thread",
+                    "threadName",
+                    "processName",
+                    "process",
+                    "message",
+                ]:
                     structured_data[key] = value
 
         return json.dumps(structured_data, default=str)
@@ -104,8 +123,9 @@ class StructuredFormatter(logging.Formatter):
 training_logger = StructuredLogger("training")
 
 
-def setup_training_logging(log_dir: Optional[Path] = None,
-                           level: int = logging.INFO) -> StructuredLogger:
+def setup_training_logging(
+    log_dir: Optional[Path] = None, level: int = logging.INFO
+) -> StructuredLogger:
     """Setup training logging with optional file output.
 
     Args:
@@ -126,9 +146,13 @@ def setup_training_logging(log_dir: Optional[Path] = None,
     return training_logger
 
 
-def log_training_step(step: int, loss: float, lr: float,
-                      tokens_per_sec: Optional[float] = None,
-                      gpu_memory_mb: Optional[float] = None) -> None:
+def log_training_step(
+    step: int,
+    loss: float,
+    lr: float,
+    tokens_per_sec: Optional[float] = None,
+    gpu_memory_mb: Optional[float] = None,
+) -> None:
     """Log training step metrics.
 
     Args:
@@ -155,15 +179,10 @@ def log_validation_metrics(step: int, metrics: Dict[str, Any]) -> None:
         step: Current training step
         metrics: Validation metrics dictionary
     """
-    training_logger.info(
-        "Validation completed",
-        step=step,
-        **metrics
-    )
+    training_logger.info("Validation completed", step=step, **metrics)
 
 
-def log_checkpoint_saved(step: int, checkpoint_path: Path,
-                         loss: float) -> None:
+def log_checkpoint_saved(step: int, checkpoint_path: Path, loss: float) -> None:
     """Log checkpoint saving.
 
     Args:
@@ -179,8 +198,9 @@ def log_checkpoint_saved(step: int, checkpoint_path: Path,
     )
 
 
-def log_error(message: str, error: Optional[Exception] = None,
-              step: Optional[int] = None, **kwargs) -> None:
+def log_error(
+    message: str, error: Optional[Exception] = None, step: Optional[int] = None, **kwargs
+) -> None:
     """Log error with context.
 
     Args:
@@ -193,7 +213,7 @@ def log_error(message: str, error: Optional[Exception] = None,
         "error_type": type(error).__name__ if error else None,
         "error_message": str(error) if error else None,
         "step": step,
-        **kwargs
+        **kwargs,
     }
 
     training_logger.error(message, **error_context)

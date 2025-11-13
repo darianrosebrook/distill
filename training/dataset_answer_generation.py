@@ -14,6 +14,7 @@ Loads answer generation JSONL format:
     }
 }
 """
+
 from typing import Dict, Any, List
 from pathlib import Path
 import json
@@ -52,15 +53,14 @@ class AnswerGenerationDataset(Dataset):
 
         # Load examples
         self.examples = []
-        with open(self.data_path, 'r', encoding='utf-8') as f:
+        with open(self.data_path, "r", encoding="utf-8") as f:
             for line in f:
                 if not line.strip():
                     continue
                 example = json.loads(line)
                 self.examples.append(example)
 
-        print(
-            f"[AnswerGenerationDataset] Loaded {len(self.examples)} examples from {data_path}")
+        print(f"[AnswerGenerationDataset] Loaded {len(self.examples)} examples from {data_path}")
 
     def __len__(self) -> int:
         return len(self.examples)
@@ -101,7 +101,9 @@ class AnswerGenerationDataset(Dataset):
         # Format tool result (if present)
         tool_result_text = ""
         if tool_result:
-            tool_result_text = f"\nTool result: {json.dumps(tool_result, ensure_ascii=False, indent=2)}\n"
+            tool_result_text = (
+                f"\nTool result: {json.dumps(tool_result, ensure_ascii=False, indent=2)}\n"
+            )
 
         # Build full prompt
         prompt = f"{system}\n\n{tools_text}\n\n{history_text}{tool_result_text}\n\nFinal answer:"

@@ -16,6 +16,7 @@ import json
 @dataclass
 class CAWSContext:
     """CAWS context structure for prompt augmentation"""
+
     spec_id: str
     title: str
     risk_tier: int
@@ -55,18 +56,18 @@ class WorkerPromptTemplate:
                 caws_section = f"CAWS: {caws_compact}\n"
             else:
                 # Legacy verbose format
-                acceptance_text = "\n".join([
-                    f"- {c}" for c in (acceptance_criteria or caws_context.acceptance_summary)
-                ])
+                acceptance_text = "\n".join(
+                    [f"- {c}" for c in (acceptance_criteria or caws_context.acceptance_summary)]
+                )
                 caws_section = f"""
 CAWS CONTEXT:
 - Spec ID: {caws_context.spec_id}
 - Title: {caws_context.title}
 - Risk Tier: {caws_context.risk_tier}
 - Mode: {caws_context.mode}
-- Budget: {caws_context.budget.get('max_files', 'N/A')} files, {caws_context.budget.get('max_loc', 'N/A')} LOC
-- Scope In: {', '.join(caws_context.scope.get('in', [])[:5])}
-- Scope Out: {', '.join(caws_context.scope.get('out', [])[:5])}
+- Budget: {caws_context.budget.get("max_files", "N/A")} files, {caws_context.budget.get("max_loc", "N/A")} LOC
+- Scope In: {", ".join(caws_context.scope.get("in", [])[:5])}
+- Scope Out: {", ".join(caws_context.scope.get("out", [])[:5])}
 
 ACCEPTANCE CRITERIA:
 {acceptance_text}
@@ -77,10 +78,12 @@ INVARIANTS:
 
         tool_section = ""
         if tool_registry:
-            tool_list = "\n".join([
-                f"- {tool.get('name', 'Unknown')}: {tool.get('description', 'No description')}"
-                for tool in tool_registry[:10]  # Limit to first 10 tools
-            ])
+            tool_list = "\n".join(
+                [
+                    f"- {tool.get('name', 'Unknown')}: {tool.get('description', 'No description')}"
+                    for tool in tool_registry[:10]  # Limit to first 10 tools
+                ]
+            )
             tool_section = f"""
 AVAILABLE TOOLS:
 {tool_list}
@@ -96,9 +99,9 @@ Use tool-use JSON format when invoking tools:
         if context_metrics:
             metrics_section = f"""
 CONTEXT METRICS:
-- Task Complexity: {context_metrics.get('task_complexity', 0.5):.2f}
-- Available CPU: {context_metrics.get('cpu_available', 50.0):.1f}%
-- Available Memory: {context_metrics.get('memory_available', 50.0):.1f}%
+- Task Complexity: {context_metrics.get("task_complexity", 0.5):.2f}
+- Available CPU: {context_metrics.get("cpu_available", 50.0):.1f}%
+- Available Memory: {context_metrics.get("memory_available", 50.0):.1f}%
 """
 
         prompt = f"""You are an autonomous coding agent. Plan and execute the following task:
@@ -141,10 +144,12 @@ VERIFICATION:
 
         Source: agent-agency/iterations/v3/agent-orchestration/src/planning/caws_tool_registry.rs
         """
-        tool_list = "\n".join([
-            f"- {tool.get('name', 'Unknown')} ({tool.get('tool_id', 'unknown')}): {tool.get('description', 'No description')}"
-            for tool in available_tools
-        ])
+        tool_list = "\n".join(
+            [
+                f"- {tool.get('name', 'Unknown')} ({tool.get('tool_id', 'unknown')}): {tool.get('description', 'No description')}"
+                for tool in available_tools
+            ]
+        )
 
         caws_section = ""
         if caws_context:
@@ -157,8 +162,8 @@ VERIFICATION:
                 caws_section = f"""
 CAWS COMPLIANCE:
 - Risk Tier: {caws_context.risk_tier}
-- Budget: {caws_context.budget.get('max_files', 'N/A')} files, {caws_context.budget.get('max_loc', 'N/A')} LOC
-- Scope: {', '.join(caws_context.scope.get('in', [])[:3])}
+- Budget: {caws_context.budget.get("max_files", "N/A")} files, {caws_context.budget.get("max_loc", "N/A")} LOC
+- Scope: {", ".join(caws_context.scope.get("in", [])[:3])}
 
 """
 
@@ -202,35 +207,37 @@ class JudgePromptTemplate:
 
         Source: agent-agency/iterations/v3/agent-orchestration/src/planning/caws_debate_scorer.rs:200-296
         """
-        solutions_text = "\n\n".join([
-            f"""SOLUTION {i+1} (Worker {output.get('worker_id', 'unknown')}):
-{output.get('content', 'No content')}
+        solutions_text = "\n\n".join(
+            [
+                f"""SOLUTION {i + 1} (Worker {output.get("worker_id", "unknown")}):
+{output.get("content", "No content")}
 
-Evidence Completeness: {output.get('evidence_completeness', 0.0):.2f}
-Budget Adherence: {output.get('budget_adherence', 0.0):.2f}
-Gate Integrity: {output.get('gate_integrity', 0.0):.2f}
-Provenance Clarity: {output.get('provenance_clarity', 0.0):.2f}
+Evidence Completeness: {output.get("evidence_completeness", 0.0):.2f}
+Budget Adherence: {output.get("budget_adherence", 0.0):.2f}
+Gate Integrity: {output.get("gate_integrity", 0.0):.2f}
+Provenance Clarity: {output.get("provenance_clarity", 0.0):.2f}
 """
-            for i, output in enumerate(worker_outputs)
-        ])
+                for i, output in enumerate(worker_outputs)
+            ]
+        )
 
         claim_section = ""
         if claim_results:
             claim_section = f"""
 CLAIM VERIFICATION RESULTS:
-- Total Claims: {claim_results.get('total_claims', 0)}
-- Verified Claims: {claim_results.get('verified_claims', 0)}
-- Verification Confidence: {claim_results.get('verification_confidence', 0.0):.2f}
-- Evidence Count: {claim_results.get('evidence_count', 0)}
+- Total Claims: {claim_results.get("total_claims", 0)}
+- Verified Claims: {claim_results.get("verified_claims", 0)}
+- Verification Confidence: {claim_results.get("verification_confidence", 0.0):.2f}
+- Evidence Count: {claim_results.get("evidence_count", 0)}
 """
 
         gate_section = ""
         if quality_gate_result:
             gate_section = f"""
 QUALITY GATE RESULTS:
-- Total Violations: {quality_gate_result.get('total_violations', 0)}
-- Waived Violations: {quality_gate_result.get('waived_violations', 0)}
-- Blocking Violations: {quality_gate_result.get('blocking_violations', 0)}
+- Total Violations: {quality_gate_result.get("total_violations", 0)}
+- Waived Violations: {quality_gate_result.get("waived_violations", 0)}
+- Blocking Violations: {quality_gate_result.get("blocking_violations", 0)}
 """
 
         mode_section = ""
@@ -241,7 +248,8 @@ QUALITY GATE RESULTS:
                 "Enterprise": (0.5, 0.25, 0.2, 0.05),
             }
             e_weight, b_weight, g_weight, p_weight = weights.get(
-                complexity_mode, (0.4, 0.3, 0.2, 0.1))
+                complexity_mode, (0.4, 0.3, 0.2, 0.1)
+            )
             mode_section = f"""
 COMPLEXITY MODE: {complexity_mode}
 SCORING WEIGHTS:
@@ -254,10 +262,10 @@ SCORING WEIGHTS:
         prompt = f"""You are a CAWS constitutional arbiter judge. Evaluate competing worker solutions using CAWS criteria.
 
 WORKING SPECIFICATION:
-- ID: {working_spec.get('id', 'unknown')}
-- Title: {working_spec.get('title', 'unknown')}
-- Risk Tier: {working_spec.get('risk_tier', 2)}
-- Mode: {working_spec.get('mode', 'feature')}
+- ID: {working_spec.get("id", "unknown")}
+- Title: {working_spec.get("title", "unknown")}
+- Risk Tier: {working_spec.get("risk_tier", 2)}
+- Mode: {working_spec.get("mode", "feature")}
 {mode_section}{claim_section}{gate_section}
 COMPETING SOLUTIONS:
 {solutions_text}
@@ -298,9 +306,9 @@ NOTES: <summary of evaluation>
         prompt = f"""Extract verifiable claims from the following worker output and verify them against the working specification.
 
 WORKING SPECIFICATION:
-- ID: {working_spec.get('id', 'unknown')}
-- Title: {working_spec.get('title', 'unknown')}
-- Risk Tier: {working_spec.get('risk_tier', 2)}
+- ID: {working_spec.get("id", "unknown")}
+- Title: {working_spec.get("title", "unknown")}
+- Risk Tier: {working_spec.get("risk_tier", 2)}
 
 WORKER OUTPUT:
 {worker_output}
@@ -392,8 +400,8 @@ class PlanningPromptTemplate:
         if current_plan:
             plan_section = f"""
 CURRENT PLAN:
-- Milestones: {current_plan.get('milestones', [])}
-- Dependencies: {current_plan.get('dependencies', [])}
+- Milestones: {current_plan.get("milestones", [])}
+- Dependencies: {current_plan.get("dependencies", [])}
 """
 
         prompt = f"""You are an AI planning assistant. Analyze this task and suggest optimal milestone decomposition.
@@ -425,11 +433,13 @@ Provide your analysis and milestone suggestions in a structured format.
 
         Source: agent-agency/iterations/v3/agent-orchestration/src/planning/plan_generator.rs:810-860
         """
-        acceptance_criteria = working_spec.get('acceptance_criteria', [])
-        acceptance_text = "\n".join([
-            f"- {c.get('id', 'unknown')}: {c.get('given', '')} → {c.get('when', '')} → {c.get('then', '')}"
-            for c in acceptance_criteria
-        ])
+        acceptance_criteria = working_spec.get("acceptance_criteria", [])
+        acceptance_text = "\n".join(
+            [
+                f"- {c.get('id', 'unknown')}: {c.get('given', '')} → {c.get('when', '')} → {c.get('then', '')}"
+                for c in acceptance_criteria
+            ]
+        )
 
         prompt = f"""You are an AI planning assistant. Suggest optimal milestone breakdown for this task.
 
@@ -437,7 +447,7 @@ TASK: {task_id}
 DESCRIPTION: {description}
 
 COMPLEXITY: {complexity}
-RISK TIER: {working_spec.get('risk_tier', 2)}
+RISK TIER: {working_spec.get("risk_tier", 2)}
 
 ACCEPTANCE CRITERIA:
 {acceptance_text}
@@ -472,12 +482,12 @@ def format_caws_compact(working_spec: Dict[str, Any]) -> str:
     # Extract fields from CAWSContext or dict
     if isinstance(working_spec, CAWSContext):
         tier = working_spec.risk_tier
-        max_files = working_spec.budget.get('max_files', 25)
-        max_loc = working_spec.budget.get('max_loc', 1000)
-        cov = working_spec.quality.get('coverage_threshold', 80)
-        mut = working_spec.quality.get('mutation_threshold', 50)
-        scope_in = working_spec.scope.get('in', [])[:5]  # Limit to 5
-        scope_out = working_spec.scope.get('out', [])[:5]
+        max_files = working_spec.budget.get("max_files", 25)
+        max_loc = working_spec.budget.get("max_loc", 1000)
+        cov = working_spec.quality.get("coverage_threshold", 80)
+        mut = working_spec.quality.get("mutation_threshold", 50)
+        scope_in = working_spec.scope.get("in", [])[:5]  # Limit to 5
+        scope_out = working_spec.scope.get("out", [])[:5]
     else:
         tier = working_spec.get("risk_tier", 2)
         budget = working_spec.get("budget", {})
@@ -502,7 +512,7 @@ def format_caws_compact(working_spec: Dict[str, Any]) -> str:
         }
     }
     # Use compact JSON (no spaces)
-    return json.dumps(caws_dict, separators=(',', ':'))
+    return json.dumps(caws_dict, separators=(",", ":"))
 
 
 def format_caws_context_for_prompt(caws_context: CAWSContext, compact: bool = False) -> str:
@@ -526,10 +536,10 @@ CAWS Working Specification:
 - Title: {caws_context.title}
 - Risk Tier: {caws_context.risk_tier}
 - Mode: {caws_context.mode}
-- Budget: {caws_context.budget.get('max_files', 'N/A')} files, {caws_context.budget.get('max_loc', 'N/A')} LOC
-- Scope In: {', '.join(caws_context.scope.get('in', [])[:5])}
-- Scope Out: {', '.join(caws_context.scope.get('out', [])[:5])}
-- Quality Thresholds: Coverage={caws_context.quality.get('coverage_threshold', 'N/A')}%, Mutation={caws_context.quality.get('mutation_threshold', 'N/A')}%
+- Budget: {caws_context.budget.get("max_files", "N/A")} files, {caws_context.budget.get("max_loc", "N/A")} LOC
+- Scope In: {", ".join(caws_context.scope.get("in", [])[:5])}
+- Scope Out: {", ".join(caws_context.scope.get("out", [])[:5])}
+- Quality Thresholds: Coverage={caws_context.quality.get("coverage_threshold", "N/A")}%, Mutation={caws_context.quality.get("mutation_threshold", "N/A")}%
 """
 
 
@@ -542,21 +552,15 @@ if __name__ == "__main__":
         risk_tier=1,
         mode="feature",
         budget={"max_files": 25, "max_loc": 1000},
-        scope={
-            "in": ["src/auth/", "tests/auth/"],
-            "out": ["node_modules/", "dist/"]
-        },
-        quality={
-            "coverage_threshold": 80,
-            "mutation_threshold": 60
-        },
+        scope={"in": ["src/auth/", "tests/auth/"], "out": ["node_modules/", "dist/"]},
+        quality={"coverage_threshold": 80, "mutation_threshold": 60},
         acceptance_summary=[
             "A1: User submits valid credentials → Authentication succeeds → User is logged in"
         ],
         invariants=[
             "Authentication state never stored in localStorage",
-            "All tokens expire within 24h"
-        ]
+            "All tokens expire within 24h",
+        ],
     )
 
     # Test worker prompt
@@ -564,14 +568,12 @@ if __name__ == "__main__":
         task_id="TASK-001",
         description="Implement user authentication flow",
         caws_context=caws_ctx,
-        acceptance_criteria=[
-            "A1: User submits valid credentials → Authentication succeeds"],
-        context_metrics={"task_complexity": 0.7,
-                         "cpu_available": 60.0, "memory_available": 70.0}
+        acceptance_criteria=["A1: User submits valid credentials → Authentication succeeds"],
+        context_metrics={"task_complexity": 0.7, "cpu_available": 60.0, "memory_available": 70.0},
     )
     print("WORKER PROMPT:")
     print(worker_prompt)
-    print("\n" + "="*80 + "\n")
+    print("\n" + "=" * 80 + "\n")
 
     # Test judge prompt
     judge_prompt = JudgePromptTemplate.caws_debate_scoring(
@@ -582,12 +584,11 @@ if __name__ == "__main__":
                 "evidence_completeness": 0.8,
                 "budget_adherence": 0.9,
                 "gate_integrity": 0.7,
-                "provenance_clarity": 0.6
+                "provenance_clarity": 0.6,
             }
         ],
-        working_spec={"id": "FEAT-001", "title": "User Auth",
-                      "risk_tier": 1, "mode": "feature"},
-        complexity_mode="Standard"
+        working_spec={"id": "FEAT-001", "title": "User Auth", "risk_tier": 1, "mode": "feature"},
+        complexity_mode="Standard",
     )
     print("JUDGE PROMPT:")
     print(judge_prompt)

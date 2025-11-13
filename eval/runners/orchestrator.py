@@ -1,13 +1,19 @@
 """InferenceOrchestrator-based runner for evaluation with advanced features."""
+
 from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from eval.runners.base import Runner
 
 try:
-    from runtime.orchestration.inference import InferenceOrchestrator, InferenceConfig, create_inference_orchestrator_from_checkpoint
+    from runtime.orchestration.inference import (
+        InferenceOrchestrator,
+        InferenceConfig,
+        create_inference_orchestrator_from_checkpoint,
+    )
     from runtime.orchestration.refine import CAWSBudgetTier
     from runtime.config import RuntimeConfig
+
     ORCHESTRATOR_AVAILABLE = True
 except ImportError:
     ORCHESTRATOR_AVAILABLE = False
@@ -54,18 +60,18 @@ class OrchestratorRunner(Runner):
             if not ORCHESTRATOR_AVAILABLE:
                 raise ImportError(
                     "runtime.orchestration.inference not available. "
-                    "Install required dependencies or use HFLocalRunner instead.")
+                    "Install required dependencies or use HFLocalRunner instead."
+                )
 
             # Load tokenizer
             try:
                 from transformers import AutoTokenizer
-                self._tokenizer = AutoTokenizer.from_pretrained(
-                    self.tokenizer_path, use_fast=True)
+
+                self._tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path, use_fast=True)
                 if self._tokenizer.pad_token is None:
                     self._tokenizer.pad_token = self._tokenizer.eos_token
             except ImportError:
-                raise ImportError(
-                    "transformers required for OrchestratorRunner")
+                raise ImportError("transformers required for OrchestratorRunner")
 
             # Create inference config from runtime config or defaults
             if self.runtime_config:

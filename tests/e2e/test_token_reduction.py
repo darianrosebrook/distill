@@ -118,11 +118,13 @@ class TestTokenReductionE2E:
         """Test that latent mode achieves ≥25% token reduction at equal accuracy."""
         # Get baseline metrics
         baseline_metrics = self.test_baseline_direct_cot(
-            mock_model, mock_tokenizer, long_chain_task)
+            mock_model, mock_tokenizer, long_chain_task
+        )
 
         # Get latent metrics
         latent_metrics = self.test_latent_mode_token_reduction(
-            mock_model, mock_tokenizer, long_chain_task)
+            mock_model, mock_tokenizer, long_chain_task
+        )
 
         # Calculate token reduction
         token_reduction = calculate_token_reduction(
@@ -175,5 +177,4 @@ class TestTokenReductionE2E:
         assert "accuracy_vs_time" in curves
 
         # Verify curves show improvement
-        assert len(curves["accuracy_vs_tokens"]
-                   ["accuracy"]) == len(current_metrics)
+        assert len(curves["accuracy_vs_tokens"]["accuracy"]) == len(current_metrics)

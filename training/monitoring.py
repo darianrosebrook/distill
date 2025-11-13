@@ -3,6 +3,7 @@ Monitoring and observability system for training.
 
 Provides metrics collection, health checks, and alerting capabilities.
 """
+
 import time
 import psutil
 import threading
@@ -17,6 +18,7 @@ import torch
 @dataclass
 class MetricPoint:
     """Single metric measurement."""
+
     timestamp: float
     name: str
     value: float
@@ -26,6 +28,7 @@ class MetricPoint:
 @dataclass
 class HealthStatus:
     """System health status."""
+
     timestamp: float
     component: str
     status: str  # "healthy", "warning", "error"
@@ -54,23 +57,21 @@ class MetricsCollector:
             value: Metric value
             **tags: Additional tags for the metric
         """
-        point = MetricPoint(
-            timestamp=time.time(),
-            name=name,
-            value=value,
-            tags=tags
-        )
+        point = MetricPoint(timestamp=time.time(), name=name, value=value, tags=tags)
 
         with self.lock:
             self.metrics.append(point)
 
             # Maintain max size
             if len(self.metrics) > self.max_points:
-                self.metrics = self.metrics[-self.max_points:]
+                self.metrics = self.metrics[-self.max_points :]
 
-    def get_metrics(self, name: Optional[str] = None,
-                    start_time: Optional[float] = None,
-                    end_time: Optional[float] = None) -> List[MetricPoint]:
+    def get_metrics(
+        self,
+        name: Optional[str] = None,
+        start_time: Optional[float] = None,
+        end_time: Optional[float] = None,
+    ) -> List[MetricPoint]:
         """Get metrics with optional filtering.
 
         Args:
@@ -137,11 +138,11 @@ class MetricsCollector:
                         "tags": m.tags,
                     }
                     for m in self.metrics
-                ]
+                ],
             }
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             json.dump(data, f, indent=2, default=str)
 
 
@@ -187,7 +188,7 @@ class HealthChecker:
                         "health_check",
                         1 if status.status == "healthy" else 0,
                         check=name,
-                        status=status.status
+                        status=status.status,
                     )
 
             except Exception as e:
@@ -197,7 +198,7 @@ class HealthChecker:
                     component=name,
                     status="error",
                     message=f"Health check failed: {e}",
-                    details={"error": str(e)}
+                    details={"error": str(e)},
                 )
                 results.append(error_status)
 
@@ -247,13 +248,13 @@ class SystemHealthChecks:
                 "usage_percent": usage_percent,
                 "available_mb": memory.available / 1024 / 1024,
                 "total_mb": memory.total / 1024 / 1024,
-            }
+            },
         )
 
     @staticmethod
     def check_disk_usage() -> HealthStatus:
         """Check disk usage."""
-        disk = psutil.disk_usage('/')
+        disk = psutil.disk_usage("/")
         usage_percent = disk.percent
 
         if usage_percent > 95:
@@ -275,7 +276,7 @@ class SystemHealthChecks:
                 "usage_percent": usage_percent,
                 "free_gb": disk.free / 1024 / 1024 / 1024,
                 "total_gb": disk.total / 1024 / 1024 / 1024,
-            }
+            },
         )
 
     @staticmethod
@@ -287,19 +288,17 @@ class SystemHealthChecks:
                 component="gpu_memory",
                 status="healthy",
                 message="No GPU available",
-                details={"gpu_available": False}
+                details={"gpu_available": False},
             )
 
         try:
             allocated = torch.cuda.memory_allocated() / 1024 / 1024 / 1024  # GB
-            reserved = torch.cuda.memory_reserved() / 1024 / 1024 / 1024    # GB
+            reserved = torch.cuda.memory_reserved() / 1024 / 1024 / 1024  # GB
 
             # Get total GPU memory
-            total_memory = torch.cuda.get_device_properties(
-                0).total_memory / 1024 / 1024 / 1024
+            total_memory = torch.cuda.get_device_properties(0).total_memory / 1024 / 1024 / 1024
 
-            usage_percent = (allocated / total_memory) * \
-                100 if total_memory > 0 else 0
+            usage_percent = (allocated / total_memory) * 100 if total_memory > 0 else 0
 
             if usage_percent > 95:
                 status = "error"
@@ -321,7 +320,7 @@ class SystemHealthChecks:
                     "allocated_gb": allocated,
                     "reserved_gb": reserved,
                     "total_gb": total_memory,
-                }
+                },
             )
 
         except Exception as e:
@@ -330,7 +329,7 @@ class SystemHealthChecks:
                 component="gpu_memory",
                 status="warning",
                 message=f"GPU memory check failed: {e}",
-                details={"error": str(e)}
+                details={"error": str(e)},
             )
 
 
@@ -351,12 +350,9 @@ class TrainingMonitor:
         self.health_checker = HealthChecker(self.metrics)
 
         # Register standard health checks
-        self.health_checker.register_check(
-            "memory", SystemHealthChecks.check_memory_usage)
-        self.health_checker.register_check(
-            "disk", SystemHealthChecks.check_disk_usage)
-        self.health_checker.register_check(
-            "gpu_memory", SystemHealthChecks.check_gpu_memory)
+        self.health_checker.register_check("memory", SystemHealthChecks.check_memory_usage)
+        self.health_checker.register_check("disk", SystemHealthChecks.check_disk_usage)
+        self.health_checker.register_check("gpu_memory", SystemHealthChecks.check_gpu_memory)
 
         # Monitoring state
         self.training_start_time = None
@@ -376,14 +372,19 @@ class TrainingMonitor:
             "training_started",
             1,
             config_hash=hash(str(config)),
-            timestamp=datetime.now().isoformat()
+            timestamp=datetime.now().isoformat(),
         )
 
         print(f"📊 Training monitoring started at {datetime.now().isoformat()}")
 
-    def record_step(self, step: int, loss: float, lr: float,
-                    tokens_processed: Optional[int] = None,
-                    gpu_memory_mb: Optional[float] = None) -> None:
+    def record_step(
+        self,
+        step: int,
+        loss: float,
+        lr: float,
+        tokens_processed: Optional[int] = None,
+        gpu_memory_mb: Optional[float] = None,
+    ) -> None:
         """Record training step metrics.
 
         Args:
@@ -398,12 +399,10 @@ class TrainingMonitor:
         self.metrics.record_metric("learning_rate", lr, step=step)
 
         if tokens_processed is not None:
-            self.metrics.record_metric(
-                "tokens_processed", tokens_processed, step=step)
+            self.metrics.record_metric("tokens_processed", tokens_processed, step=step)
 
         if gpu_memory_mb is not None:
-            self.metrics.record_metric(
-                "gpu_memory_mb", gpu_memory_mb, step=step)
+            self.metrics.record_metric("gpu_memory_mb", gpu_memory_mb, step=step)
 
         # Periodic health checks
         current_time = time.time()
@@ -419,7 +418,8 @@ class TrainingMonitor:
         for result in results:
             if result.status != "healthy":
                 print(
-                    f"⚠️  Health check {result.component}: {result.status.upper()} - {result.message}")
+                    f"⚠️  Health check {result.component}: {result.status.upper()} - {result.message}"
+                )
 
                 # Record health issues as metrics
                 self.metrics.record_metric(
@@ -427,7 +427,7 @@ class TrainingMonitor:
                     1,
                     component=result.component,
                     status=result.status,
-                    message=result.message
+                    message=result.message,
                 )
 
     def end_training(self, final_loss: float, total_steps: int) -> None:
@@ -448,12 +448,11 @@ class TrainingMonitor:
             1,
             duration_seconds=training_duration,
             final_loss=final_loss,
-            total_steps=total_steps
+            total_steps=total_steps,
         )
 
         # Save final metrics
-        metrics_file = self.log_dir / \
-            f"training_metrics_{int(time.time())}.json"
+        metrics_file = self.log_dir / f"training_metrics_{int(time.time())}.json"
         self.metrics.save_to_file(metrics_file)
 
         # Generate summary
@@ -467,7 +466,7 @@ class TrainingMonitor:
         }
 
         summary_file = self.log_dir / "training_summary.json"
-        with open(summary_file, 'w') as f:
+        with open(summary_file, "w") as f:
             json.dump(summary, f, indent=2, default=str)
 
         print(f"📊 Training completed in {training_duration:.1f}s")
@@ -518,7 +517,7 @@ if __name__ == "__main__":
         monitor.record_step(
             step=step,
             loss=1.0 / (step + 1),  # Decreasing loss
-            lr=0.001 * (0.9 ** step),  # Decreasing LR
+            lr=0.001 * (0.9**step),  # Decreasing LR
             tokens_processed=(step + 1) * 1000,
         )
         time.sleep(0.1)  # Simulate training time

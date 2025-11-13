@@ -12,6 +12,7 @@ Usage:
         --samples 10 \
         --steps 5
 """
+
 import argparse
 import json
 from pathlib import Path
@@ -21,7 +22,9 @@ import torch
 from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
 
 
-def create_toy_model_config(d_model: int = 64, n_layers: int = 2, vocab_size: int = 32000) -> ModelCfg:
+def create_toy_model_config(
+    d_model: int = 64, n_layers: int = 2, vocab_size: int = 32000
+) -> ModelCfg:
     """Create a tiny model configuration for testing."""
     return ModelCfg(
         d_model=d_model,
@@ -39,7 +42,7 @@ def create_toy_model_config(d_model: int = 64, n_layers: int = 2, vocab_size: in
 def create_toy_dataset(output_path: Path, num_samples: int = 10, vocab_size: int = 32000):
     """Create a tiny KD dataset for testing."""
     samples = []
-    
+
     # Simple prompts and responses
     prompts = [
         "What is 2+2?",
@@ -53,7 +56,7 @@ def create_toy_dataset(output_path: Path, num_samples: int = 10, vocab_size: int
         "How does HTTP work?",
         "What is JSON?",
     ]
-    
+
     responses = [
         "2 + 2 equals 4.",
         "print('Hello, world!')",
@@ -66,7 +69,7 @@ def create_toy_dataset(output_path: Path, num_samples: int = 10, vocab_size: int
         "HTTP is a protocol for web communication.",
         "JSON is a data format.",
     ]
-    
+
     for i in range(num_samples):
         prompt_idx = i % len(prompts)
         sample = {
@@ -77,17 +80,17 @@ def create_toy_dataset(output_path: Path, num_samples: int = 10, vocab_size: int
                 "tokens": {
                     "input": len(prompts[prompt_idx].split()),
                     "output": len(responses[prompt_idx].split()),
-                }
-            }
+                },
+            },
         }
         samples.append(sample)
-    
+
     # Write JSONL
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         for sample in samples:
-            f.write(json.dumps(sample, ensure_ascii=False) + '\n')
-    
+            f.write(json.dumps(sample, ensure_ascii=False) + "\n")
+
     print(f"[make_toy_training] Created toy dataset: {output_path} ({num_samples} samples)")
 
 
@@ -153,40 +156,45 @@ def create_toy_config(
             "console_log": True,
         },
     }
-    
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     import yaml
-    with open(output_path, 'w') as f:
+
+    with open(output_path, "w") as f:
         yaml.dump(config, f, default_flow_style=False)
-    
+
     print(f"[make_toy_training] Created toy config: {output_path}")
 
 
 def main():
     ap = argparse.ArgumentParser(description="Create toy training setup for smoke testing")
-    ap.add_argument('--out-dir', type=str, default='training/toy_test', help='Output directory')
-    ap.add_argument('--samples', type=int, default=10, help='Number of dataset samples')
-    ap.add_argument('--steps', type=int, default=5, help='Number of training steps')
-    ap.add_argument('--dmodel', type=int, default=64, help='Model dimension')
-    ap.add_argument('--nlayers', type=int, default=2, help='Number of layers')
-    ap.add_argument('--vocab', type=int, default=32000, help='Vocabulary size (must match tokenizer)')
-    ap.add_argument('--tokenizer', type=str, default='models/student/tokenizer', help='Tokenizer path')
+    ap.add_argument("--out-dir", type=str, default="training/toy_test", help="Output directory")
+    ap.add_argument("--samples", type=int, default=10, help="Number of dataset samples")
+    ap.add_argument("--steps", type=int, default=5, help="Number of training steps")
+    ap.add_argument("--dmodel", type=int, default=64, help="Model dimension")
+    ap.add_argument("--nlayers", type=int, default=2, help="Number of layers")
+    ap.add_argument(
+        "--vocab", type=int, default=32000, help="Vocabulary size (must match tokenizer)"
+    )
+    ap.add_argument(
+        "--tokenizer", type=str, default="models/student/tokenizer", help="Tokenizer path"
+    )
     args = ap.parse_args()
-    
+
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Create model config
     model_cfg = create_toy_model_config(
         d_model=args.dmodel,
         n_layers=args.nlayers,
         vocab_size=args.vocab,
     )
-    
+
     # Create dataset
     dataset_path = out_dir / "toy_dataset.jsonl"
     create_toy_dataset(dataset_path, num_samples=args.samples, vocab_size=args.vocab)
-    
+
     # Create config
     config_path = out_dir / "toy_config.yaml"
     create_toy_config(
@@ -196,20 +204,23 @@ def main():
         args.tokenizer,
         num_steps=args.steps,
     )
-    
+
     # Create model checkpoint (initialized randomly)
     model = StudentLM(model_cfg)
     checkpoint_path = out_dir / "toy_model_init.pt"
-    torch.save({
-        "model_state_dict": model.state_dict(),
-        "config": model_cfg.__dict__,
-    }, checkpoint_path)
+    torch.save(
+        {
+            "model_state_dict": model.state_dict(),
+            "config": model_cfg.__dict__,
+        },
+        checkpoint_path,
+    )
     print(f"[make_toy_training] Created toy model: {checkpoint_path}")
-    
+
     # Print summary
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Toy Training Setup Created")
-    print("="*60)
+    print("=" * 60)
     print(f"Output directory: {out_dir}")
     print(f"Dataset: {dataset_path} ({args.samples} samples)")
     print(f"Config: {config_path}")
@@ -224,9 +235,8 @@ def main():
     print("  Sequence length: 128")
     print("\nTo test training:")
     print(f"  python -m training.distill_kd --config {config_path}")
-    print("="*60)
+    print("=" * 60)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
-

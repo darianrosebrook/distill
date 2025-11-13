@@ -8,6 +8,7 @@ Reference: code-mode-latent-reasoning.md Milestone 1
 
 Author: @darianrosebrook
 """
+
 from __future__ import annotations
 
 from typing import Dict, Any, List, Optional, Tuple
@@ -50,7 +51,9 @@ def make_code_mode_example(
 
     if "salesforce" in servers:
         ts_code_lines.append("// Query records before updating")
-        ts_code_lines.append("const records = await salesforce.queryRecords({ objectType: 'SalesMeeting', limit: 10 });")
+        ts_code_lines.append(
+            "const records = await salesforce.queryRecords({ objectType: 'SalesMeeting', limit: 10 });"
+        )
         ts_code_lines.append("const recordId = records[0].Id;")
 
     # Process large data in sandbox (not echoed to tokens)
@@ -87,9 +90,9 @@ def make_code_mode_example(
 
     # Determine eligibility
     eligible_for_code_mode = (
-        tool_count >= 2 or
-        max(intermediate_sizes) >= 10000 if intermediate_sizes else False or
-        pii_tags_present
+        tool_count >= 2 or max(intermediate_sizes) >= 10000
+        if intermediate_sizes
+        else False or pii_tags_present
     )
 
     # Compute span targets for token-level loss (requires tokenizer at generation time)
@@ -153,103 +156,103 @@ def compute_span_targets_from_tokenized(
     # Try to use offset_mapping for precise token positions
     try:
         # Use encode_plus with return_offsets_mapping if available
-        if hasattr(tokenizer, 'encode_plus'):
+        if hasattr(tokenizer, "encode_plus"):
             encoding = tokenizer.encode_plus(
                 text,
                 add_special_tokens=False,
                 return_offsets_mapping=True,
                 return_tensors=None,
             )
-            encoding['input_ids']
-            offset_mapping = encoding.get('offset_mapping', None)
-            
+            encoding["input_ids"]
+            offset_mapping = encoding.get("offset_mapping", None)
+
             if offset_mapping:
                 # Use precise offset mapping to find token positions
                 text_lower = text.lower()
-                
+
                 # Find TS mode spans
                 for marker_pattern in ts_markers:
                     for match in re.finditer(marker_pattern, text_lower, re.IGNORECASE):
                         start_char = match.start()
                         end_char = match.end()
-                        
+
                         # Find tokens that overlap with this character range
                         start_token = None
                         end_token = None
-                        
+
                         for token_idx, (tok_start, tok_end) in enumerate(offset_mapping):
                             if tok_start is None or tok_end is None:
                                 continue
-                            
+
                             # Token overlaps with marker span
                             if tok_start <= end_char and tok_end >= start_char:
                                 if start_token is None:
                                     start_token = token_idx
                                 end_token = token_idx + 1
-                        
+
                         if start_token is not None and end_token is not None:
                             ts_mode_spans.append((start_token, end_token))
-                
+
                 # Find direct tool call spans
                 for marker_pattern in direct_markers:
                     for match in re.finditer(marker_pattern, text_lower, re.IGNORECASE):
                         start_char = match.start()
                         end_char = match.end()
-                        
+
                         start_token = None
                         end_token = None
-                        
+
                         for token_idx, (tok_start, tok_end) in enumerate(offset_mapping):
                             if tok_start is None or tok_end is None:
                                 continue
-                            
+
                             if tok_start <= end_char and tok_end >= start_char:
                                 if start_token is None:
                                     start_token = token_idx
                                 end_token = token_idx + 1
-                        
+
                         if start_token is not None and end_token is not None:
                             direct_tool_spans.append((start_token, end_token))
-                
+
                 return {
                     "ts_mode_spans": ts_mode_spans,
                     "direct_tool_spans": direct_tool_spans,
                 }
     except Exception:
         pass
-    
+
     # Fallback: approximate using character positions
     try:
         encoded = tokenizer.encode(text, add_special_tokens=False)
         num_tokens = len(encoded)
         text_len = len(text)
-        
+
         # Rough approximation: assume ~4 chars per token
         chars_per_token = text_len / max(1, num_tokens)
-        
+
         text_lower = text.lower()
-        
+
         # Find TS mode spans (approximate)
         for marker_pattern in ts_markers:
             for match in re.finditer(marker_pattern, text_lower, re.IGNORECASE):
                 start_char = match.start()
                 end_char = match.end()
-                
+
                 start_token = max(0, int(start_char / chars_per_token))
                 end_token = min(num_tokens, int(end_char / chars_per_token) + 1)
-                
+
                 if end_token > start_token:
                     ts_mode_spans.append((start_token, end_token))
-        
+
         # Find direct tool call spans (approximate)
         for marker_pattern in direct_markers:
             for match in re.finditer(marker_pattern, text_lower, re.IGNORECASE):
                 start_char = match.start()
                 end_char = match.end()
-                
+
                 start_token = max(0, int(start_char / chars_per_token))
                 end_token = min(num_tokens, int(end_char / chars_per_token) + 1)
-                
+
                 if end_token > start_token:
                     direct_tool_spans.append((start_token, end_token))
     except Exception:
@@ -318,4 +321,3 @@ def generate_code_mode_dataset(
         examples.append(example)
 
     return examples
-

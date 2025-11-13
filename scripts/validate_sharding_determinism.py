@@ -1,4 +1,5 @@
 """Validate that sharded evaluation produces observationally equivalent results to non-sharded evaluation."""
+
 from __future__ import annotations
 
 import argparse
@@ -22,15 +23,15 @@ except ImportError:
 
 def stable_shard(sample_id: str, num_shards: int) -> int:
     """Derive shard assignment from stable sample_id hash."""
-    h = hashlib.sha256(sample_id.encode('utf-8')).digest()
-    val = int.from_bytes(h[:8], 'little')
+    h = hashlib.sha256(sample_id.encode("utf-8")).digest()
+    val = int.from_bytes(h[:8], "little")
     return val % num_shards
 
 
 def synthesize_sample_id(item: Dict[str, Any]) -> str:
     """Synthesize stable sample_id from row if missing."""
     row_json = json.dumps(item, sort_keys=True, ensure_ascii=False)
-    return hashlib.sha256(row_json.encode('utf-8')).hexdigest()
+    return hashlib.sha256(row_json.encode("utf-8")).hexdigest()
 
 
 def get_sample_id(rec: Dict[str, Any]) -> str:
@@ -42,9 +43,8 @@ def get_sample_id(rec: Dict[str, Any]) -> str:
             "prompt": rec.get("prompt", ""),
             "tool_trace": rec.get("tool_trace", []),
         }
-        stable_json = json.dumps(
-            stable_fields, sort_keys=True, ensure_ascii=False)
-        sample_id = hashlib.sha256(stable_json.encode('utf-8')).hexdigest()
+        stable_json = json.dumps(stable_fields, sort_keys=True, ensure_ascii=False)
+        sample_id = hashlib.sha256(stable_json.encode("utf-8")).hexdigest()
     return str(sample_id)
 
 
@@ -107,23 +107,26 @@ def norm_output(rec: Dict[str, Any]) -> Dict[str, Any]:
         args = tc.get("arguments", {})
         norm_args = canonicalize_args(args, tool_name=tool_name)
 
-        normalized_tools.append({
-            "name": tool_name,
-            "arguments": norm_args,
-            "result": tc.get("result", {}),
-        })
+        normalized_tools.append(
+            {
+                "name": tool_name,
+                "arguments": norm_args,
+                "result": tc.get("result", {}),
+            }
+        )
 
     # Sort tools by name, then arguments (for deterministic ordering)
-    normalized_tools.sort(key=lambda tc: (
-        tc.get("name", ""),
-        json.dumps(tc.get("arguments", {}), sort_keys=True)
-    ))
+    normalized_tools.sort(
+        key=lambda tc: (tc.get("name", ""), json.dumps(tc.get("arguments", {}), sort_keys=True))
+    )
 
     # Extract integration spans from model_output
     model_output = rec.get("model_output", "")
     integration_spans = []
     if model_output:
-        for m in re.finditer(r'Integration:\s*([^\n]+?)(?:[\.!?…]\s|$)', model_output, flags=re.UNICODE):
+        for m in re.finditer(
+            r"Integration:\s*([^\n]+?)(?:[\.!?…]\s|$)", model_output, flags=re.UNICODE
+        ):
             integration_spans.append([m.start(1), m.end(1)])
 
     return {
@@ -142,11 +145,13 @@ def close(a: float, b: float, atol: float = 1e-6, rtol: float = 1e-6) -> bool:
 def get_deterministic_env() -> Dict[str, str]:
     """Get deterministic environment variables for subprocess execution."""
     env = os.environ.copy()
-    env.update({
-        "PYTHONHASHSEED": "0",
-        "OMP_NUM_THREADS": "1",
-        "MKL_NUM_THREADS": "1",
-    })
+    env.update(
+        {
+            "PYTHONHASHSEED": "0",
+            "OMP_NUM_THREADS": "1",
+            "MKL_NUM_THREADS": "1",
+        }
+    )
     return env
 
 
@@ -182,18 +187,31 @@ def run_eval(
     env = get_deterministic_env()
 
     cmd = [
-        sys.executable, "-m", "eval.cli",
-        "--runner", runner,
-        "--model", model,
-        "--in", dataset_path,
-        "--out", output_results,
-        "--report", output_report,
-        "--fixtures", fixtures_dir,
-        "--num-shards", str(num_shards),
-        "--shard-index", str(shard_index),
-        "--seed", str(seed),
-        "--temperature", "0.0",
-        "--min-eligible-for-gates", "15",
+        sys.executable,
+        "-m",
+        "eval.cli",
+        "--runner",
+        runner,
+        "--model",
+        model,
+        "--in",
+        dataset_path,
+        "--out",
+        output_results,
+        "--report",
+        output_report,
+        "--fixtures",
+        fixtures_dir,
+        "--num-shards",
+        str(num_shards),
+        "--shard-index",
+        str(shard_index),
+        "--seed",
+        str(seed),
+        "--temperature",
+        "0.0",
+        "--min-eligible-for-gates",
+        "15",
         "--fail-on-fingerprint-mismatch",
     ]
 
@@ -237,7 +255,9 @@ def load_report(path: str) -> Dict[str, Any]:
         return json.load(f)
 
 
-def extract_fingerprints_from_report(report: Dict[str, Any], results: List[Dict[str, Any]]) -> Dict[str, Any]:
+def extract_fingerprints_from_report(
+    report: Dict[str, Any], results: List[Dict[str, Any]]
+) -> Dict[str, Any]:
     """
     Extract all fingerprints from report header and first result.
 
@@ -263,8 +283,7 @@ def extract_fingerprints_from_report(report: Dict[str, Any], results: List[Dict[
 
         # Extract prompt_wrapper_sha256 from runner fingerprint
         if isinstance(runner_fp, dict):
-            fingerprints["prompt_wrapper_sha256"] = runner_fp.get(
-                "prompt_wrapper_sha256")
+            fingerprints["prompt_wrapper_sha256"] = runner_fp.get("prompt_wrapper_sha256")
 
     return fingerprints
 
@@ -281,8 +300,7 @@ def compare_fingerprints(
     Returns:
         (all_match, mismatches) tuple
     """
-    baseline_fps = extract_fingerprints_from_report(
-        baseline_report, baseline_results)
+    baseline_fps = extract_fingerprints_from_report(baseline_report, baseline_results)
     mismatches = []
 
     fingerprint_fields = [
@@ -294,9 +312,10 @@ def compare_fingerprints(
         "model_fingerprint",
     ]
 
-    for shard_idx, (shard_report, shard_results) in enumerate(zip(shard_reports, shard_results_list)):
-        shard_fps = extract_fingerprints_from_report(
-            shard_report, shard_results)
+    for shard_idx, (shard_report, shard_results) in enumerate(
+        zip(shard_reports, shard_results_list)
+    ):
+        shard_fps = extract_fingerprints_from_report(shard_report, shard_results)
 
         for field in fingerprint_fields:
             baseline_val = baseline_fps.get(field)
@@ -346,8 +365,7 @@ def validate_shard_completeness(
 
         # Check for duplicates within this shard
         shard_id_counts = Counter(get_sample_id(r) for r in shard_results)
-        shard_dupes = [sid for sid,
-                       count in shard_id_counts.items() if count > 1]
+        shard_dupes = [sid for sid, count in shard_id_counts.items() if count > 1]
         if shard_dupes:
             duplicates.extend([(shard_idx, sid) for sid in shard_dupes])
 
@@ -387,8 +405,7 @@ def compare_per_example(
     Returns:
         (mismatch_count, mismatch_details) tuple
     """
-    baseline_by_id = {get_sample_id(r): norm_output(r)
-                      for r in baseline_results}
+    baseline_by_id = {get_sample_id(r): norm_output(r) for r in baseline_results}
     sharded_by_id = {get_sample_id(r): norm_output(r) for r in sharded_results}
 
     mismatches = []
@@ -396,30 +413,36 @@ def compare_per_example(
     # Check all baseline samples exist in sharded
     for sample_id, baseline_norm in baseline_by_id.items():
         if sample_id not in sharded_by_id:
-            mismatches.append({
-                "sample_id": sample_id,
-                "reason": "missing_in_sharded",
-            })
+            mismatches.append(
+                {
+                    "sample_id": sample_id,
+                    "reason": "missing_in_sharded",
+                }
+            )
             continue
 
         sharded_norm = sharded_by_id[sample_id]
 
         # Compare normalized outputs
         if baseline_norm != sharded_norm:
-            mismatches.append({
-                "sample_id": sample_id,
-                "reason": "output_mismatch",
-                "baseline": baseline_norm,
-                "sharded": sharded_norm,
-            })
+            mismatches.append(
+                {
+                    "sample_id": sample_id,
+                    "reason": "output_mismatch",
+                    "baseline": baseline_norm,
+                    "sharded": sharded_norm,
+                }
+            )
 
     # Check for extra samples in sharded
     for sample_id in sharded_by_id:
         if sample_id not in baseline_by_id:
-            mismatches.append({
-                "sample_id": sample_id,
-                "reason": "extra_in_sharded",
-            })
+            mismatches.append(
+                {
+                    "sample_id": sample_id,
+                    "reason": "extra_in_sharded",
+                }
+            )
 
     return len(mismatches), mismatches
 
@@ -476,17 +499,16 @@ def compare_metrics(
         if exact:
             # For exact matches, handle dict/list comparison
             if isinstance(baseline_val, dict) and isinstance(sharded_val, dict):
-                match = (baseline_val == sharded_val)
+                match = baseline_val == sharded_val
             elif isinstance(baseline_val, list) and isinstance(sharded_val, list):
-                match = (baseline_val == sharded_val)
+                match = baseline_val == sharded_val
             else:
-                match = (baseline_val == sharded_val)
+                match = baseline_val == sharded_val
         else:
             if isinstance(baseline_val, (int, float)) and isinstance(sharded_val, (int, float)):
-                match = close(float(baseline_val), float(
-                    sharded_val), atol=atol, rtol=rtol)
+                match = close(float(baseline_val), float(sharded_val), atol=atol, rtol=rtol)
             else:
-                match = (baseline_val == sharded_val)
+                match = baseline_val == sharded_val
 
         if not match:
             all_match = False
@@ -519,29 +541,22 @@ def compare_metrics(
 
 def main() -> int:
     """Main validation entry point."""
-    ap = argparse.ArgumentParser(
-        description="Validate sharding determinism for evaluation harness"
-    )
-    ap.add_argument("--dataset", required=True,
-                    help="Path to evaluation dataset JSONL")
+    ap = argparse.ArgumentParser(description="Validate sharding determinism for evaluation harness")
+    ap.add_argument("--dataset", required=True, help="Path to evaluation dataset JSONL")
     ap.add_argument("--model", required=True, help="Model path or name")
-    ap.add_argument("--runner", required=True,
-                    choices=["hf_local", "openai_http"])
+    ap.add_argument("--runner", required=True, choices=["hf_local", "openai_http"])
     ap.add_argument("--fixtures", required=True, help="Fixtures directory")
-    ap.add_argument("--num-shards", type=int, default=4,
-                    help="Number of shards (default: 4)")
-    ap.add_argument("--atol", type=float, default=1e-6,
-                    help="Absolute tolerance (default: 1e-6)")
-    ap.add_argument("--rtol", type=float, default=1e-6,
-                    help="Relative tolerance (default: 1e-6)")
-    ap.add_argument("--seed", type=int, default=42,
-                    help="Random seed (default: 42)")
-    ap.add_argument("--temp-dir", default=None,
-                    help="Temporary directory (default: system temp)")
-    ap.add_argument("--output", default="eval/reports/sharding_validation.json",
-                    help="Output validation report path")
-    ap.add_argument("--prompt-wrapper", default=None,
-                    help="Optional prompt wrapper template path")
+    ap.add_argument("--num-shards", type=int, default=4, help="Number of shards (default: 4)")
+    ap.add_argument("--atol", type=float, default=1e-6, help="Absolute tolerance (default: 1e-6)")
+    ap.add_argument("--rtol", type=float, default=1e-6, help="Relative tolerance (default: 1e-6)")
+    ap.add_argument("--seed", type=int, default=42, help="Random seed (default: 42)")
+    ap.add_argument("--temp-dir", default=None, help="Temporary directory (default: system temp)")
+    ap.add_argument(
+        "--output",
+        default="eval/reports/sharding_validation.json",
+        help="Output validation report path",
+    )
+    ap.add_argument("--prompt-wrapper", default=None, help="Optional prompt wrapper template path")
 
     args = ap.parse_args()
 
@@ -578,8 +593,7 @@ def main() -> int:
         print(f"[VALIDATION] Baseline: {len(baseline_results)} results")
 
         # 2. Run sharded evaluation
-        print(
-            f"[VALIDATION] Running sharded evaluation ({args.num_shards} shards)...")
+        print(f"[VALIDATION] Running sharded evaluation ({args.num_shards} shards)...")
         shard_results_list = []
         shard_reports_list = []
 
@@ -607,8 +621,7 @@ def main() -> int:
             shard_results_list.append(shard_results)
             shard_reports_list.append(shard_report)
 
-            print(
-                f"[VALIDATION] Shard {shard_idx}: {len(shard_results)} results")
+            print(f"[VALIDATION] Shard {shard_idx}: {len(shard_results)} results")
 
         # 3. Concatenate and sort shard results
         print("[VALIDATION] Concatenating and sorting shard results...")
@@ -617,21 +630,20 @@ def main() -> int:
             all_sharded_results.extend(shard_results)
 
         # Sort by sample_id (stable sort)
-        all_sharded_results.sort(key=lambda r: (
-            get_sample_id(r), r.get("tool_trace", [])))
+        all_sharded_results.sort(key=lambda r: (get_sample_id(r), r.get("tool_trace", [])))
 
         # 4. Re-summarize concatenated results
         print("[VALIDATION] Re-summarizing concatenated results...")
         if summarize_results is None:
             print(
-                "[VALIDATION] WARNING: summarize_results not available, skipping metric comparison")
+                "[VALIDATION] WARNING: summarize_results not available, skipping metric comparison"
+            )
             sharded_report = None
         else:
             baseline_header = baseline_report.get("header", {})
             dataset_sha256 = baseline_header.get("dataset_sha256", "")
             tool_registry_sha256 = baseline_header.get("tool_registry_sha256")
-            tokenizer_fingerprint = baseline_header.get(
-                "tokenizer_fingerprint")
+            tokenizer_fingerprint = baseline_header.get("tokenizer_fingerprint")
 
             sharded_report = summarize_results(
                 results=all_sharded_results,
@@ -688,8 +700,7 @@ def main() -> int:
         )
 
         if mismatch_count > 0:
-            print(
-                f"[VALIDATION] FAILED: {mismatch_count} per-example mismatches")
+            print(f"[VALIDATION] FAILED: {mismatch_count} per-example mismatches")
             for detail in mismatch_details[:10]:  # Show first 10
                 print(f"  Sample {detail['sample_id']}: {detail['reason']}")
             if len(mismatch_details) > 10:
@@ -701,7 +712,8 @@ def main() -> int:
         # 8. Compare metrics
         if sharded_report is None:
             print(
-                "[VALIDATION] WARNING: Skipping metric comparison (summarize_results unavailable)")
+                "[VALIDATION] WARNING: Skipping metric comparison (summarize_results unavailable)"
+            )
             metrics_ok = True
             metric_diffs = {}
         else:
@@ -714,7 +726,8 @@ def main() -> int:
                 print("[VALIDATION] FAILED: Metric differences detected")
                 for field, diff in metric_diffs.items():
                     print(
-                        f"  {field}: baseline={diff['baseline']}, sharded={diff['sharded']}, delta={diff.get('delta')}")
+                        f"  {field}: baseline={diff['baseline']}, sharded={diff['sharded']}, delta={diff.get('delta')}"
+                    )
             else:
                 print("[VALIDATION] Metrics match")
 
@@ -727,11 +740,14 @@ def main() -> int:
 
         # 10. Generate validation report
         # Extract fingerprints for report
-        baseline_fps = extract_fingerprints_from_report(
-            baseline_report, baseline_results)
+        baseline_fps = extract_fingerprints_from_report(baseline_report, baseline_results)
 
         validation_report = {
-            "ok": fingerprints_ok and completeness_ok and (mismatch_count == 0) and metrics_ok and gates_ok,
+            "ok": fingerprints_ok
+            and completeness_ok
+            and (mismatch_count == 0)
+            and metrics_ok
+            and gates_ok,
             "num_shards": args.num_shards,
             "dataset_sha256": baseline_fps.get("dataset_sha256"),
             "runner_fingerprint": baseline_fps.get("runner_fingerprint"),
@@ -766,6 +782,7 @@ def main() -> int:
         # Cleanup temp directory if we created it
         if args.temp_dir is None and temp_dir.exists():
             import shutil
+
             shutil.rmtree(temp_dir)
 
 

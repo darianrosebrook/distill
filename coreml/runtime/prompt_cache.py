@@ -6,6 +6,7 @@ Leverages unified memory architecture (64GB) for zero memory pressure.
 
 Reference: docs/M_SERIES_ADVANCED_OPTIMIZATIONS.md Phase 7
 """
+
 from __future__ import annotations
 import hashlib
 from typing import Dict, Any, Optional, Tuple
@@ -51,7 +52,7 @@ class PromptCache:
         Returns:
             SHA256 hash hex string
         """
-        return hashlib.sha256(prompt_text.encode('utf-8')).hexdigest()
+        return hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
 
     def _cache_size(self) -> int:
         """
@@ -130,8 +131,7 @@ class PromptCache:
             elif isinstance(value, dict):
                 size += self._estimate_state_size(value)
             elif isinstance(value, (list, tuple)):
-                size += sum(v.nbytes if isinstance(v, np.ndarray)
-                            else 0 for v in value)
+                size += sum(v.nbytes if isinstance(v, np.ndarray) else 0 for v in value)
         return size
 
     def _deep_copy_state(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -151,8 +151,7 @@ class PromptCache:
             elif isinstance(value, dict):
                 copied[key] = self._deep_copy_state(value)
             elif isinstance(value, (list, tuple)):
-                copied[key] = [v.copy() if isinstance(
-                    v, np.ndarray) else v for v in value]
+                copied[key] = [v.copy() if isinstance(v, np.ndarray) else v for v in value]
             else:
                 copied[key] = value
         return copied
@@ -204,26 +203,25 @@ def extract_system_prompt(prompt_text: str) -> Optional[str]:
         return None
 
     # Try to find system prompt patterns
-    lines = prompt_text.split('\n')
+    lines = prompt_text.split("\n")
 
     # Pattern 1: "System:" prefix
     for line in lines[:5]:  # Check first 5 lines
-        if line.strip().startswith('System:'):
+        if line.strip().startswith("System:"):
             return line.strip()
 
     # Pattern 2: First paragraph (if it looks like a system prompt)
     first_line = lines[0].strip() if lines else ""
     if first_line and len(first_line) > 20:  # Reasonable system prompt length
         # Check if it contains common system prompt keywords
-        system_keywords = ['assistant', 'helpful',
-                           'tool', 'capable', 'careful', 'policy']
+        system_keywords = ["assistant", "helpful", "tool", "capable", "careful", "policy"]
         if any(keyword in first_line.lower() for keyword in system_keywords):
             return first_line
 
     # Pattern 3: Everything before first "User:" or "Human:" marker
     for i, line in enumerate(lines):
-        if any(marker in line for marker in ['User:', 'Human:', 'Question:']):
-            return '\n'.join(lines[:i]).strip()
+        if any(marker in line for marker in ["User:", "Human:", "Question:"]):
+            return "\n".join(lines[:i]).strip()
 
     # No system prompt found
     return None
@@ -243,7 +241,7 @@ def extract_prompt_parts(prompt_text: str) -> Dict[str, str]:
 
     if system_prompt:
         # Remove system prompt from user content
-        user_content = prompt_text.replace(system_prompt, '', 1).strip()
+        user_content = prompt_text.replace(system_prompt, "", 1).strip()
     else:
         user_content = prompt_text
 

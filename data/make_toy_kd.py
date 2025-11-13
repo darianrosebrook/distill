@@ -11,6 +11,7 @@ Usage:
     python -m data.make_toy_kd --out magic_8_ball.jsonl --n 128 --magic-8-ball
     python -m data.make_toy_kd --demo  # Show sample Magic 8 Ball data
 """
+
 import argparse
 import json
 import random
@@ -42,7 +43,7 @@ def mk_item(i: int, vocab_size: int = 512, magic_8_ball: bool = False) -> dict:
         "metadata": {
             "source": "toy_kd",
             "has_tool_span": "tool.call{" in target,
-        }
+        },
     }
 
 
@@ -69,7 +70,7 @@ def mk_magic_8_ball_item(i: int, vocab_size: int = 512) -> dict:
         "My reply is no",
         "My sources say no",
         "Outlook not so good",
-        "Very doubtful"
+        "Very doubtful",
     ]
 
     # Mystical flair options
@@ -79,7 +80,7 @@ def mk_magic_8_ball_item(i: int, vocab_size: int = 512) -> dict:
         " ✨",
         " 🌟",
         " The spirits say:",
-        " The crystal ball reveals:"
+        " The crystal ball reveals:",
     ]
 
     # Create yes/no questions that should get Magic 8 Ball answers
@@ -125,7 +126,7 @@ def mk_magic_8_ball_item(i: int, vocab_size: int = 512) -> dict:
             "source": "magic_8_ball_kd",
             "has_tool_span": "tool:" in target,
             "mystical_answer": mystical_answer,
-        }
+        },
     }
 
 
@@ -133,11 +134,13 @@ def main():
     ap = argparse.ArgumentParser(description="Generate toy KD dataset")
     ap.add_argument("--out", required=True, help="Output JSONL path")
     ap.add_argument("--n", type=int, default=128, help="Number of samples")
-    ap.add_argument("--vocab", type=int, default=512,
-                    help="Vocabulary size (for compatibility)")
+    ap.add_argument("--vocab", type=int, default=512, help="Vocabulary size (for compatibility)")
     ap.add_argument("--seed", type=int, default=42, help="Random seed")
-    ap.add_argument("--magic-8-ball", action="store_true",
-                    help="Generate Magic 8 Ball mystical training data instead of tool data")
+    ap.add_argument(
+        "--magic-8-ball",
+        action="store_true",
+        help="Generate Magic 8 Ball mystical training data instead of tool data",
+    )
     args = ap.parse_args()
 
     # Set seed for reproducibility
@@ -152,32 +155,29 @@ def main():
         samples.append(mk_item(i, args.vocab, args.magic_8_ball))
 
     # Write JSONL
-    with open(output_path, 'w', encoding='utf-8') as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         for sample in samples:
-            f.write(json.dumps(sample, ensure_ascii=False) + '\n')
+            f.write(json.dumps(sample, ensure_ascii=False) + "\n")
 
     # Compute dataset hash
-    dataset_content = '\n'.join(
-        [json.dumps(s, ensure_ascii=False) for s in samples])
-    dataset_sha256 = hashlib.sha256(
-        dataset_content.encode('utf-8')).hexdigest()
+    dataset_content = "\n".join([json.dumps(s, ensure_ascii=False) for s in samples])
+    dataset_sha256 = hashlib.sha256(dataset_content.encode("utf-8")).hexdigest()
 
     tool_span_count = sum(1 for s in samples if s["metadata"]["has_tool_span"])
 
     dataset_type = "Magic 8 Ball" if args.magic_8_ball else "toy"
     print(f"[make_toy_kd] Created {dataset_type} dataset: {output_path}")
     print(f"  Samples: {len(samples)}")
-    print(
-        f"  Tool spans: {tool_span_count} ({100*tool_span_count/len(samples):.1f}%)")
+    print(f"  Tool spans: {tool_span_count} ({100 * tool_span_count / len(samples):.1f}%)")
     if args.magic_8_ball:
-        mystical_answers = sum(
-            1 for s in samples if "mystical_answer" in s["metadata"])
+        mystical_answers = sum(1 for s in samples if "mystical_answer" in s["metadata"])
         print(
-            f"  Mystical answers: {mystical_answers} ({100*mystical_answers/len(samples):.1f}%)")
+            f"  Mystical answers: {mystical_answers} ({100 * mystical_answers / len(samples):.1f}%)"
+        )
     print(f"  Dataset SHA256: {dataset_sha256[:16]}...")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # For testing Magic 8 Ball generation
     if len(sys.argv) > 1 and sys.argv[1] == "--demo":
         print("🎱 Magic 8 Ball Dataset Demo:")

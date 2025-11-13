@@ -1,4 +1,5 @@
 """Training callback for automatic checkpoint evaluation."""
+
 from __future__ import annotations
 
 import json
@@ -57,29 +58,40 @@ def run_eval_for_checkpoint(
     for shard_idx in range(num_shards):
         shard_report = f"{report_path}.shard_{shard_idx}.json"
         cmd = [
-            "python", "-m", "eval.cli",
-            "--runner", "hf_local",
-            "--model", ckpt_dir,
-            "--in", dataset_path,
-            "--out", f"{out_dir}/preds_shard_{shard_idx}.jsonl",
-            "--report", shard_report,
-            "--fixtures", fixtures_dir,
-            "--num-shards", str(num_shards),
-            "--shard-index", str(shard_idx),
-            "--seed", "42",
-            "--temperature", "0.0",
-            "--max-tokens", str(model_max_tokens),
-            "--min-eligible-for-gates", str(min_eligible_for_gates),
+            "python",
+            "-m",
+            "eval.cli",
+            "--runner",
+            "hf_local",
+            "--model",
+            ckpt_dir,
+            "--in",
+            dataset_path,
+            "--out",
+            f"{out_dir}/preds_shard_{shard_idx}.jsonl",
+            "--report",
+            shard_report,
+            "--fixtures",
+            fixtures_dir,
+            "--num-shards",
+            str(num_shards),
+            "--shard-index",
+            str(shard_idx),
+            "--seed",
+            "42",
+            "--temperature",
+            "0.0",
+            "--max-tokens",
+            str(model_max_tokens),
+            "--min-eligible-for-gates",
+            str(min_eligible_for_gates),
             "--fail-on-fingerprint-mismatch",
         ]
 
         try:
-            subprocess.run(
-                cmd, check=True, capture_output=True, text=True)
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(
-                f"Evaluation failed for shard {shard_idx}: {e.stderr}"
-            ) from e
+            raise RuntimeError(f"Evaluation failed for shard {shard_idx}: {e.stderr}") from e
 
         if os.path.exists(shard_report):
             shard_reports.append(shard_report)
@@ -104,22 +116,26 @@ def run_eval_for_checkpoint(
     # Gate: fail CI / caller if any shard is gates_ok=false
     gates_ok = all(r.get("gates_ok", False) for r in reports)
     if not gates_ok and raise_on_gate_failure:
-        failed_shards = [i for i, r in enumerate(
-            reports) if not r.get("gates_ok", False)]
+        failed_shards = [i for i, r in enumerate(reports) if not r.get("gates_ok", False)]
         raise RuntimeError(
-            f"Evaluation gates failed for checkpoint: {ckpt_dir} "
-            f"(failed shards: {failed_shards})"
+            f"Evaluation gates failed for checkpoint: {ckpt_dir} (failed shards: {failed_shards})"
         )
 
     # Append to eval history
     history_path = "eval/reports/history.ndjson"
     with open(history_path, "a", encoding="utf-8") as f:
         for r in reports:
-            f.write(json.dumps({
-                "ts": time.time(),
-                "ckpt": ckpt_dir,
-                "summary": r.get("summary", {}),
-                "gates_ok": r.get("gates_ok", False),
-            }, ensure_ascii=False) + "\n")
+            f.write(
+                json.dumps(
+                    {
+                        "ts": time.time(),
+                        "ckpt": ckpt_dir,
+                        "summary": r.get("summary", {}),
+                        "gates_ok": r.get("gates_ok", False),
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
 
     return merged

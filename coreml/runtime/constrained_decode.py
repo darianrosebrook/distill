@@ -40,6 +40,7 @@ def _strip_json_prefix(s: str) -> str:
     # HF tokenizers sometimes prefix spaces; keep them separate
     return s
 
+
 # -------------------------
 # Token <-> string helpers
 # -------------------------
@@ -59,8 +60,7 @@ class TokenLexicon:
         # Build id->string map robustly from ids:
         for tid in range(tokenizer.vocab_size):
             try:
-                self.id2str[tid] = tokenizer.decode(
-                    [tid], clean_up_tokenization_spaces=False)
+                self.id2str[tid] = tokenizer.decode([tid], clean_up_tokenization_spaces=False)
             except Exception:
                 self.id2str[tid] = ""
 
@@ -97,6 +97,7 @@ class TokenLexicon:
                 out.update(tids)
         return out
 
+
 # -------------------------
 # JSON finite-state machine (minimal but robust)
 # -------------------------
@@ -104,10 +105,10 @@ class TokenLexicon:
 
 @dataclass
 class DecoderState:
-    buffer: str          # accumulated text
-    stack: List[str]     # 'obj', 'arr', 'str' markers
-    expect: Set[str]     # what syntactic elements are allowed next
-    complete: bool       # True when a full valid JSON value parsed
+    buffer: str  # accumulated text
+    stack: List[str]  # 'obj', 'arr', 'str' markers
+    expect: Set[str]  # what syntactic elements are allowed next
+    complete: bool  # True when a full valid JSON value parsed
     error: Optional[str]  # last error if any
 
 
@@ -198,7 +199,10 @@ class JSONFSM:
             complete = not self._inside_string(s)
         except Exception:
             complete = False
-        return DecoderState(buffer=s, stack=st.stack, expect=st.expect, complete=complete, error=err)
+        return DecoderState(
+            buffer=s, stack=st.stack, expect=st.expect, complete=complete, error=err
+        )
+
 
 # -------------------------
 # Schema checker (post-hoc validation)
@@ -249,6 +253,7 @@ class SchemaValidator:
             if t == "array" and not isinstance(v, list):
                 return False, f"{k} must be array"
         return True, None
+
 
 # -------------------------
 # Public decoder
@@ -319,6 +324,7 @@ class JSONConstrainedDecoder:
             Boolean numpy array of shape (V,) where True indicates allowed tokens
         """
         import numpy as np
+
         V = logits_shape[-1]
         mask = np.zeros(V, dtype=bool)
         allowed_chars = self.fsm.step_chars_allowed(st)
@@ -388,8 +394,7 @@ class JSONConstrainedDecoder:
 
         # Get tool-specific schema from registry
         # Registry should have a get() method that returns schema dict or None
-        tool_schema = self.registry.get(tool_name) if hasattr(
-            self.registry, 'get') else None
+        tool_schema = self.registry.get(tool_name) if hasattr(self.registry, "get") else None
 
         if tool_schema:
             self.validator.set_schema(tool_schema)

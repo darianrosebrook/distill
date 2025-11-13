@@ -8,18 +8,21 @@ Supports:
 - Post-tool integration
 - Final answer generation
 """
+
 from typing import Dict, Any, List, Optional
 import json
 import numpy as np
 
 try:
     import coremltools as ct
+
     COREML_AVAILABLE = True
 except ImportError:
     COREML_AVAILABLE = False
 
 try:
     import torch
+
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
@@ -38,8 +41,7 @@ def load_coreml_model(mlpackage_path: str):
         Loaded CoreML model
     """
     if not COREML_AVAILABLE:
-        raise ImportError(
-            "coremltools not available. Install with: pip install coremltools")
+        raise ImportError("coremltools not available. Install with: pip install coremltools")
 
     model = ct.models.MLModel(mlpackage_path)
     return model
@@ -72,10 +74,7 @@ def generate_tool_call(
     tool_schema = {
         "type": "object",
         "required": ["name", "arguments"],
-        "properties": {
-            "name": {"type": "string"},
-            "arguments": {"type": "object"}
-        }
+        "properties": {"name": {"type": "string"}, "arguments": {"type": "object"}},
     }
 
     # Create constrained decoder
@@ -85,7 +84,8 @@ def generate_tool_call(
     # Encode prompt
     if not TORCH_AVAILABLE:
         raise ImportError(
-            "PyTorch required for tool call generation. Install with: pip install torch")
+            "PyTorch required for tool call generation. Install with: pip install torch"
+        )
 
     input_ids = tokenizer.encode(prompt, return_tensors="pt")
     if device and hasattr(input_ids, "to"):
@@ -97,7 +97,8 @@ def generate_tool_call(
 
     # Determine if this is CoreML or PyTorch model
     is_coreml = hasattr(model, "prediction") or (
-        COREML_AVAILABLE and isinstance(model, ct.models.MLModel))
+        COREML_AVAILABLE and isinstance(model, ct.models.MLModel)
+    )
 
     # For CoreML, we need to track input_ids as numpy array and handle KV cache
     if is_coreml:
@@ -174,25 +175,26 @@ def generate_tool_call(
                     # [V] -> already single token
                     next_token_logits = logits
                 else:
-                    raise ValueError(
-                        f"Unexpected logits shape: {logits.shape}")
+                    raise ValueError(f"Unexpected logits shape: {logits.shape}")
             else:
                 # Convert to numpy if it's a different type
                 next_token_logits = np.array(logits)
                 if len(next_token_logits.shape) > 1:
                     # Flatten and take last vocab_size elements if shape is wrong
                     next_token_logits = next_token_logits.flatten()
-                    if hasattr(tokenizer, 'vocab_size') and len(next_token_logits) > tokenizer.vocab_size:
-                        next_token_logits = next_token_logits[-tokenizer.vocab_size:]
+                    if (
+                        hasattr(tokenizer, "vocab_size")
+                        and len(next_token_logits) > tokenizer.vocab_size
+                    ):
+                        next_token_logits = next_token_logits[-tokenizer.vocab_size :]
         else:
             # PyTorch inference
             if not TORCH_AVAILABLE:
-                raise ImportError(
-                    "PyTorch required for PyTorch model inference")
+                raise ImportError("PyTorch required for PyTorch model inference")
             model.eval()
             with torch.no_grad():
                 # Check if model supports halt head
-                if hasattr(model, 'use_halt_head') and model.use_halt_head and return_halt_logits:
+                if hasattr(model, "use_halt_head") and model.use_halt_head and return_halt_logits:
                     outputs = model(input_ids, return_halt_logits=True)
                     if isinstance(outputs, tuple) and len(outputs) == 2:
                         logits, halt_logits_tensor = outputs
@@ -202,12 +204,10 @@ def generate_tool_call(
                         else:
                             halt_logits = halt_logits_tensor
                     else:
-                        logits = outputs[0] if isinstance(
-                            outputs, tuple) else outputs
+                        logits = outputs[0] if isinstance(outputs, tuple) else outputs
                 else:
                     outputs = model(input_ids)
-                    logits = outputs[0] if isinstance(
-                        outputs, tuple) else outputs
+                    logits = outputs[0] if isinstance(outputs, tuple) else outputs
                 next_token_logits = logits[0, -1, :].cpu().numpy()  # [V]
 
         # Apply constrained decoding mask
@@ -227,11 +227,13 @@ def generate_tool_call(
             new_token = np.array([[tok_id]], dtype=np.int32)
             input_ids_np = np.concatenate([input_ids_np, new_token], axis=1)
             attention_mask = np.concatenate(
-                [attention_mask, np.ones((1, 1), dtype=np.int32)], axis=1)
+                [attention_mask, np.ones((1, 1), dtype=np.int32)], axis=1
+            )
             current_seq_len += 1
         elif TORCH_AVAILABLE:
-            input_ids = torch.cat([input_ids, torch.tensor(
-                [[tok_id]], device=input_ids.device)], dim=1)
+            input_ids = torch.cat(
+                [input_ids, torch.tensor([[tok_id]], device=input_ids.device)], dim=1
+            )
 
         # Stop if decoder says we're complete
         if state.complete:
@@ -266,15 +268,16 @@ def generate_tool_call(
         return tool_call
     except ValueError as e:
         # Invalid JSON - try to extract anyway
-        generated_text = tokenizer.decode(
-            generated_tokens, skip_special_tokens=True)
+        generated_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
         tool_call = extract_tool_call_fallback(generated_text)
         if tool_call:
             # Add halt logits if available
             if return_halt_logits and halt_logits is not None:
                 if isinstance(halt_logits, np.ndarray):
                     if len(halt_logits.shape) == 2:
-                        halt_logits_final = halt_logits[-1] if halt_logits.shape[0] > 1 else halt_logits[0]
+                        halt_logits_final = (
+                            halt_logits[-1] if halt_logits.shape[0] > 1 else halt_logits[0]
+                        )
                     else:
                         halt_logits_final = halt_logits
                     tool_call["halt_logits"] = halt_logits_final.tolist()
@@ -287,20 +290,21 @@ def generate_tool_call(
 def extract_tool_call_fallback(text: str) -> Optional[Dict[str, Any]]:
     """Fallback extraction if constrained decoder fails."""
     import re
-    json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+
+    json_pattern = r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}"
     matches = re.findall(json_pattern, text)
 
     for match in matches:
         try:
             obj = json.loads(match)
-            if isinstance(obj, dict) and 'name' in obj:
+            if isinstance(obj, dict) and "name" in obj:
                 return obj
         except json.JSONDecodeError:
             continue
 
     try:
         obj = json.loads(text.strip())
-        if isinstance(obj, dict) and 'name' in obj:
+        if isinstance(obj, dict) and "name" in obj:
             return obj
     except json.JSONDecodeError:
         pass
@@ -347,7 +351,8 @@ def generate_text_streaming(
 
     # Determine if this is CoreML or PyTorch model
     is_coreml = hasattr(model, "prediction") or (
-        COREML_AVAILABLE and isinstance(model, ct.models.MLModel))
+        COREML_AVAILABLE and isinstance(model, ct.models.MLModel)
+    )
 
     # For CoreML, we need to track input_ids as numpy array
     if is_coreml:
@@ -407,20 +412,23 @@ def generate_text_streaming(
                 elif len(logits.shape) == 1:
                     next_token_logits = logits
                 else:
-                    raise ValueError(
-                        f"Unexpected logits shape: {logits.shape}")
+                    raise ValueError(f"Unexpected logits shape: {logits.shape}")
             else:
                 # Convert to numpy if it's a different type
                 next_token_logits = np.array(logits)
                 if len(next_token_logits.shape) > 1:
                     next_token_logits = next_token_logits.flatten()
-                    if hasattr(tokenizer, 'vocab_size') and len(next_token_logits) > tokenizer.vocab_size:
-                        next_token_logits = next_token_logits[-tokenizer.vocab_size:]
+                    if (
+                        hasattr(tokenizer, "vocab_size")
+                        and len(next_token_logits) > tokenizer.vocab_size
+                    ):
+                        next_token_logits = next_token_logits[-tokenizer.vocab_size :]
         else:
             # PyTorch inference
             if not TORCH_AVAILABLE:
                 raise ImportError(
-                    "PyTorch required for text generation. Install with: pip install torch")
+                    "PyTorch required for text generation. Install with: pip install torch"
+                )
             model.eval()
             with torch.no_grad():
                 outputs = model(input_ids)
@@ -448,11 +456,13 @@ def generate_text_streaming(
             new_token = np.array([[tok_id]], dtype=np.int32)
             input_ids_np = np.concatenate([input_ids_np, new_token], axis=1)
             attention_mask = np.concatenate(
-                [attention_mask, np.ones((1, 1), dtype=np.int32)], axis=1)
+                [attention_mask, np.ones((1, 1), dtype=np.int32)], axis=1
+            )
             current_seq_len += 1
         elif TORCH_AVAILABLE:
-            input_ids = torch.cat([input_ids, torch.tensor(
-                [[tok_id]], device=input_ids.device)], dim=1)
+            input_ids = torch.cat(
+                [input_ids, torch.tensor([[tok_id]], device=input_ids.device)], dim=1
+            )
 
         # Decode and yield chunk
         chunk = tokenizer.decode([tok_id], skip_special_tokens=True)
@@ -469,20 +479,20 @@ def main():
     import argparse
 
     ap = argparse.ArgumentParser(description="CoreML runtime generator")
-    ap.add_argument("--model", required=True,
-                    help="Path to .mlpackage or PyTorch checkpoint")
+    ap.add_argument("--model", required=True, help="Path to .mlpackage or PyTorch checkpoint")
     ap.add_argument("--tokenizer", required=True, help="Path to tokenizer")
     ap.add_argument("--prompt", required=True, help="Input prompt")
     ap.add_argument("--tools", help="Path to tools manifest JSON")
-    ap.add_argument("--max-tokens", type=int, default=512,
-                    help="Max tokens to generate")
-    ap.add_argument("--use-constrained", action="store_true",
-                    help="Use constrained decoding for tool calls")
+    ap.add_argument("--max-tokens", type=int, default=512, help="Max tokens to generate")
+    ap.add_argument(
+        "--use-constrained", action="store_true", help="Use constrained decoding for tool calls"
+    )
 
     args = ap.parse_args()
 
     # Load tokenizer
     from training.dataset import load_tokenizer
+
     tokenizer = load_tokenizer(args.tokenizer)
 
     # Load model
@@ -498,19 +508,19 @@ def main():
 
         # Load config from checkpoint if available
         cfg = None
-        if 'config' in checkpoint:
-            config_data = checkpoint['config']
-            arch_cfg = config_data.get('arch', {})
+        if "config" in checkpoint:
+            config_data = checkpoint["config"]
+            arch_cfg = config_data.get("arch", {})
             cfg = ModelCfg(
-                d_model=arch_cfg.get('d_model', 4096),
-                n_layers=arch_cfg.get('n_layers', 32),
-                n_heads=arch_cfg.get('n_heads', 32),
-                n_kv_heads=arch_cfg.get('n_kv_heads', 8),
-                d_head=arch_cfg.get('d_head', 128),
-                vocab_size=arch_cfg.get('vocab_size', 32000),
-                rope_theta=arch_cfg.get('rope_theta', 10000.0),
-                rope_scaling=arch_cfg.get('rope_scaling', 'dynamic'),
-                dropout=arch_cfg.get('dropout', 0.0),
+                d_model=arch_cfg.get("d_model", 4096),
+                n_layers=arch_cfg.get("n_layers", 32),
+                n_heads=arch_cfg.get("n_heads", 32),
+                n_kv_heads=arch_cfg.get("n_kv_heads", 8),
+                d_head=arch_cfg.get("d_head", 128),
+                vocab_size=arch_cfg.get("vocab_size", 32000),
+                rope_theta=arch_cfg.get("rope_theta", 10000.0),
+                rope_scaling=arch_cfg.get("rope_scaling", "dynamic"),
+                dropout=arch_cfg.get("dropout", 0.0),
             )
 
         if cfg is None:
@@ -518,8 +528,8 @@ def main():
 
         model = StudentLM(cfg)
 
-        if 'model_state_dict' in checkpoint:
-            model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+        if "model_state_dict" in checkpoint:
+            model.load_state_dict(checkpoint["model_state_dict"], strict=False)
         else:
             model.load_state_dict(checkpoint, strict=False)
 
@@ -527,8 +537,7 @@ def main():
 
         # Set device for PyTorch model (not CoreML)
         if not isinstance(model, str):  # CoreML models are loaded as file paths
-            device = torch.device(
-                "cuda" if torch.cuda.is_available() else "cpu")
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             model = model.to(device)
             device_str = str(device)  # For passing to generate functions
         else:
@@ -538,18 +547,19 @@ def main():
     # Load tools if provided
     tools = []
     if args.tools:
-        with open(args.tools, 'r') as f:
+        with open(args.tools, "r") as f:
             tools = json.load(f)
 
     # Generate
     if args.use_constrained and tools:
         # Generate tool call with constrained decoding
-        tool_call = generate_tool_call(
-            model, tokenizer, args.prompt, tools, device=device_str)
+        tool_call = generate_tool_call(model, tokenizer, args.prompt, tools, device=device_str)
         print(json.dumps(tool_call, indent=2))
     else:
         # Generate text normally
-        for chunk in generate_text_streaming(model, tokenizer, args.prompt, args.max_tokens, device=device_str):
+        for chunk in generate_text_streaming(
+            model, tokenizer, args.prompt, args.max_tokens, device=device_str
+        ):
             print(chunk, end="", flush=True)
         print()
 

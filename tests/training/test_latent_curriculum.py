@@ -18,10 +18,12 @@ class TestLatentCurriculum:
     def mock_tokenizer(self):
         """Create mock tokenizer."""
         tokenizer = Mock()
-        tokenizer.convert_tokens_to_ids = Mock(side_effect=lambda x: {
-            BOT_TOKEN: 3,
-            EOT_TOKEN: 4,
-        }.get(x, None))
+        tokenizer.convert_tokens_to_ids = Mock(
+            side_effect=lambda x: {
+                BOT_TOKEN: 3,
+                EOT_TOKEN: 4,
+            }.get(x, None)
+        )
         return tokenizer
 
     @pytest.fixture
@@ -98,5 +100,4 @@ class TestLatentCurriculum:
             assert isinstance(result["loss_mask"], torch.Tensor)
             # At least some tokens should be masked (latent slots)
             if result["loss_mask"].numel() > 0:
-                assert torch.any(~result["loss_mask"]) or torch.all(
-                    result["loss_mask"])
+                assert torch.any(~result["loss_mask"]) or torch.all(result["loss_mask"])

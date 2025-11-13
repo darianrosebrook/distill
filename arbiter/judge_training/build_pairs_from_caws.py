@@ -38,7 +38,7 @@ def main(inp, out):
                 "prompt": r["prompt"],
                 "a": {"text": a["text"], "clauses": a.get("clauses", [])},
                 "b": {"text": b["text"], "clauses": b.get("clauses", [])},
-                "winner": winner
+                "winner": winner,
             }
             g.write(json.dumps(row, ensure_ascii=False) + "\n")
     print("wrote", out)
@@ -46,4 +46,3 @@ def main(inp, out):
 
 if __name__ == "__main__":
     main(sys.argv[1], sys.argv[2])
-

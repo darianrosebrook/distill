@@ -10,6 +10,7 @@ Reference: code-mode-latent-reasoning.md Milestone 1
 
 Author: @darianrosebrook
 """
+
 from __future__ import annotations
 
 import re
@@ -28,7 +29,7 @@ def detect_code_mode_usage(model_output: str) -> bool:
     """
     ts_api_patterns = [
         "from './servers",
-        "from \"./servers",
+        'from "./servers',
         "callMCPTool(",
         "import * as",
         "await ",
@@ -65,9 +66,9 @@ def detect_data_leak(model_output: str, tool_results: List[Dict[str, Any]]) -> b
         True if data leak detected
     """
     pii_patterns = {
-        "EMAIL": r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
-        "PHONE": r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b',
-        "SSN": r'\b\d{3}-\d{2}-\d{4}\b',
+        "EMAIL": r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
+        "PHONE": r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b",
+        "SSN": r"\b\d{3}-\d{2}-\d{4}\b",
     }
 
     # Extract PII from tool results
@@ -131,20 +132,24 @@ console.log('Summary:', summary);
 """
 
         # Code-mode should be detected
-        assert detect_code_mode_usage(model_output_with_code_mode), \
+        assert detect_code_mode_usage(model_output_with_code_mode), (
             "Code-mode usage should be detected for TS API patterns"
+        )
 
         # Direct tool call should be detected
-        assert detect_direct_tool_calls(model_output_with_direct_tool), \
+        assert detect_direct_tool_calls(model_output_with_direct_tool), (
             "Direct tool call patterns should be detected"
+        )
 
         # Large content should not be echoed in code-mode output
-        assert len(model_output_with_code_mode) < 1000, \
+        assert len(model_output_with_code_mode) < 1000, (
             "Code-mode output should not contain large payloads"
+        )
 
         # Direct tool call would echo large content (bad)
-        assert len(model_output_with_direct_tool) > 1000, \
+        assert len(model_output_with_direct_tool) > 1000, (
             "Direct tool calls echo large payloads (this is the problem we're solving)"
+        )
 
 
 class TestCodeModeMultiTool:
@@ -178,17 +183,18 @@ console.log('Task completed');
 """
 
         # Code-mode should be detected
-        assert detect_code_mode_usage(model_output_with_code_mode), \
+        assert detect_code_mode_usage(model_output_with_code_mode), (
             "Code-mode usage should be detected for multi-tool scenarios"
+        )
 
         # Count tools in code-mode (should be 2+)
         code_mode_tool_count = model_output_with_code_mode.count("await ")
-        assert code_mode_tool_count >= 2, \
-            "Multi-tool scenario should have ≥2 tool calls"
+        assert code_mode_tool_count >= 2, "Multi-tool scenario should have ≥2 tool calls"
 
         # Direct tool call should be detected
-        assert detect_direct_tool_calls(model_output_with_direct_tool), \
+        assert detect_direct_tool_calls(model_output_with_direct_tool), (
             "Direct tool call patterns should be detected"
+        )
 
 
 class TestCodeModePII:
@@ -203,11 +209,8 @@ class TestCodeModePII:
             {
                 "name": "salesforce__query_records",
                 "result": {
-                    "records": [
-                        {"Id": "001", "Email": "user@example.com",
-                            "Phone": "555-123-4567"}
-                    ]
-                }
+                    "records": [{"Id": "001", "Email": "user@example.com", "Phone": "555-123-4567"}]
+                },
             }
         ]
 
@@ -228,16 +231,19 @@ The contact email is user@example.com and phone is 555-123-4567.
 """
 
         # Code-mode should be detected
-        assert detect_code_mode_usage(model_output_with_code_mode), \
+        assert detect_code_mode_usage(model_output_with_code_mode), (
             "Code-mode usage should be detected"
+        )
 
         # Code-mode should not leak PII
-        assert not detect_data_leak(model_output_with_code_mode, tool_results), \
+        assert not detect_data_leak(model_output_with_code_mode, tool_results), (
             "Code-mode should not leak PII into tokens"
+        )
 
         # Direct tool call with leak should be detected
-        assert detect_data_leak(model_output_with_leak, tool_results), \
+        assert detect_data_leak(model_output_with_leak, tool_results), (
             "Data leak should be detected when PII appears in output"
+        )
 
 
 class TestCodeModeTokenEfficiency:
@@ -268,13 +274,15 @@ console.log('Done');
         tokens_direct = count_tokens(model_output_direct)
 
         # Code-mode should use fewer tokens (large result stays in sandbox)
-        assert tokens_code_mode < tokens_direct, \
+        assert tokens_code_mode < tokens_direct, (
             f"Code-mode should use fewer tokens ({tokens_code_mode} < {tokens_direct})"
+        )
 
         # Improvement should be significant (≥25% reduction)
         improvement = (tokens_direct - tokens_code_mode) / tokens_direct
-        assert improvement >= 0.25, \
+        assert improvement >= 0.25, (
             f"Code-mode should achieve ≥25% token reduction (got {improvement:.1%})"
+        )
 
 
 class TestCodeModeExecutionCorrectness:
@@ -316,19 +324,22 @@ console.log('Report written');
 
         # Check that pretty-only output doesn't create side-effect
         # (In real test, would execute code and check for file)
-        assert "writeFileSync" not in model_output_pretty_only or \
-               "./workspace/report.json" not in model_output_pretty_only, \
-            "Pretty-only TS should not create execution side-effects"
+        assert (
+            "writeFileSync" not in model_output_pretty_only
+            or "./workspace/report.json" not in model_output_pretty_only
+        ), "Pretty-only TS should not create execution side-effects"
 
         # Check that execution output creates side-effect
-        assert "writeFileSync" in model_output_with_execution and \
-               "./workspace/report.json" in model_output_with_execution, \
-            "Execution output should create observable side-effects"
+        assert (
+            "writeFileSync" in model_output_with_execution
+            and "./workspace/report.json" in model_output_with_execution
+        ), "Execution output should create observable side-effects"
 
         # Check that large blob doesn't appear in tokens (≤200 chars)
         large_blob_in_output = large_blob[:200] in model_output_with_execution
-        assert not large_blob_in_output, \
+        assert not large_blob_in_output, (
             "Large blob should not appear in assistant tokens (should stay in sandbox)"
+        )
 
 
 class TestCodeModeSingleToolExemption:
@@ -352,18 +363,18 @@ class TestCodeModeSingleToolExemption:
         intermediate_size = len(model_output_single_tool)  # Small
 
         eligible = (
-            tool_count >= 2 or
-            intermediate_size >= 10000 or
-            False  # No PII
+            tool_count >= 2 or intermediate_size >= 10000 or False  # No PII
         )
 
-        assert not eligible, \
+        assert not eligible, (
             "Single small tool call should not be eligible for code-mode preference"
+        )
 
         # Should not detect as direct tool call requiring penalty
         # (eligibility check should prevent loss from firing)
-        assert detect_direct_tool_calls(model_output_single_tool), \
+        assert detect_direct_tool_calls(model_output_single_tool), (
             "Should detect direct tool call pattern"
+        )
 
         # But since it's not eligible, it shouldn't be penalized
         # (This is tested by ensuring eligibility_mask filters it out)
@@ -383,31 +394,28 @@ def test_single_small_tool_exempt():
     seq_len = 10
     vocab_size = 1000
 
-    student_logits = torch.randn(
-        batch_size, seq_len, vocab_size, requires_grad=True)
+    student_logits = torch.randn(batch_size, seq_len, vocab_size, requires_grad=True)
 
     loss_module = CodeModePreferenceLoss(
-        eligibility_rules={"min_tools": 2,
-                           "min_intermediate_chars": 10000, "pii_patterns": []},
-        reward={"prefer_ts_api_over_direct_tool": True,
-                "penalize_tool_result_roundtrip": True},
+        eligibility_rules={"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []},
+        reward={"prefer_ts_api_over_direct_tool": True, "penalize_tool_result_roundtrip": True},
         vocab_ids={},
     )
 
     # Single small tool call (not eligible)
-    batch_meta = [{
-        "tool_count": 1,  # Only 1 tool
-        "intermediate_sizes": [100],  # Small payload (< 10k)
-        "pii_tags_present": False,
-    }]
+    batch_meta = [
+        {
+            "tool_count": 1,  # Only 1 tool
+            "intermediate_sizes": [100],  # Small payload (< 10k)
+            "pii_tags_present": False,
+        }
+    ]
 
     # Compute eligibility mask
-    eligibility_mask = loss_module._compute_eligibility_mask(
-        batch_meta, batch_size)
+    eligibility_mask = loss_module._compute_eligibility_mask(batch_meta, batch_size)
 
     # Should be ineligible
-    assert not eligibility_mask[0].item(
-    ), "Single small tool should not be eligible"
+    assert not eligibility_mask[0].item(), "Single small tool should not be eligible"
 
     # Loss should be zero for ineligible cases
     loss = loss_module(
@@ -416,8 +424,7 @@ def test_single_small_tool_exempt():
         batch_meta=batch_meta,
     )
 
-    assert loss.item(
-    ) == 0.0, f"Loss should be zero for ineligible case (got {loss.item()})"
+    assert loss.item() == 0.0, f"Loss should be zero for ineligible case (got {loss.item()})"
 
 
 def test_adversarial_printing():
@@ -443,8 +450,7 @@ console.log('Done');
 
     # Gate should fail: large payload echoed into tokens
     # (In real test, would check CES and no-leakage gate)
-    assert len(
-        model_output_adversarial) > 20000, "Adversarial output should exceed token limit"
+    assert len(model_output_adversarial) > 20000, "Adversarial output should exceed token limit"
 
 
 def test_pii_binding_path_no_leak():
@@ -470,13 +476,13 @@ console.log(`Processed ${filtered.length} emails`);
 """
 
     # Check that emails don't appear in output (only counts)
-    email_in_output = any(
-        email in model_output_safe for email in tool_results["emails"])
+    email_in_output = any(email in model_output_safe for email in tool_results["emails"])
 
     assert not email_in_output, "PII should not appear in output (only counts logged)"
 
     # Check that counts are logged
-    assert "count" in model_output_safe.lower() or "length" in model_output_safe.lower(), \
+    assert "count" in model_output_safe.lower() or "length" in model_output_safe.lower(), (
         "Counts should be logged instead of PII"
+    )
 
     # In real test, would verify leak_count == 0 via scorer

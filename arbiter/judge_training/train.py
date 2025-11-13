@@ -18,6 +18,7 @@ app = typer.Typer()
 @app.command()
 def main(config: str = "configs/judge_training.yaml"):
     import yaml
+
     cfg = yaml.safe_load(open(config))
     os.makedirs(cfg["paths"]["out_dir"], exist_ok=True)
 
@@ -30,14 +31,22 @@ def main(config: str = "configs/judge_training.yaml"):
     val_ds = PairwiseJudgeDataset(cfg["paths"]["val_jsonl"], jc)
 
     model = MultiTaskJudge(jc.hf_name, num_clauses=len(jc.clauses))
-    device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+    device = torch.device(
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
+    )
     model.to(device)
 
     bs = cfg["train"]["batch_size"]
     train_dl = DataLoader(train_ds, batch_size=bs, shuffle=True)
     val_dl = DataLoader(val_ds, batch_size=bs)
 
-    opt = torch.optim.AdamW(model.parameters(), lr=cfg["train"]["lr"], weight_decay=cfg["train"]["weight_decay"])
+    opt = torch.optim.AdamW(
+        model.parameters(), lr=cfg["train"]["lr"], weight_decay=cfg["train"]["weight_decay"]
+    )
     total_steps = cfg["train"]["total_steps"]
     warmup = cfg["train"]["warmup_steps"]
     sch = get_linear_schedule_with_warmup(opt, warmup, total_steps)
@@ -49,7 +58,7 @@ def main(config: str = "configs/judge_training.yaml"):
     def step(batch):
         (sa, ca), (sb, cb) = model(
             {k: v.to(device) for k, v in batch["a"].items()},
-            {k: v.to(device) for k, v in batch["b"].items()}
+            {k: v.to(device) for k, v in batch["b"].items()},
         )
         # Pairwise ranking loss
         target = batch["target"].to(device).float()
@@ -98,11 +107,11 @@ def evaluate(model, val_dl, device):
     for b in val_dl:
         (sa, ca), (sb, cb) = model(
             {k: v.to(device) for k, v in b["a"].items()},
-            {k: v.to(device) for k, v in b["b"].items()}
+            {k: v.to(device) for k, v in b["b"].items()},
         )
         # Pairwise acc ignoring ties
         winners = torch.where(sa > sb, 1, -1)
-        mask = (b["target"] != 0)
+        mask = b["target"] != 0
         correct += ((winners == b["target"].to(winners.dtype)) & mask).sum().item()
         total += mask.sum().item()
     acc = correct / max(1, total)
@@ -112,4 +121,3 @@ def evaluate(model, val_dl, device):
 
 if __name__ == "__main__":
     app()
-

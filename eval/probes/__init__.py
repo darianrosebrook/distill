@@ -3,4 +3,3 @@
 from eval.probes.latent_probe import LatentProbe
 
 __all__ = ["LatentProbe"]
-

@@ -3,6 +3,7 @@
 
 Author: @darianrosebrook
 """
+
 import json
 import os
 import hashlib
@@ -27,9 +28,7 @@ def sha256p(path: str) -> Optional[str]:
 def maybe(cmd: str) -> str:
     """Run command and return output or error message."""
     try:
-        out = subprocess.check_output(
-            cmd, shell=True, text=True, stderr=subprocess.STDOUT
-        )
+        out = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.STDOUT)
         return out.strip()
     except subprocess.CalledProcessError as e:
         return f"ERROR: {e.output.strip()}"
@@ -52,7 +51,11 @@ def main() -> None:
     }
 
     # Eval reports
-    for p in ["eval/reports/latest.json", "eval/reports/verify_dataset.json", "eval/reports/smoke.json"]:
+    for p in [
+        "eval/reports/latest.json",
+        "eval/reports/verify_dataset.json",
+        "eval/reports/smoke.json",
+    ]:
         if os.path.exists(p):
             try:
                 with open(p, "r", encoding="utf-8") as f:
@@ -66,8 +69,7 @@ def main() -> None:
         try:
             with open(hist, "r", encoding="utf-8") as f:
                 lines = f.readlines()[-200:]
-            report["eval"]["history_tail"] = [
-                json.loads(line) for line in lines if line.strip()]
+            report["eval"]["history_tail"] = [json.loads(line) for line in lines if line.strip()]
         except Exception as e:
             report["eval"]["history_error"] = str(e)
 
@@ -94,9 +96,7 @@ def main() -> None:
 
     # Dataset files
     dataset_files = glob.glob("data/contextual*.jsonl")
-    report["files"]["dataset_files"] = [
-        os.path.basename(f) for f in dataset_files
-    ]
+    report["files"]["dataset_files"] = [os.path.basename(f) for f in dataset_files]
     report["files"]["dataset_count"] = len(dataset_files)
 
     # Git
@@ -119,9 +119,7 @@ def main() -> None:
 
     # Tool registry
     registry_files = glob.glob("tools/*.py")
-    report["files"]["tool_registry_files"] = [
-        os.path.basename(f) for f in registry_files
-    ]
+    report["files"]["tool_registry_files"] = [os.path.basename(f) for f in registry_files]
 
     print(json.dumps(report, indent=2))
 

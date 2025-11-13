@@ -7,6 +7,7 @@ Tests:
 3. Batch repair checking
 4. Repair metrics
 """
+
 import pytest
 from training.json_repair import (
     validate_json,
@@ -51,7 +52,7 @@ class TestJSONRepair:
         """Test repair with already valid JSON."""
         valid_json = '{"name": "test", "value": 123}'
         success, repaired_dict, was_repaired = repair_json(valid_json, use_jsonrepair=True)
-        
+
         assert success is True
         assert repaired_dict is not None
         assert was_repaired is False
@@ -61,10 +62,10 @@ class TestJSONRepair:
     def test_repair_json_missing_quote(self):
         """Test repair with missing quote."""
         invalid_json = '{"name": test, "value": 123}'  # Missing quotes around "test"
-        
+
         # Try repair
         success, repaired_dict, was_repaired = repair_json(invalid_json, use_jsonrepair=True)
-        
+
         # May or may not succeed depending on jsonrepair availability
         if JSONREPAIR_AVAILABLE:
             # jsonrepair should attempt repair
@@ -76,9 +77,9 @@ class TestJSONRepair:
     def test_repair_json_without_jsonrepair(self):
         """Test repair without jsonrepair library."""
         invalid_json = '{"name": test}'  # Invalid JSON
-        
+
         success, repaired_dict, was_repaired = repair_json(invalid_json, use_jsonrepair=False)
-        
+
         # Without jsonrepair, should fail to repair
         # But function may still try to parse first
         assert success is False or was_repaired is False
@@ -93,16 +94,16 @@ class TestJSONRepairDetection:
         """Test detection with valid JSON."""
         valid_json = '{"name": "test"}'
         is_valid, needs_repair = check_json_repair_needed(valid_json, use_jsonrepair=True)
-        
+
         assert is_valid is True
         assert needs_repair is False
 
     def test_check_repair_needed_invalid(self):
         """Test detection with invalid JSON."""
         invalid_json = '{"name": test}'  # Missing quotes
-        
+
         is_valid, needs_repair = check_json_repair_needed(invalid_json, use_jsonrepair=True)
-        
+
         assert is_valid is False
         # May or may not need repair depending on jsonrepair availability
         assert isinstance(needs_repair, bool)
@@ -110,9 +111,9 @@ class TestJSONRepairDetection:
     def test_check_repair_needed_without_jsonrepair(self):
         """Test detection without jsonrepair."""
         invalid_json = '{"name": test}'
-        
+
         is_valid, needs_repair = check_json_repair_needed(invalid_json, use_jsonrepair=False)
-        
+
         assert is_valid is False
         # Without jsonrepair, needs_repair should be True (can't repair)
         # But function may return False if it can't determine repair need
@@ -129,9 +130,9 @@ class TestBatchJSONRepair:
             '{"name": "test2"}',
             '{"name": "test3"}',
         ]
-        
+
         result = batch_check_json_repair(texts, use_jsonrepair=True)
-        
+
         assert result["total"] == 3
         assert result["valid_json_count"] == 3
         assert result["repair_rate"] == 0.0
@@ -142,12 +143,12 @@ class TestBatchJSONRepair:
         """Test batch check with mixed valid/invalid JSON."""
         texts = [
             '{"name": "test1"}',  # Valid
-            '{"name": test2}',     # Invalid
+            '{"name": test2}',  # Invalid
             '{"name": "test3"}',  # Valid
         ]
-        
+
         result = batch_check_json_repair(texts, use_jsonrepair=True)
-        
+
         assert result["total"] == 3
         assert result["valid_json_count"] >= 2  # At least 2 valid
         assert result["needs_repair_count"] >= 0  # May or may not need repair
@@ -156,7 +157,7 @@ class TestBatchJSONRepair:
     def test_batch_check_empty(self):
         """Test batch check with empty list."""
         result = batch_check_json_repair([], use_jsonrepair=True)
-        
+
         assert result["total"] == 0
         assert result["valid_json_count"] == 0
         assert result["repair_rate"] == 0.0
@@ -166,6 +167,7 @@ class TestBatchJSONRepair:
 # Import JSONREPAIR_AVAILABLE for conditional tests
 try:
     import jsonrepair
+
     JSONREPAIR_AVAILABLE = True
 except ImportError:
     JSONREPAIR_AVAILABLE = False
@@ -173,5 +175,5 @@ except ImportError:
 
 if __name__ == "__main__":
     import pytest
-    pytest.main([__file__, "-v"])
 
+    pytest.main([__file__, "-v"])

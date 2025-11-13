@@ -6,6 +6,7 @@ and hardware profile. Enforces policies to optimize latency vs throughput trade-
 
 Reference: docs/M_SERIES_ADVANCED_OPTIMIZATIONS.md Phase 12
 """
+
 from __future__ import annotations
 from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from dataclasses import dataclass
 @dataclass
 class BatchPolicyConfig:
     """Configuration for batch policy."""
+
     interactive_default: int = 1  # Always 1 for interactive
     # Allowed batch sizes for offline (e.g., [2, 4])
     offline_allowed: List[int] = None
@@ -63,22 +65,21 @@ class BatchPolicy:
             batch_policy_config = profile_config.get("batch_policy", {})
 
             config = BatchPolicyConfig(
-                interactive_default=batch_policy_config.get(
-                    "interactive_default", 1),
-                offline_allowed=batch_policy_config.get(
-                    "offline_allowed", [2, 4]),
+                interactive_default=batch_policy_config.get("interactive_default", 1),
+                offline_allowed=batch_policy_config.get("offline_allowed", [2, 4]),
                 tps_improvement_threshold=batch_policy_config.get(
-                    "tps_improvement_threshold", 0.10),
+                    "tps_improvement_threshold", 0.10
+                ),
                 latency_penalty_threshold=batch_policy_config.get(
-                    "latency_penalty_threshold", 0.10),
+                    "latency_penalty_threshold", 0.10
+                ),
             )
 
         self.config = config
 
         # Cached optimization results
         self._offline_optimal_batch: Optional[int] = None
-        self._optimization_results: Optional[Dict[int,
-                                                  Dict[str, float]]] = None
+        self._optimization_results: Optional[Dict[int, Dict[str, float]]] = None
 
     def select_batch_size(
         self,
@@ -147,9 +148,9 @@ class BatchPolicy:
         # Get baseline (batch=1) metrics
         baseline = benchmark_results.get(1, {})
         baseline_tps = baseline.get("tps", 0.0)
-        baseline_p95 = baseline.get("p95_latency_ms", float('inf'))
+        baseline_p95 = baseline.get("p95_latency_ms", float("inf"))
 
-        if baseline_tps == 0 or baseline_p95 == float('inf'):
+        if baseline_tps == 0 or baseline_p95 == float("inf"):
             return self.config.interactive_default
 
         best_batch = 1
@@ -162,21 +163,22 @@ class BatchPolicy:
 
             metrics = benchmark_results[batch_size]
             tps = metrics.get("tps", 0.0)
-            p95_latency = metrics.get("p95_latency_ms", float('inf'))
+            p95_latency = metrics.get("p95_latency_ms", float("inf"))
 
-            if tps == 0 or p95_latency == float('inf'):
+            if tps == 0 or p95_latency == float("inf"):
                 continue
 
             # Check thresholds
-            tps_improvement = (tps - baseline_tps) / \
-                baseline_tps if baseline_tps > 0 else 0.0
-            latency_penalty = (p95_latency - baseline_p95) / \
-                baseline_p95 if baseline_p95 > 0 else 0.0
+            tps_improvement = (tps - baseline_tps) / baseline_tps if baseline_tps > 0 else 0.0
+            latency_penalty = (
+                (p95_latency - baseline_p95) / baseline_p95 if baseline_p95 > 0 else 0.0
+            )
 
             # Must meet both thresholds
-            if (tps_improvement >= self.config.tps_improvement_threshold and
-                    latency_penalty <= self.config.latency_penalty_threshold):
-
+            if (
+                tps_improvement >= self.config.tps_improvement_threshold
+                and latency_penalty <= self.config.latency_penalty_threshold
+            ):
                 # Score: prioritize TPS improvement, penalize latency penalty
                 score = tps_improvement - (latency_penalty * 0.5)
 
@@ -213,7 +215,10 @@ class BatchPolicy:
             if batch_size in self.config.offline_allowed:
                 return True, f"Batch size {batch_size} allowed for offline workloads"
             else:
-                return False, f"Batch size {batch_size} not in allowed list {self.config.offline_allowed}"
+                return (
+                    False,
+                    f"Batch size {batch_size} not in allowed list {self.config.offline_allowed}",
+                )
 
     def get_policy_summary(self) -> Dict[str, Any]:
         """
@@ -225,7 +230,9 @@ class BatchPolicy:
         return {
             "interactive_batch": self.config.interactive_default,
             "offline_allowed": self.config.offline_allowed,
-            "offline_optimal": self._offline_optimal_batch or self.config.offline_allowed[0] if self.config.offline_allowed else 1,
+            "offline_optimal": self._offline_optimal_batch or self.config.offline_allowed[0]
+            if self.config.offline_allowed
+            else 1,
             "tps_improvement_threshold": self.config.tps_improvement_threshold,
             "latency_penalty_threshold": self.config.latency_penalty_threshold,
             "optimization_results": self._optimization_results,

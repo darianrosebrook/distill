@@ -19,6 +19,7 @@ class MultiTaskJudge(nn.Module):
     - score_head: scalar score for ranking
     - clause_head: multi-label logits over CAWS clauses
     """
+
     def __init__(self, hf_name: str, num_clauses: int):
         super().__init__()
         self.backbone = AutoModel.from_pretrained(hf_name)
@@ -28,7 +29,9 @@ class MultiTaskJudge(nn.Module):
         self.clause_head = nn.Linear(hidden, num_clauses)
 
     def encode_once(self, input_ids, attention_mask, token_type_ids=None):
-        out = self.backbone(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+        out = self.backbone(
+            input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids
+        )
         h = self.pool(out.last_hidden_state, attention_mask)
         s = self.score_head(h).squeeze(-1)
         c = self.clause_head(h)
@@ -38,4 +41,3 @@ class MultiTaskJudge(nn.Module):
         sa, ca = self.encode_once(**a)
         sb, cb = self.encode_once(**b)
         return (sa, ca), (sb, cb)
-

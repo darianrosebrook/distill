@@ -3,4 +3,3 @@
 from runtime.config import RuntimeConfig
 
 __all__ = ["RuntimeConfig"]
-

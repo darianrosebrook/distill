@@ -19,6 +19,7 @@ from eval.scoring.efficiency import EfficiencyMetrics, aggregate_efficiency_metr
 @dataclass
 class BaselineArtifact:
     """Baseline artifact for a single run."""
+
     run_id: str
     seed: int
     task_name: str
@@ -37,7 +38,7 @@ def save_baseline(
 ) -> Dict[str, Any]:
     """
     Save direct CoT baseline artifact for later comparison.
-    
+
     Args:
         results: Evaluation results from direct CoT run (latent disabled)
         run_id: Unique run identifier
@@ -45,12 +46,12 @@ def save_baseline(
         task_name: Task name/identifier
         output_path: Path to save baseline JSON file
         config: Optional config dict to save with baseline
-    
+
     Returns:
         Saved baseline metadata dict
     """
     from datetime import datetime
-    
+
     # Extract efficiency metrics from results
     metrics_list = []
     for result in results:
@@ -63,10 +64,10 @@ def save_baseline(
             refinement_loops=scores.get("refinement_loops", 1),
         )
         metrics_list.append(metrics)
-    
+
     # Aggregate metrics
     aggregated = aggregate_efficiency_metrics(metrics_list)
-    
+
     # Create baseline metrics
     baseline_metrics = EfficiencyMetrics(
         accuracy=aggregated.get("mean_accuracy", 0.0),
@@ -75,7 +76,7 @@ def save_baseline(
         latent_spans_used=0,
         refinement_loops=int(aggregated.get("mean_loops", 1)),
     )
-    
+
     # Create baseline artifact
     artifact = BaselineArtifact(
         run_id=run_id,
@@ -85,20 +86,24 @@ def save_baseline(
         config=config or {},
         timestamp=datetime.now().isoformat(),
     )
-    
+
     # Save to file
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, 'w') as f:
-        json.dump({
-            "run_id": artifact.run_id,
-            "seed": artifact.seed,
-            "task_name": artifact.task_name,
-            "metrics": asdict(artifact.metrics),
-            "config": artifact.config,
-            "timestamp": artifact.timestamp,
-            "aggregated": aggregated,
-        }, f, indent=2)
-    
+    with open(output_path, "w") as f:
+        json.dump(
+            {
+                "run_id": artifact.run_id,
+                "seed": artifact.seed,
+                "task_name": artifact.task_name,
+                "metrics": asdict(artifact.metrics),
+                "config": artifact.config,
+                "timestamp": artifact.timestamp,
+                "aggregated": aggregated,
+            },
+            f,
+            indent=2,
+        )
+
     return {
         "run_id": artifact.run_id,
         "seed": artifact.seed,
@@ -111,24 +116,24 @@ def save_baseline(
 def load_baseline(baseline_path: Path) -> Optional[Dict[str, Any]]:
     """
     Load baseline artifact from file.
-    
+
     Args:
         baseline_path: Path to baseline JSON file
-    
+
     Returns:
         Baseline dict or None if not found
     """
     if not baseline_path.exists():
         return None
-    
+
     try:
-        with open(baseline_path, 'r') as f:
+        with open(baseline_path, "r") as f:
             baseline = json.load(f)
-        
+
         # Convert metrics dict back to EfficiencyMetrics
         metrics_dict = baseline.get("metrics", {})
         baseline["metrics"] = EfficiencyMetrics(**metrics_dict)
-        
+
         return baseline
     except Exception as e:
         print(f"[baseline] WARN: Failed to load baseline from {baseline_path}: {e}")
@@ -143,26 +148,26 @@ def find_baseline(
 ) -> Optional[Path]:
     """
     Find baseline artifact for a given task/seed.
-    
+
     Args:
         task_name: Task name/identifier
         seed: Random seed
         baseline_dir: Directory containing baseline artifacts
         run_id: Optional specific run_id to match
-    
+
     Returns:
         Path to baseline file or None if not found
     """
     if not baseline_dir.exists():
         return None
-    
+
     # Look for baseline files matching pattern: {task_name}_seed{seed}_*.json
     pattern = f"{task_name}_seed{seed}_*.json"
     matches = list(baseline_dir.glob(pattern))
-    
+
     if not matches:
         return None
-    
+
     # If run_id specified, try to match it
     if run_id:
         for match in matches:
@@ -172,7 +177,7 @@ def find_baseline(
                     return match
             except Exception:
                 continue
-    
+
     # Return most recent match
     return max(matches, key=lambda p: p.stat().st_mtime)
 
@@ -184,12 +189,12 @@ def save_efficiency_curves(
 ) -> Dict[str, Any]:
     """
     Save efficiency curves (accuracy vs tokens/time) to file.
-    
+
     Args:
         current_metrics: List of current efficiency metrics
         baseline_metrics: Optional baseline metrics for comparison
         output_path: Path to save curves JSON file
-    
+
     Returns:
         Curves dict with accuracy vs tokens/time data
     """
@@ -200,26 +205,36 @@ def save_efficiency_curves(
             "time_ms": [m.wall_clock_time_ms for m in current_metrics],
         },
     }
-    
+
     if baseline_metrics:
         curves["baseline"] = {
             "accuracy": baseline_metrics.accuracy,
             "tokens": baseline_metrics.generated_tokens,
             "time_ms": baseline_metrics.wall_clock_time_ms,
         }
-        
+
         # Compute deltas
         aggregated = aggregate_efficiency_metrics(current_metrics)
         curves["deltas"] = {
             "accuracy_delta": aggregated.get("mean_accuracy", 0.0) - baseline_metrics.accuracy,
-            "token_reduction": (baseline_metrics.generated_tokens - aggregated.get("mean_tokens", 0)) / baseline_metrics.generated_tokens if baseline_metrics.generated_tokens > 0 else 0.0,
-            "time_delta_percent": ((aggregated.get("mean_time_ms", 0.0) - baseline_metrics.wall_clock_time_ms) / baseline_metrics.wall_clock_time_ms * 100.0) if baseline_metrics.wall_clock_time_ms > 0 else 0.0,
+            "token_reduction": (
+                baseline_metrics.generated_tokens - aggregated.get("mean_tokens", 0)
+            )
+            / baseline_metrics.generated_tokens
+            if baseline_metrics.generated_tokens > 0
+            else 0.0,
+            "time_delta_percent": (
+                (aggregated.get("mean_time_ms", 0.0) - baseline_metrics.wall_clock_time_ms)
+                / baseline_metrics.wall_clock_time_ms
+                * 100.0
+            )
+            if baseline_metrics.wall_clock_time_ms > 0
+            else 0.0,
         }
-    
+
     # Save to file
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         json.dump(curves, f, indent=2)
-    
-    return curves
 
+    return curves

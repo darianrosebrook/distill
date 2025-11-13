@@ -17,6 +17,7 @@ from dataclasses import dataclass
 @dataclass
 class EfficiencyMetrics:
     """Efficiency metrics for a single run."""
+
     accuracy: float
     generated_tokens: int
     wall_clock_time_ms: float
@@ -30,6 +31,7 @@ class EfficiencyMetrics:
 @dataclass
 class EfficiencyCurve:
     """Efficiency curve data points."""
+
     accuracies: List[float]
     token_counts: List[int]
     time_ms: List[float]
@@ -42,11 +44,11 @@ def calculate_token_reduction(
 ) -> float:
     """
     Calculate token reduction percentage.
-    
+
     Args:
         baseline_tokens: Baseline token count
         current_tokens: Current token count
-    
+
     Returns:
         Token reduction percentage (0-1, where 1.0 = 100% reduction)
     """
@@ -62,11 +64,11 @@ def calculate_time_reduction(
 ) -> float:
     """
     Calculate time reduction percentage.
-    
+
     Args:
         baseline_time_ms: Baseline time in milliseconds
         current_time_ms: Current time in milliseconds
-    
+
     Returns:
         Time reduction percentage (0-1, where 1.0 = 100% reduction)
     """
@@ -82,11 +84,11 @@ def compute_efficiency_curves(
 ) -> Dict[str, EfficiencyCurve]:
     """
     Compute efficiency curves from metrics.
-    
+
     Args:
         metrics_list: List of efficiency metrics
         baseline_metrics: Optional baseline metrics for comparison
-    
+
     Returns:
         Dict with curves:
         - accuracy_vs_tokens: EfficiencyCurve
@@ -96,35 +98,35 @@ def compute_efficiency_curves(
     token_counts = []
     time_ms = []
     labels = []
-    
+
     # Add baseline if provided
     if baseline_metrics:
         accuracies.append(baseline_metrics.accuracy)
         token_counts.append(baseline_metrics.generated_tokens)
         time_ms.append(baseline_metrics.wall_clock_time_ms)
         labels.append("baseline")
-    
+
     # Add current metrics
     for i, metrics in enumerate(metrics_list):
         accuracies.append(metrics.accuracy)
         token_counts.append(metrics.generated_tokens)
         time_ms.append(metrics.wall_clock_time_ms)
-        labels.append(f"latent_{i+1}")
-    
+        labels.append(f"latent_{i + 1}")
+
     accuracy_vs_tokens = EfficiencyCurve(
         accuracies=accuracies,
         token_counts=token_counts,
         time_ms=time_ms,
         labels=labels,
     )
-    
+
     accuracy_vs_time = EfficiencyCurve(
         accuracies=accuracies,
         token_counts=token_counts,
         time_ms=time_ms,
         labels=labels,
     )
-    
+
     return {
         "accuracy_vs_tokens": accuracy_vs_tokens,
         "accuracy_vs_time": accuracy_vs_time,
@@ -137,11 +139,11 @@ def compare_with_baseline(
 ) -> Dict[str, Any]:
     """
     Compare current metrics with baseline.
-    
+
     Args:
         current_metrics: Current efficiency metrics
         baseline_metrics: Baseline efficiency metrics
-    
+
     Returns:
         Dict with comparison results:
         - token_reduction: float (0-1)
@@ -154,18 +156,18 @@ def compare_with_baseline(
         baseline_metrics.generated_tokens,
         current_metrics.generated_tokens,
     )
-    
+
     time_reduction = calculate_time_reduction(
         baseline_metrics.wall_clock_time_ms,
         current_metrics.wall_clock_time_ms,
     )
-    
+
     accuracy_delta = current_metrics.accuracy - baseline_metrics.accuracy
     accuracy_maintained = accuracy_delta >= -0.01  # Allow small regression
-    
+
     # Target: ≥25-40% token reduction
     meets_efficiency_target = token_reduction >= 0.25
-    
+
     return {
         "token_reduction": token_reduction,
         "time_reduction": time_reduction,
@@ -182,10 +184,10 @@ def aggregate_efficiency_metrics(
 ) -> Dict[str, Any]:
     """
     Aggregate efficiency metrics across multiple runs.
-    
+
     Args:
         metrics_list: List of efficiency metrics
-    
+
     Returns:
         Dict with aggregated statistics:
         - mean_accuracy: float
@@ -198,13 +200,13 @@ def aggregate_efficiency_metrics(
     """
     if not metrics_list:
         return {}
-    
+
     accuracies = [m.accuracy for m in metrics_list]
     tokens = [m.generated_tokens for m in metrics_list]
     times = [m.wall_clock_time_ms for m in metrics_list]
     loops = [m.refinement_loops for m in metrics_list]
     latent_spans = [m.latent_spans_used for m in metrics_list]
-    
+
     return {
         "mean_accuracy": float(np.mean(accuracies)),
         "mean_tokens": float(np.mean(tokens)),
@@ -228,12 +230,12 @@ def evaluate_efficiency_gates(
 ) -> Dict[str, Any]:
     """
     Evaluate efficiency gates.
-    
+
     Gates:
     - ≥ baseline accuracy with ≥25-40% fewer generated tokens on long chains
     - Average refinement loops ≤ current self-refine
     - Tail latency not worse than baseline
-    
+
     Args:
         current_metrics: Current efficiency metrics
         baseline_metrics: Baseline efficiency metrics
@@ -241,7 +243,7 @@ def evaluate_efficiency_gates(
         max_token_reduction: Maximum token reduction (default: 0.40 = 40%)
         max_accuracy_regression: Maximum allowed accuracy regression (default: 0.01)
         max_loop_increase: Maximum allowed loop increase (if None, no limit)
-    
+
     Returns:
         Dict with gate results:
         - all_gates_passed: bool
@@ -252,19 +254,18 @@ def evaluate_efficiency_gates(
         - details: Dict with individual gate details
     """
     comparison = compare_with_baseline(current_metrics, baseline_metrics)
-    
+
     token_reduction = comparison["token_reduction"]
     accuracy_delta = comparison["accuracy_delta"]
-    
+
     # Gate 1: Token reduction ≥25-40%
     token_reduction_gate = (
-        token_reduction >= min_token_reduction and
-        token_reduction <= max_token_reduction
+        token_reduction >= min_token_reduction and token_reduction <= max_token_reduction
     )
-    
+
     # Gate 2: Accuracy maintained (≥ baseline - small regression)
     accuracy_gate = accuracy_delta >= -max_accuracy_regression
-    
+
     # Gate 3: Loop count ≤ baseline (or within limit)
     loop_gate = True
     if max_loop_increase is not None:
@@ -272,18 +273,15 @@ def evaluate_efficiency_gates(
         loop_gate = loop_increase <= max_loop_increase
     else:
         loop_gate = current_metrics.refinement_loops <= baseline_metrics.refinement_loops
-    
+
     # Gate 4: Latency not worse (time reduction ≥ 0 or small increase)
     time_delta = current_metrics.wall_clock_time_ms - baseline_metrics.wall_clock_time_ms
-    latency_gate = time_delta <= 0 or (time_delta / baseline_metrics.wall_clock_time_ms) <= 0.1  # ≤10% increase
-    
-    all_gates_passed = (
-        token_reduction_gate and
-        accuracy_gate and
-        loop_gate and
-        latency_gate
-    )
-    
+    latency_gate = (
+        time_delta <= 0 or (time_delta / baseline_metrics.wall_clock_time_ms) <= 0.1
+    )  # ≤10% increase
+
+    all_gates_passed = token_reduction_gate and accuracy_gate and loop_gate and latency_gate
+
     return {
         "all_gates_passed": all_gates_passed,
         "token_reduction_gate": token_reduction_gate,
@@ -295,7 +293,8 @@ def evaluate_efficiency_gates(
             "accuracy_delta": accuracy_delta,
             "loop_delta": current_metrics.refinement_loops - baseline_metrics.refinement_loops,
             "time_delta_ms": time_delta,
-            "time_delta_percent": (time_delta / baseline_metrics.wall_clock_time_ms) * 100 if baseline_metrics.wall_clock_time_ms > 0 else 0,
+            "time_delta_percent": (time_delta / baseline_metrics.wall_clock_time_ms) * 100
+            if baseline_metrics.wall_clock_time_ms > 0
+            else 0,
         },
     }
-

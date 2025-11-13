@@ -163,7 +163,9 @@ class InferenceOrchestrator:
                 curriculum_result = curriculum_example
 
             # Encode generation prompt
-            gen_input_ids = torch.tensor([self.tokenizer.encode(generation_prompt)], dtype=torch.long)
+            gen_input_ids = torch.tensor(
+                [self.tokenizer.encode(generation_prompt)], dtype=torch.long
+            )
 
             # Generate with latent mode
             generation_result = self.latent_engine.generate_with_latent_mode(
@@ -230,7 +232,8 @@ class InferenceOrchestrator:
             "refinement_history": refinement_history,
             "latent_mode_used": self.config.latent_mode_enabled,
             "halt_head_used": self.config.halt_head_enabled,
-            "curriculum_applied": self.config.latent_mode_enabled and self.config.curriculum_probability > 0,
+            "curriculum_applied": self.config.latent_mode_enabled
+            and self.config.curriculum_probability > 0,
         }
 
     def generate_simple(
@@ -291,33 +294,34 @@ def create_inference_orchestrator_from_checkpoint(
         Configured InferenceOrchestrator
     """
     # Load checkpoint
-    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
 
     # Load model config
-    config_data = checkpoint.get('config', {})
-    arch_cfg = config_data.get('arch', {})
+    config_data = checkpoint.get("config", {})
+    arch_cfg = config_data.get("arch", {})
 
     # Get model architecture flags
-    model_arch = checkpoint.get('model_arch', {})
-    use_halt_head = model_arch.get('use_halt_head', False) and halt_head_enabled
+    model_arch = checkpoint.get("model_arch", {})
+    use_halt_head = model_arch.get("use_halt_head", False) and halt_head_enabled
 
     # Create model config
     from models.student.architectures.gqa_transformer import ModelCfg
+
     model_cfg = ModelCfg(
-        d_model=arch_cfg.get('d_model', 4096),
-        n_layers=arch_cfg.get('n_layers', 32),
-        n_heads=arch_cfg.get('n_heads', 32),
-        n_kv_heads=arch_cfg.get('n_kv_heads', 8),
-        d_head=arch_cfg.get('d_head', 128),
-        vocab_size=arch_cfg.get('vocab_size', 32000),
-        rope_theta=arch_cfg.get('rope_theta', 10000.0),
-        rope_scaling=arch_cfg.get('rope_scaling', 'dynamic'),
-        dropout=arch_cfg.get('dropout', 0.0),
+        d_model=arch_cfg.get("d_model", 4096),
+        n_layers=arch_cfg.get("n_layers", 32),
+        n_heads=arch_cfg.get("n_heads", 32),
+        n_kv_heads=arch_cfg.get("n_kv_heads", 8),
+        d_head=arch_cfg.get("d_head", 128),
+        vocab_size=arch_cfg.get("vocab_size", 32000),
+        rope_theta=arch_cfg.get("rope_theta", 10000.0),
+        rope_scaling=arch_cfg.get("rope_scaling", "dynamic"),
+        dropout=arch_cfg.get("dropout", 0.0),
     )
 
     # Create model
     model = StudentLM(model_cfg, use_halt_head=use_halt_head, use_self_evaluation=False)
-    model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+    model.load_state_dict(checkpoint["model_state_dict"], strict=False)
     model.eval()
 
     # Create inference config

@@ -29,8 +29,11 @@ class PairwiseJudgeDataset(Dataset):
     """
 
     def __init__(self, path: str, cfg: JudgeConfig):
-        self.rows = [json.loads(line) for line in open(
-            path, "r", encoding="utf-8").read().splitlines() if line.strip()]
+        self.rows = [
+            json.loads(line)
+            for line in open(path, "r", encoding="utf-8").read().splitlines()
+            if line.strip()
+        ]
         self.cfg = cfg
         self.tok = AutoTokenizer.from_pretrained(cfg.hf_name, use_fast=True)
         self.clause2id = {c: i for i, c in enumerate(cfg.clauses)}
@@ -40,11 +43,12 @@ class PairwiseJudgeDataset(Dataset):
 
     def encode(self, prompt: str, text: str) -> Dict[str, torch.Tensor]:
         enc = self.tok(
-            prompt, text,
+            prompt,
+            text,
             truncation=True,
             max_length=self.cfg.max_len,
             padding="max_length",
-            return_tensors="pt"
+            return_tensors="pt",
         )
         return {k: v.squeeze(0) for k, v in enc.items()}
 
@@ -64,9 +68,15 @@ class PairwiseJudgeDataset(Dataset):
         winner = r.get("winner", "tie")
         target = 0
         if winner == "a":
-            target = 1   # A > B
+            target = 1  # A > B
         elif winner == "b":
             target = -1  # B > A
         else:
-            target = 0   # tie
-        return {"a": pa, "b": pb, "ya": ya, "yb": yb, "target": torch.tensor(target, dtype=torch.int8)}
+            target = 0  # tie
+        return {
+            "a": pa,
+            "b": pb,
+            "ya": ya,
+            "yb": yb,
+            "target": torch.tensor(target, dtype=torch.int8),
+        }

@@ -3,6 +3,7 @@ Unit tests for speed metrics measurement.
 
 Tests TTFT/TPS/TTFA measurement and aggregation.
 """
+
 import time
 import torch
 import pytest
@@ -120,8 +121,8 @@ class TestMeasureProxy:
             max_new_tokens=10,
         )
 
-        assert metrics["ttfa_tokens"] == float('inf')
-        assert metrics["ttfa_ms"] == float('inf')
+        assert metrics["ttfa_tokens"] == float("inf")
+        assert metrics["ttfa_ms"] == float("inf")
 
     def test_no_tokenizer(self, mock_model, device):
         """Test measurement without tokenizer (TTFA should be inf)."""
@@ -137,8 +138,8 @@ class TestMeasureProxy:
             max_new_tokens=10,
         )
 
-        assert metrics["ttfa_tokens"] == float('inf')
-        assert metrics["ttfa_ms"] == float('inf')
+        assert metrics["ttfa_tokens"] == float("inf")
+        assert metrics["ttfa_ms"] == float("inf")
 
 
 class TestAggregateSpeedMetrics:
@@ -153,12 +154,14 @@ class TestAggregateSpeedMetrics:
 
     def test_aggregate_single_metric(self):
         """Test aggregation with single metric."""
-        metrics_list = [{
-            "ttft_ms": 100.0,
-            "tps": 50.0,
-            "ttfa_tokens": 10.0,
-            "ttfa_ms": 200.0,
-        }]
+        metrics_list = [
+            {
+                "ttft_ms": 100.0,
+                "tps": 50.0,
+                "ttfa_tokens": 10.0,
+                "ttfa_ms": 200.0,
+            }
+        ]
 
         result = aggregate_speed_metrics(metrics_list)
 
@@ -185,8 +188,7 @@ class TestAggregateSpeedMetrics:
         """Test that inf values are filtered from TTFA aggregation."""
         metrics_list = [
             {"ttft_ms": 100.0, "tps": 50.0, "ttfa_tokens": 10.0, "ttfa_ms": 200.0},
-            {"ttft_ms": 150.0, "tps": 60.0, "ttfa_tokens": float(
-                'inf'), "ttfa_ms": float('inf')},
+            {"ttft_ms": 150.0, "tps": 60.0, "ttfa_tokens": float("inf"), "ttfa_ms": float("inf")},
         ]
 
         result = aggregate_speed_metrics(metrics_list)
@@ -201,8 +203,7 @@ class TestIsValidToolJSON:
 
     def test_valid_tool_json(self):
         """Test detection of valid tool JSON."""
-        assert is_valid_tool_json(
-            '{"name": "web_search", "arguments": {"q": "test"}}')
+        assert is_valid_tool_json('{"name": "web_search", "arguments": {"q": "test"}}')
         assert is_valid_tool_json('{"tool": "read_file", "path": "test.txt"}')
 
     def test_invalid_tool_json(self):

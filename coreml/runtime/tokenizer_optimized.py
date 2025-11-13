@@ -6,12 +6,14 @@ and improve TTFT for long prompts.
 
 Reference: docs/M_SERIES_ADVANCED_OPTIMIZATIONS.md Phase 10
 """
+
 from __future__ import annotations
 from typing import Iterator, List, Optional
 import numpy as np
 
 try:
     import torch
+
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
@@ -73,11 +75,11 @@ class RingBuffer:
 
         # Read tokens (handle wrap-around)
         if read_pos + num_tokens <= self.size:
-            result = self.buffer[read_pos:read_pos + num_tokens].copy()
+            result = self.buffer[read_pos : read_pos + num_tokens].copy()
         else:
             # Wrap around
             part1 = self.buffer[read_pos:].copy()
-            part2 = self.buffer[:num_tokens - len(part1)].copy()
+            part2 = self.buffer[: num_tokens - len(part1)].copy()
             result = np.concatenate([part1, part2])
 
         return result
@@ -117,10 +119,8 @@ class OptimizedTokenizer:
         # Pre-allocate CoreML I/O tensors (numpy arrays for CoreML compatibility)
         if TORCH_AVAILABLE:
             # Use torch for training, numpy for inference
-            self.input_buffer_torch = torch.zeros(
-                max_seq_length, dtype=torch.long)
-            self.output_buffer_torch = torch.zeros(
-                max_seq_length, dtype=torch.long)
+            self.input_buffer_torch = torch.zeros(max_seq_length, dtype=torch.long)
+            self.output_buffer_torch = torch.zeros(max_seq_length, dtype=torch.long)
 
         self.input_buffer_np = np.zeros(max_seq_length, dtype=np.int32)
         self.output_buffer_np = np.zeros(max_seq_length, dtype=np.int32)
@@ -298,8 +298,7 @@ class OptimizedTokenizer:
             else:
                 tokens = tokens
 
-            text = self.decode_optimized(
-                tokens, skip_special_tokens=skip_special_tokens)
+            text = self.decode_optimized(tokens, skip_special_tokens=skip_special_tokens)
             texts.append(text)
 
         return texts
