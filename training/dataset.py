@@ -59,6 +59,7 @@ class KDDataset(Dataset):
         tokenizer_path: str,
         max_seq_length: int = 4096,
         teacher_logits_available: bool = False,
+        latent_curriculum: Optional[Any] = None,
     ):
         """
         Initialize KD dataset.
@@ -68,11 +69,13 @@ class KDDataset(Dataset):
             tokenizer_path: Path to tokenizer (HuggingFace format)
             max_seq_length: Maximum sequence length for truncation
             teacher_logits_available: Whether teacher logits are in the dataset
+            latent_curriculum: Optional LatentCurriculum wrapper instance
         """
         self.jsonl_path = Path(jsonl_path)
         self.tokenizer_path = tokenizer_path
         self.max_seq_length = max_seq_length
         self.teacher_logits_available = teacher_logits_available
+        self.latent_curriculum = latent_curriculum
 
         # Load tokenizer
         if not HF_TOKENIZER_AVAILABLE:
@@ -131,10 +134,23 @@ class KDDataset(Dataset):
             - attention_mask: [T] attention mask
             - teacher_target_ids: [T] teacher's predicted tokens (if available)
             - teacher_logits: [T, V] teacher logits (if available)
+            - loss_mask: [T] boolean mask (if latent curriculum applied)
         """
-        sample = self.samples[idx]
-        prompt = sample["prompt"]
-        teacher_text = sample["teacher_text"]
+        sample = self.samples[idx].copy()
+
+        # Apply latent curriculum if enabled
+        if self.latent_curriculum is not None:
+            sample = self.latent_curriculum.apply(sample, self.tokenizer)
+
+        prompt = sample.get("prompt", sample.get("training_text", "").split(
+            "\n\n")[0] if "training_text" in sample else "")
+        teacher_text = sample.get("teacher_text", "")
+
+        # Use training_text if available (from latent curriculum)
+        if "training_text" in sample:
+            full_text = sample["training_text"]
+        else:
+            full_text = prompt + teacher_text
 
         # Tokenize prompt
         prompt_tokens = self.tokenizer.encode(prompt, add_special_tokens=False)
@@ -143,9 +159,24 @@ class KDDataset(Dataset):
         teacher_tokens = self.tokenizer.encode(
             teacher_text, add_special_tokens=False)
 
+        # Compute span targets for code-mode loss if metadata contains teacher_targets
+        span_targets = None
+        if "metadata" in sample and "span_targets" in sample["metadata"]:
+            # Check if span_targets need to be computed from teacher_text
+            metadata_span_targets = sample["metadata"].get("span_targets", {})
+            if not metadata_span_targets.get("ts_mode_spans") and not metadata_span_targets.get("direct_tool_spans"):
+                # Compute spans from teacher_text using tokenizer
+                try:
+                    from data.generators.mcp_code_mode import compute_span_targets_from_tokenized
+                    span_targets = compute_span_targets_from_tokenized(
+                        teacher_text, self.tokenizer)
+                except Exception:
+                    span_targets = None
+            else:
+                span_targets = metadata_span_targets
+
         # Combine: prompt + teacher response
         # For next-token prediction, we want to predict teacher tokens given prompt
-        full_text = prompt + teacher_text
         full_tokens = self.tokenizer.encode(full_text, add_special_tokens=True)
 
         # Truncate if needed
@@ -163,6 +194,7 @@ class KDDataset(Dataset):
 
         result = {
             "input_ids": input_ids,
+            "span_targets": span_targets,  # Token-level spans for code-mode loss
             "attention_mask": attention_mask,
             "labels": labels,  # Ground truth labels
         }
@@ -200,6 +232,19 @@ class KDDataset(Dataset):
             elif len(teacher_target_ids) > len(labels):
                 teacher_target_ids = teacher_target_ids[:len(labels)]
             result["teacher_target_ids"] = teacher_target_ids
+
+        # Add loss mask if latent curriculum was applied
+        if "loss_mask" in sample and sample["loss_mask"] is not None:
+            loss_mask = sample["loss_mask"]
+            # Ensure loss_mask matches labels length
+            if len(loss_mask) < len(labels):
+                # Pad with True (supervise padding)
+                padding = torch.ones(
+                    len(labels) - len(loss_mask), dtype=torch.bool)
+                loss_mask = torch.cat([loss_mask, padding])
+            elif len(loss_mask) > len(labels):
+                loss_mask = loss_mask[:len(labels)]
+            result["loss_mask"] = loss_mask
 
         # Add teacher logits if available
         if self.teacher_logits_available and "teacher_logits" in sample and sample["teacher_logits"]:
@@ -301,6 +346,8 @@ def collate_kd_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
     mask_valid_json_tokens_list = []
     tool_result_fields_list = []
     integration_mask_list = []
+    # Latent curriculum loss mask
+    loss_mask_list = []
 
     for item in batch:
         seq_len = item["input_ids"].size(0)
@@ -387,6 +434,15 @@ def collate_kd_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
                     [integration_mask, torch.zeros(pad_len, dtype=torch.bool)])
             integration_mask_list.append(integration_mask)
 
+        # Handle loss mask (from latent curriculum)
+        if "loss_mask" in item:
+            loss_mask = item["loss_mask"]
+            if pad_len > 0:
+                # Pad with True (supervise padding tokens)
+                loss_mask = torch.cat(
+                    [loss_mask, torch.ones(pad_len, dtype=torch.bool)])
+            loss_mask_list.append(loss_mask)
+
     # Stack into batches
     result = {
         "input_ids": torch.stack(input_ids_list),
@@ -414,5 +470,9 @@ def collate_kd_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
         result["tool_result_fields"] = torch.stack(tool_result_fields_list)
     if integration_mask_list:
         result["integration_mask"] = torch.stack(integration_mask_list)
+
+    # Add loss mask if available
+    if loss_mask_list:
+        result["loss_mask"] = torch.stack(loss_mask_list)
 
     return result

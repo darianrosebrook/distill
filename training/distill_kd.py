@@ -33,9 +33,26 @@ from training.losses import (
     create_projection_layers,
     length_aware_kd_loss,
     early_tool_call_loss,
+    CodeModePreferenceLoss,
 )
-from training.dataset import KDDataset, collate_kd_batch
+from training.dataset import KDDataset, collate_kd_batch, load_tokenizer
 from training.tracing import TrainingTracer, create_tracer_from_config
+
+# Latent curriculum import (optional)
+try:
+    from data.wrappers.curriculum import LatentCurriculum
+    LATENT_CURRICULUM_AVAILABLE = True
+except ImportError:
+    LATENT_CURRICULUM_AVAILABLE = False
+    LatentCurriculum = None
+
+# Tokenizer migration import
+try:
+    from training.tokenizer_migration import migrate_tokenizer_and_model
+    TOKENIZER_MIGRATION_AVAILABLE = True
+except ImportError:
+    TOKENIZER_MIGRATION_AVAILABLE = False
+    migrate_tokenizer_and_model = None
 
 # QAT imports (optional, only if quant.enabled)
 try:
@@ -253,8 +270,20 @@ def load_config(config_path: str) -> Dict[str, Any]:
         return yaml.safe_load(f)
 
 
-def merge_configs(configs: list) -> Dict[str, Any]:
-    """Merge multiple config files."""
+def merge_configs(configs: list, env_overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Merge multiple config files and apply environment variable overrides.
+
+    Config is the source of truth; env vars are CLI overrides that write into resolved config.
+    All overrides are logged for provenance tracking.
+
+    Args:
+        configs: List of config file paths
+        env_overrides: Optional dict of env var overrides (will be merged into config)
+
+    Returns:
+        Merged config dict with provenance metadata
+    """
     merged = {}
     for config_path in configs:
         config = load_config(config_path)
@@ -264,6 +293,39 @@ def merge_configs(configs: list) -> Dict[str, Any]:
                 merged[key].update(value)
             else:
                 merged[key] = value
+
+    # Apply environment variable overrides (CLI overrides)
+    if env_overrides is None:
+        env_overrides = {}
+
+    # Latent training override
+    if os.getenv("TRAIN_LATENT", "0") == "1":
+        if "latent" not in merged:
+            merged["latent"] = {}
+        merged["latent"]["enabled"] = True
+        env_overrides["TRAIN_LATENT"] = "1"
+
+    # Latent mode override
+    if os.getenv("LATENT_MODE", "0") == "1":
+        if "latent" not in merged:
+            merged["latent"] = {}
+        merged["latent"]["mode_enabled"] = True
+        env_overrides["LATENT_MODE"] = "1"
+
+    # Halt head override
+    if os.getenv("HALT_HEAD", "0") == "1":
+        if "latent" not in merged:
+            merged["latent"] = {}
+        merged["latent"]["halt_head_enabled"] = True
+        env_overrides["HALT_HEAD"] = "1"
+
+    # Store provenance metadata
+    merged["_provenance"] = {
+        "config_files": configs,
+        "env_overrides": env_overrides,
+        "final_config": merged.copy(),  # Snapshot of final resolved config
+    }
+
     return merged
 
 
@@ -742,6 +804,18 @@ def save_checkpoint(
     # Compute SHA256 hash of model state for reproducibility tracking
     state_sha256 = sha256_state_dict(model_state)
 
+    # Extract code-mode metadata (always persist, even when disabled)
+    distill_cfg = config.get("distill", {})
+    code_mode_cfg = distill_cfg.get("code_mode", {})
+    train_code_mode = code_mode_cfg.get("enabled", False)
+
+    code_mode_meta = {
+        "enabled": train_code_mode,
+        "weight": code_mode_cfg.get("weight", 0.3),
+        "weight_schedule": code_mode_cfg.get("weight_schedule", {}),
+        "eligibility": code_mode_cfg.get("code_mode_pref", {}).get("eligibility_rules", {}),
+    }
+
     checkpoint = {
         "step": step,
         "model_state_dict": model_state,
@@ -750,6 +824,7 @@ def save_checkpoint(
         "config": config,
         "meta": {
             "sha256_state": state_sha256,
+            "code_mode": code_mode_meta,
         },
     }
 
@@ -852,6 +927,11 @@ def train_step(
         use_self_eval = kd_cfg.get("use_self_evaluation", False)
         return_eval_score = use_self_eval
 
+        # Enable halt head if configured
+        latent_cfg = cfg.get("latent", {})
+        use_halt_head = latent_cfg.get("halt_head_enabled", False)
+        return_halt_logits = use_halt_head
+
         if return_eval_score:
             # Re-run forward pass if we need eval score but didn't get it above
             if not return_hidden_states:
@@ -869,6 +949,32 @@ def train_step(
                 )  # [B, 1]
         else:
             eval_score = None
+
+        # Get halt logits if enabled
+        halt_logits = None
+        if return_halt_logits:
+            # Get halt logits from model (use pooled hidden state)
+            if hasattr(model, 'use_halt_head') and model.use_halt_head:
+                # Forward pass with halt logits
+                if return_hidden_states or return_eval_score:
+                    # Need separate forward pass for halt logits
+                    _, halt_logits = model(
+                        input_ids,
+                        attention_mask,
+                        return_halt_logits=True
+                    )  # [B, T, V], [B, 2]
+                    # Extract halt logits (model returns tuple)
+                    if isinstance(halt_logits, tuple):
+                        # Last element is halt logits
+                        halt_logits = halt_logits[-1]
+                else:
+                    student_logits, halt_logits = model(
+                        input_ids,
+                        attention_mask,
+                        return_halt_logits=True
+                    )  # [B, T, V], [B, 2]
+                    if isinstance(halt_logits, tuple):
+                        halt_logits = halt_logits[-1]
 
         # Compute loss
 
@@ -982,6 +1088,154 @@ def train_step(
         if integration_mask is not None:
             integration_mask = integration_mask.to(device)
 
+        # Code-mode preference loss (differentiable, token-level)
+        # Module initialized once in main() and passed via closure or global
+        code_mode_loss_tensor = None
+        code_mode_weight = 0.0
+
+        # Check if code-mode enabled (config is single source of truth)
+        code_mode_cfg = cfg.get("distill", {}).get("code_mode", {})
+        train_code_mode = code_mode_cfg.get("enabled", False)
+
+        if train_code_mode:
+            code_mode_weight_base = code_mode_cfg.get("weight", 0.3)
+
+            # Apply weight scheduling (warmup)
+            weight_schedule = code_mode_cfg.get("weight_schedule", {})
+            warmup_steps = weight_schedule.get("warmup_steps", 5000)
+            start_weight = weight_schedule.get("start_weight", 0.1)
+
+            if current_step < warmup_steps and warmup_steps > 0:
+                # Linear warmup: lerp(w_start, w_target, step / warmup_steps)
+                progress = current_step / warmup_steps
+                code_mode_weight = start_weight + \
+                    (code_mode_weight_base - start_weight) * progress
+            else:
+                code_mode_weight = code_mode_weight_base
+
+            # Add weight to loss_dict for logging
+            loss_dict["code_mode_weight"] = code_mode_weight
+
+            if code_mode_weight > 0:
+                code_mode_pref_cfg = code_mode_cfg.get("code_mode_pref", {})
+                eligibility_rules = code_mode_pref_cfg.get("eligibility_rules", {
+                    "min_tools": 2,
+                    "min_intermediate_chars": 10000,
+                    "pii_patterns": ["EMAIL", "PHONE", "SSN"],
+                })
+                reward_cfg = code_mode_pref_cfg.get("reward", {
+                    "prefer_ts_api_over_direct_tool": True,
+                    "penalize_tool_result_roundtrip": True,
+                })
+                loss_weights = code_mode_pref_cfg.get(
+                    "weights", {"pos": 1.0, "neg": 1.0})
+
+                # Get vocabulary IDs for markers (requires tokenizer)
+                vocab_ids = {}
+                if tokenizer is not None:
+                    marker_tokens = [
+                        "import", "from", "callMCPTool", "await", "tool_call", "tool_result"]
+                    for marker in marker_tokens:
+                        try:
+                            if hasattr(tokenizer, "convert_tokens_to_ids"):
+                                tok_id = tokenizer.convert_tokens_to_ids(
+                                    marker)
+                            else:
+                                encoded = tokenizer.encode(
+                                    marker, add_special_tokens=False)
+                                tok_id = encoded[0] if encoded else None
+
+                            if tok_id is not None and tok_id < student_logits.size(-1):
+                                vocab_ids[marker] = tok_id
+                        except Exception:
+                            pass
+
+                # Code-mode loss module should be initialized in main() and passed here
+                # For now, check if it exists as a closure variable or use fallback
+                code_mode_loss_module = getattr(
+                    train_step, "_code_mode_loss_module", None)
+                if code_mode_loss_module is None:
+                    # Fallback: initialize on first call (not ideal, but backward compatible)
+                    code_mode_loss_module = CodeModePreferenceLoss(
+                        eligibility_rules=eligibility_rules,
+                        reward=reward_cfg,
+                        vocab_ids=vocab_ids,
+                        weights=loss_weights,
+                    ).to(device)
+                    train_step._code_mode_loss_module = code_mode_loss_module
+
+                # Get batch metadata and span targets (NO DECODING - pre-computed during dataset generation)
+                batch_meta = batch.get("meta", {})
+                span_targets = None
+
+                # Extract span targets from metadata if available (pre-computed during dataset generation)
+                if isinstance(batch_meta, list):
+                    span_targets = [m.get("span_targets", {})
+                                    for m in batch_meta]
+                elif isinstance(batch_meta, dict):
+                    if "span_targets" in batch_meta:
+                        span_targets = [batch_meta["span_targets"]]
+                    else:
+                        # Try to get from nested structure
+                        span_targets = batch_meta.get(
+                            "span_targets_list", None)
+
+                # Compute code-mode loss (differentiable, token-level, NO TEXT DECODING)
+                code_mode_loss_tensor = code_mode_loss_module(
+                    student_logits=student_logits,
+                    span_targets=span_targets,
+                    batch_meta=batch_meta,
+                )
+
+        # Get loss mask if available (from latent curriculum)
+        loss_mask = batch.get("loss_mask")
+        if loss_mask is not None:
+            loss_mask = loss_mask.to(device)
+
+        # Derive halt targets if halt head is enabled
+        halt_targets = None
+        halt_weight = 0.0
+        if use_halt_head and halt_logits is not None:
+            # Import halt targets derivation
+            try:
+                from training.halt_targets import HaltHeadTargets, create_halt_targets_batch
+
+                # Get batch metadata for halt target derivation
+                batch_metadata = batch.get("metadata", [])
+                if not isinstance(batch_metadata, list):
+                    batch_metadata = [batch_metadata] * input_ids.size(0)
+
+                # Create halt targets instance
+                halt_targets_cfg = latent_cfg.get("halt_targets", {})
+                halt_targets_deriver = HaltHeadTargets(
+                    judge_score_threshold=halt_targets_cfg.get(
+                        "judge_score_threshold", 0.8),
+                    delta_shrinking_threshold=halt_targets_cfg.get(
+                        "delta_shrinking_threshold", 0.05),
+                    caws_tier=halt_targets_cfg.get("caws_tier", "Tier-2"),
+                    warmup_steps=halt_targets_cfg.get("warmup_steps", 1000),
+                )
+
+                # Derive halt targets
+                halt_targets = create_halt_targets_batch(
+                    batch_metadata,
+                    halt_targets_deriver,
+                    current_step,
+                )
+
+                if halt_targets is not None:
+                    halt_targets = halt_targets.to(device)
+                    # Get halt weight with warmup schedule
+                    halt_weight_base = latent_cfg.get("halt_weight", 0.05)
+                    if current_step < halt_targets_deriver.warmup_steps:
+                        halt_weight = 0.0  # No loss during warmup
+                    else:
+                        halt_weight = halt_weight_base
+            except ImportError:
+                if current_step % 100 == 0:
+                    print(
+                        f"[distill_kd] WARN: Halt targets not available, skipping halt loss")
+
         loss_dict = combined_kd_loss(
             student_logits=student_logits,
             teacher_logits=teacher_logits,
@@ -1002,6 +1256,15 @@ def train_step(
             w_integr=w_integr,
             ce_ground_truth_weight=ce_ground_truth_weight,
             kd_temperature=current_temperature,
+            # Code-mode preference loss (optional)
+            code_mode_loss=code_mode_loss_tensor,
+            code_mode_weight=code_mode_weight if train_code_mode else 0.0,
+            # Latent curriculum loss mask (optional)
+            loss_mask=loss_mask,
+            # Halt head loss (optional)
+            halt_logits=halt_logits,
+            halt_targets=halt_targets,
+            halt_weight=halt_weight,
         )
 
         # ====================================================================
@@ -1577,8 +1840,16 @@ def main():
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         is_main_process = True
 
-    # Load configs
+    # Load configs (with env var overrides)
     cfg = merge_configs(args.config)
+
+    # Log provenance for reproducibility
+    if is_main_process and "_provenance" in cfg:
+        provenance = cfg["_provenance"]
+        print(f"[distill_kd] Config provenance:")
+        print(f"  Config files: {provenance['config_files']}")
+        if provenance.get("env_overrides"):
+            print(f"  Env overrides: {provenance['env_overrides']}")
 
     # Create output directory
     output_dir = Path(args.output_dir)
@@ -1587,6 +1858,35 @@ def main():
 
     # Create model
     model = create_model(cfg, device)
+
+    # Migrate tokenizer and model for special tokens (if needed)
+    tokenizer_path = cfg.get("io", {}).get(
+        "tokenizer_path", "models/student/tokenizer")
+    if TOKENIZER_MIGRATION_AVAILABLE:
+        try:
+            tokenizer = load_tokenizer(tokenizer_path)
+            model, migration_metadata = migrate_tokenizer_and_model(
+                model,
+                tokenizer,
+                tokenizer_path,
+                verify_ids=True,
+                resize_embeddings=True,
+                init_special_tokens=True,
+            )
+            if is_main_process:
+                print(f"[distill_kd] Tokenizer migration completed:")
+                print(
+                    f"  - Embedding resized: {migration_metadata['resize'].get('embedding_resized', False)}")
+                print(
+                    f"  - LM head resized: {migration_metadata['resize'].get('lm_head_resized', False)}")
+                if migration_metadata['resize'].get('embedding_resized'):
+                    print(
+                        f"  - Vocab size: {migration_metadata['resize']['original_vocab_size']} -> {migration_metadata['resize']['new_vocab_size']}")
+        except Exception as e:
+            if is_main_process:
+                print(f"[distill_kd] WARN: Tokenizer migration failed: {e}")
+                print(
+                    "  Continuing without migration (may cause issues if vocab mismatch)")
 
     # Setup distributed model if needed
     if args.local_rank >= 0:
@@ -1644,12 +1944,31 @@ def main():
     # Use max sequence length for dataset (will truncate per batch if using enumerated shapes)
     max_seq_len = max(seq_lengths) if seq_lengths else 4096
 
+    # Setup latent curriculum if enabled
+    latent_curriculum = None
+    latent_cfg = cfg.get("latent", {})
+    latent_enabled = latent_cfg.get("enabled", False) or (
+        os.getenv("TRAIN_LATENT", "0") == "1")
+
+    if latent_enabled and LATENT_CURRICULUM_AVAILABLE:
+        m = latent_cfg.get("m", 2)
+        c = latent_cfg.get("c", 1)
+        p = latent_cfg.get("p", 0.5)
+        latent_curriculum = LatentCurriculum(m=m, c=c, p=p)
+        if is_main_process:
+            print(
+                f"[distill_kd] Latent curriculum enabled: m={m}, c={c}, p={p}")
+    elif latent_enabled and not LATENT_CURRICULUM_AVAILABLE:
+        if is_main_process:
+            print("[distill_kd] WARN: Latent curriculum requested but not available")
+
     dataset = KDDataset(
         jsonl_path=train_shards[0],
         tokenizer_path=tokenizer_path,
         max_seq_length=max_seq_len,
         teacher_logits_available=cfg.get("kd", {}).get(
             "teacher_logits_available", False),
+        latent_curriculum=latent_curriculum,
     )
 
     # Create dataloader
@@ -1665,6 +1984,63 @@ def main():
         num_workers=2,
         pin_memory=device.type == 'cuda',
     )
+
+    # Initialize code-mode loss module if enabled (once, before training loop)
+    code_mode_loss_module = None
+    code_mode_cfg = cfg.get("distill", {}).get("code_mode", {})
+    train_code_mode = code_mode_cfg.get("enabled", False)
+
+    if train_code_mode:
+        from training.dataset import load_tokenizer
+        tokenizer_for_vocab = load_tokenizer(
+            tokenizer_path) if tokenizer_path else None
+
+        # Get vocabulary IDs for markers
+        vocab_ids = {}
+        if tokenizer_for_vocab is not None:
+            marker_tokens = ["import", "from", "callMCPTool",
+                             "await", "tool_call", "tool_result"]
+            for marker in marker_tokens:
+                try:
+                    if hasattr(tokenizer_for_vocab, "convert_tokens_to_ids"):
+                        tok_id = tokenizer_for_vocab.convert_tokens_to_ids(
+                            marker)
+                    else:
+                        encoded = tokenizer_for_vocab.encode(
+                            marker, add_special_tokens=False)
+                        tok_id = encoded[0] if encoded else None
+
+                    if tok_id is not None:
+                        vocab_ids[marker] = tok_id
+                except Exception:
+                    pass
+
+        code_mode_pref_cfg = code_mode_cfg.get("code_mode_pref", {})
+        eligibility_rules = code_mode_pref_cfg.get("eligibility_rules", {
+            "min_tools": 2,
+            "min_intermediate_chars": 10000,
+            "pii_patterns": ["EMAIL", "PHONE", "SSN"],
+        })
+        reward_cfg = code_mode_pref_cfg.get("reward", {
+            "prefer_ts_api_over_direct_tool": True,
+            "penalize_tool_result_roundtrip": True,
+        })
+        loss_weights = code_mode_pref_cfg.get(
+            "weights", {"pos": 1.0, "neg": 1.0})
+
+        code_mode_loss_module = CodeModePreferenceLoss(
+            eligibility_rules=eligibility_rules,
+            reward=reward_cfg,
+            vocab_ids=vocab_ids,
+            weights=loss_weights,
+        ).to(device)
+
+        # Store as module attribute for train_step to access
+        train_step._code_mode_loss_module = code_mode_loss_module
+
+        if is_main_process:
+            print(
+                f"[distill_kd] Code-mode loss module initialized with vocab_ids: {list(vocab_ids.keys())}")
 
     # Training loop
     total_steps = train_cfg.get("steps", 200000)

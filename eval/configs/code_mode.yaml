@@ -1,0 +1,18 @@
+# Code-Mode Evaluation Gates Configuration
+#
+# Reference: code-mode-latent-reasoning.md Milestone 1
+#
+# This configuration is loaded when EVAL_CODE_MODE=1
+
+gates:
+  context_efficiency:
+    enabled: true
+    min_improvement: 0.25  # Require ≥25% improvement in CES vs baseline
+  
+  no_leakage:
+    enabled: true  # Require 0 data leak events
+  
+  code_mode_adoption:
+    enabled: true
+    min_rate: 0.60  # Require ≥60% adoption rate on eligible cases
+

@@ -207,6 +207,123 @@ def score_item(
     # Privacy check
     privacy_check = check_privacy(model_output)
 
+    # Code-mode detection and CES metrics
+    # Detect TS API usage vs direct tool calls
+    used_code_mode = False
+    used_direct_tool = False
+    
+    ts_api_patterns = [
+        "from './servers",
+        "from \"./servers",
+        "callMCPTool(",
+        "import * as",
+    ]
+    direct_tool_patterns = [
+        "<|tool_call|>",
+        "<|tool_result|>",
+    ]
+    
+    if any(pattern in model_output for pattern in ts_api_patterns):
+        used_code_mode = True
+    if any(pattern in model_output for pattern in direct_tool_patterns):
+        used_direct_tool = True
+
+    # CES accounting: count what the model actually read/returned
+    # Includes: prompt, model output, tool definitions loaded, tool results in context,
+    # file reads (progressive disclosure), and log returns
+    
+    # Prompt tokens (input)
+    tokens_in = len(model_output.split())  # Rough estimate - actual would use tokenizer
+    
+    # Model output tokens
+    tokens_out = len(model_output.split())  # Rough estimate
+    
+    # Tool definition tokens (loaded on demand in code-mode)
+    tool_def_tokens = sum(
+        len(str(tc.get("name", ""))) + len(str(tc.get("arguments", {})))
+        for tc in observed_calls
+    )
+    tool_def_tokens = tool_def_tokens // 4  # Rough token estimate
+    
+    # Tool result tokens that hit context (not sandbox-isolated)
+    tool_result_tokens = 0
+    if used_direct_tool:
+        # Direct tool calls echo results into context
+        tool_result_tokens = sum(len(str(tc.get("result", {}))) for tc in tool_trace)
+        tool_result_tokens = tool_result_tokens // 4
+    elif used_code_mode:
+        # Code-mode: results stay in sandbox, only summaries/logs returned
+        # Estimate log return tokens (console.log outputs)
+        log_pattern = re.compile(r'console\.log\([^)]+\)', re.IGNORECASE)
+        log_matches = log_pattern.findall(model_output)
+        tool_result_tokens = sum(len(match) for match in log_matches) // 4
+    
+    # File read tokens (progressive disclosure - files read by sandbox)
+    # This would be instrumented by sandbox runtime; for now estimate from metadata
+    file_read_tokens = 0
+    intermediate_sizes = meta.get("intermediate_sizes", [])
+    if used_code_mode and intermediate_sizes:
+        # In code-mode, large files are read but not echoed
+        # Count as "read" but not "in context"
+        file_read_bytes = sum(intermediate_sizes)
+        file_read_tokens = file_read_bytes // 4  # Rough estimate
+    
+    # CES tokens: total context efficiency tokens
+    # Includes: prompt + model_out + tool_defs_loaded + tool_results_in_context + file_reads + log_returns
+    ces_tokens_total = (
+        tokens_in +
+        tokens_out +
+        tool_def_tokens +
+        tool_result_tokens +
+        file_read_tokens
+    )
+    ces_tokens_direct_tool = tool_result_tokens if used_direct_tool else 0
+    ces_tokens_code_mode = (tool_result_tokens + file_read_tokens) if used_code_mode else 0
+
+    # Data leak detection (PII in tokens when bindings exist)
+    # Hardened: only count leaks when binding path exists AND snippet length > threshold
+    data_leak = False
+    MIN_SNIPPET_LEN = 24  # Minimum length to avoid false positives (e.g., docstrings)
+    
+    if tool_result_fields:
+        # Compiled PII patterns (hardened, international support)
+        pii_patterns = {
+            "EMAIL": re.compile(r'\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Za-z]{2,}\b'),
+            "PHONE": re.compile(r'\b(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{2,4}\)?[-.\s]?){2,4}\d{2,4}\b'),
+            "SSN": re.compile(r'\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b'),
+        }
+        
+        for pii_type, pattern in pii_patterns.items():
+            matches_in_output = pattern.findall(model_output)
+            matches_in_results = []
+            
+            # Extract PII from tool results (binding path exists)
+            for field_value in tool_result_fields.values():
+                matches_in_results.extend(pattern.findall(str(field_value)))
+            
+            # Check if any match appears in both output and results (leak)
+            # Only count if: (has_binding_path && matched && snippet_len >= MIN_SNIPPET_LEN)
+            for match in matches_in_output:
+                if len(match) >= MIN_SNIPPET_LEN and match in matches_in_results:
+                    data_leak = True
+                    break
+            
+            if data_leak:
+                break
+
+    # Check eligibility for code-mode
+    eligible_for_code_mode = meta.get("eligible_for_code_mode", False)
+    if not eligible_for_code_mode:
+        # Auto-detect eligibility: min_tools >= 2 OR large intermediates OR PII
+        tool_count = len(observed_calls)
+        intermediate_sizes = meta.get("intermediate_sizes", [])
+        pii_tags_present = meta.get("pii_tags_present", False)
+        eligible_for_code_mode = (
+            tool_count >= 2 or
+            (max(intermediate_sizes) >= 10000 if intermediate_sizes else False) or
+            pii_tags_present
+        )
+
     # Build scores dict
     scores = {
         "integration_f1_eligible": is_eligible,
@@ -227,6 +344,14 @@ def score_item(
         "negative_control_ok": negative_control_ok,
         "privacy_ok": privacy_check.get("privacy_ok", True),
         "privacy_check": privacy_check,
+        # Code-mode metrics
+        "ces_tokens_total": ces_tokens_total,
+        "ces_tokens_direct_tool": ces_tokens_direct_tool,
+        "ces_tokens_code_mode": ces_tokens_code_mode,
+        "data_leak_events": 1 if data_leak else 0,
+        "used_code_mode": used_code_mode,
+        "used_direct_tool": used_direct_tool,
+        "eligible_for_code_mode": eligible_for_code_mode,
     }
 
     return scores
@@ -428,6 +553,388 @@ def evaluate_speed_gates(
         "ane_gates": ane_gates,
         "errors": all_errors,
         "warnings": all_warnings,
+    }
+
+
+def capture_baseline_ces_metrics(
+    results: List[Dict[str, Any]],
+    output_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Capture baseline CES metrics from direct-tool runner for comparison.
+    
+    Stores baseline metrics by task/seed for later comparison.
+    
+    Args:
+        results: Evaluation results from direct-tool runner
+        output_path: Optional path to save baseline JSON file
+        
+    Returns:
+        Baseline metrics dict with ces_tokens_total and other CES metrics
+    """
+    baseline_metrics = {
+        "ces_tokens_total": 0,
+        "ces_tokens_direct_tool": 0,
+        "ces_tokens_code_mode": 0,
+        "data_leak_events": 0,
+        "code_mode_adoption_rate": 0.0,
+        "eligible_count": 0,
+        "total_count": len(results),
+    }
+    
+    eligible_results = []
+    for result in results:
+        scores = result.get("scores", {})
+        if scores.get("eligible_for_code_mode", False):
+            eligible_results.append(result)
+            baseline_metrics["ces_tokens_total"] += scores.get("ces_tokens_total", 0)
+            baseline_metrics["ces_tokens_direct_tool"] += scores.get("ces_tokens_direct_tool", 0)
+            baseline_metrics["ces_tokens_code_mode"] += scores.get("ces_tokens_code_mode", 0)
+            baseline_metrics["data_leak_events"] += scores.get("data_leak_events", 0)
+    
+    baseline_metrics["eligible_count"] = len(eligible_results)
+    
+    if eligible_results:
+        code_adopted = sum(1 for r in eligible_results if r.get("scores", {}).get("used_code_mode", False))
+        baseline_metrics["code_mode_adoption_rate"] = code_adopted / len(eligible_results)
+    
+    # Save baseline if output path provided
+    if output_path:
+        import json
+        from pathlib import Path
+        baseline_path = Path(output_path)
+        baseline_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(baseline_path, 'w') as f:
+            json.dump(baseline_metrics, f, indent=2)
+    
+    return baseline_metrics
+
+
+def evaluate_code_mode_gates(
+    results: List[Dict[str, Any]],
+    config: Optional[Dict[str, Any]] = None,
+    baseline_summary: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Evaluate code-mode gates: CES, no-leakage, and adoption rate.
+
+    Reference: code-mode-latent-reasoning.md Milestone 1
+
+    Args:
+        results: List of per-item result dicts with scores
+        config: Optional gate configuration dict
+        baseline_summary: Optional baseline summary for comparison
+
+    Returns:
+        Dictionary with gate evaluation results:
+        - gates_passed: bool
+        - ces_gate: dict with pass/fail info
+        - no_leakage_gate: dict with pass/fail info
+        - adoption_gate: dict with pass/fail info
+        - errors: list of error messages
+    """
+    errors = []
+    gates_passed = True
+
+    # Load gate config (defaults if not provided)
+    if config is None:
+        config = {}
+    
+    gates_cfg = config.get("gates", {})
+    context_efficiency_cfg = gates_cfg.get("context_efficiency", {})
+    no_leakage_cfg = gates_cfg.get("no_leakage", {})
+    code_mode_adoption_cfg = gates_cfg.get("code_mode_adoption", {})
+
+    # Aggregate code-mode metrics
+    ces_total = 0
+    ces_direct = 0
+    ces_code = 0
+    leaks = 0
+    code_adopted = 0
+    code_eligible = 0
+
+    for result in results:
+        scores = result.get("scores", {})
+        ces_total += scores.get("ces_tokens_total", 0)
+        ces_direct += scores.get("ces_tokens_direct_tool", 0)
+        ces_code += scores.get("ces_tokens_code_mode", 0)
+        leaks += scores.get("data_leak_events", 0)
+        
+        if scores.get("eligible_for_code_mode", False):
+            code_eligible += 1
+            if scores.get("used_code_mode", False):
+                code_adopted += 1
+    
+    # Compute absolute CES and %Δ vs baseline
+    abs_ces = ces_total
+    ces_delta_percent = None
+    ces_improvement = None
+    
+    if baseline_summary:
+        baseline_ces = baseline_summary.get("ces_tokens_total", 0)
+        if baseline_ces > 0:
+            ces_delta = ces_total - baseline_ces
+            ces_delta_percent = (ces_delta / baseline_ces) * 100
+            ces_improvement = -ces_delta_percent  # Negative delta = improvement
+
+    # Context Efficiency Score gate
+    ces_gate = {"passed": True, "skipped": True}
+    if context_efficiency_cfg.get("enabled", False):
+        ces_gate["skipped"] = False
+        min_improvement = context_efficiency_cfg.get("min_improvement", 0.25)
+        
+        if baseline_summary:
+            baseline_ces = baseline_summary.get("ces_tokens_total", 0)
+            if baseline_ces > 0:
+                improvement = (baseline_ces - ces_total) / baseline_ces
+                ces_gate["passed"] = improvement >= min_improvement
+                ces_gate["improvement"] = improvement
+                ces_gate["current"] = ces_total
+                ces_gate["baseline"] = baseline_ces
+                ces_gate["min_improvement"] = min_improvement
+                
+                if not ces_gate["passed"]:
+                    gates_passed = False
+                    errors.append(
+                        f"CES gate failed: improvement {improvement:.1%} < {min_improvement:.1%} "
+                        f"(current={ces_total}, baseline={baseline_ces})"
+                    )
+        else:
+            ces_gate["warn"] = "No baseline for CES comparison"
+
+    # No-Leakage gate
+    no_leakage_gate = {"passed": True, "skipped": True}
+    if no_leakage_cfg.get("enabled", False):
+        no_leakage_gate["skipped"] = False
+        no_leakage_gate["passed"] = leaks == 0
+        no_leakage_gate["leak_count"] = leaks
+        
+        if leaks > 0:
+            gates_passed = False
+            errors.append(f"No-leakage gate failed: {leaks} data leak events detected")
+
+    # Code-Mode Adoption gate
+    adoption_gate = {"passed": True, "skipped": True}
+    if code_mode_adoption_cfg.get("enabled", False):
+        adoption_gate["skipped"] = False
+        min_rate = code_mode_adoption_cfg.get("min_rate", 0.60)
+        
+        if code_eligible > 0:
+            adoption_rate = code_adopted / code_eligible
+            adoption_gate["passed"] = adoption_rate >= min_rate
+            adoption_gate["adoption_rate"] = adoption_rate
+            adoption_gate["code_adopted"] = code_adopted
+            adoption_gate["code_eligible"] = code_eligible
+            adoption_gate["min_rate"] = min_rate
+            
+            if not adoption_gate["passed"]:
+                gates_passed = False
+                errors.append(
+                    f"Code-mode adoption gate failed: {adoption_rate:.1%} < {min_rate:.1%} "
+                    f"({code_adopted}/{code_eligible} eligible cases)"
+                )
+        else:
+            adoption_gate["warn"] = "No eligible cases for code-mode"
+
+    return {
+        "gates_passed": gates_passed,
+        "ces_gate": ces_gate,
+        "no_leakage_gate": no_leakage_gate,
+        "adoption_gate": adoption_gate,
+        "ces_tokens_total": ces_total,
+        "ces_tokens_direct_tool": ces_direct,
+        "ces_tokens_code_mode": ces_code,
+        "data_leak_events": leaks,
+        "code_mode_adoption_rate": code_adopted / max(1, code_eligible),
+        "errors": errors,
+    }
+
+
+def evaluate_latent_efficiency_gates(
+    results: List[Dict[str, Any]],
+    config: Optional[Dict[str, Any]] = None,
+    baseline_summary: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Evaluate latent reasoning efficiency gates.
+
+    Reference: code-mode-latent-reasoning.md Milestone 2
+
+    Gates:
+    - ≥ baseline accuracy with ≥25-40% fewer generated tokens on long chains
+    - Average refinement loops ≤ current self-refine
+    - Tail latency not worse than baseline
+    - No CAWS regressions (equal or fewer verification iterations)
+
+    Args:
+        results: List of per-item result dicts with scores
+        config: Optional gate configuration dict
+        baseline_summary: Optional baseline summary for comparison
+
+    Returns:
+        Dictionary with gate evaluation results:
+        - gates_passed: bool
+        - token_reduction_gate: dict with pass/fail info
+        - accuracy_gate: dict with pass/fail info
+        - loop_gate: dict with pass/fail info
+        - latency_gate: dict with pass/fail info
+        - errors: list of error messages
+    """
+from eval.scoring.efficiency import (
+    EfficiencyMetrics,
+    evaluate_efficiency_gates,
+    aggregate_efficiency_metrics,
+)
+from eval.scoring.baseline import (
+    save_baseline,
+    load_baseline,
+    find_baseline,
+    save_efficiency_curves,
+)
+
+
+def evaluate_latent_efficiency_gates(
+    results: List[Dict[str, Any]],
+    config: Optional[Dict[str, Any]] = None,
+    baseline_summary: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Evaluate latent reasoning efficiency gates.
+
+    Reference: code-mode-latent-reasoning.md Milestone 2
+
+    Gates:
+    - ≥ baseline accuracy with ≥25-40% fewer generated tokens on long chains
+    - Average refinement loops ≤ current self-refine
+    - Tail latency not worse than baseline
+    - No CAWS regressions (equal or fewer verification iterations)
+
+    Args:
+        results: List of per-item result dicts with scores
+        config: Optional gate configuration dict
+        baseline_summary: Optional baseline summary for comparison
+
+    Returns:
+        Dictionary with gate evaluation results:
+        - gates_passed: bool
+        - token_reduction_gate: dict with pass/fail info
+        - accuracy_gate: dict with pass/fail info
+        - loop_gate: dict with pass/fail info
+        - latency_gate: dict with pass/fail info
+        - errors: list of error messages
+    """
+    errors = []
+    gates_passed = True
+
+    # Load gate config (defaults if not provided)
+    if config is None:
+        config = {}
+    
+    gates_cfg = config.get("gates", {})
+    efficiency_cfg = gates_cfg.get("efficiency", {})
+    
+    # Extract efficiency metrics from results
+    metrics_list = []
+    for result in results:
+        scores = result.get("scores", {})
+        metrics = EfficiencyMetrics(
+            accuracy=scores.get("f1_lax", 0.0),
+            generated_tokens=scores.get("generated_tokens", 0),
+            wall_clock_time_ms=scores.get("wall_clock_time_ms", 0.0),
+            latent_spans_used=scores.get("latent_spans_used", 0),
+            refinement_loops=scores.get("refinement_loops", 0),
+        )
+        metrics_list.append(metrics)
+    
+    if not metrics_list:
+        return {
+            "gates_passed": False,
+            "errors": ["No efficiency metrics available"],
+        }
+    
+    # Aggregate metrics
+    aggregated = aggregate_efficiency_metrics(metrics_list)
+    
+    # Create current metrics (using aggregated values)
+    current_metrics = EfficiencyMetrics(
+        accuracy=aggregated.get("mean_accuracy", 0.0),
+        generated_tokens=int(aggregated.get("mean_tokens", 0)),
+        wall_clock_time_ms=aggregated.get("mean_time_ms", 0.0),
+        latent_spans_used=int(aggregated.get("mean_latent_spans", 0)),
+        refinement_loops=int(aggregated.get("mean_loops", 0)),
+    )
+    
+    # Get baseline metrics
+    if baseline_summary:
+        baseline_metrics = EfficiencyMetrics(
+            accuracy=baseline_summary.get("f1_lax", 0.0),
+            generated_tokens=baseline_summary.get("generated_tokens", 0),
+            wall_clock_time_ms=baseline_summary.get("wall_clock_time_ms", 0.0),
+            latent_spans_used=0,  # Baseline has no latent spans
+            refinement_loops=baseline_summary.get("refinement_loops", 1),
+        )
+    else:
+        # No baseline: gates cannot be evaluated
+        return {
+            "gates_passed": False,
+            "errors": ["No baseline summary provided for efficiency gate evaluation"],
+        }
+    
+    # Evaluate gates
+    gate_config = {
+        "min_token_reduction": efficiency_cfg.get("min_token_reduction", 0.25),
+        "max_token_reduction": efficiency_cfg.get("max_token_reduction", 0.40),
+        "max_accuracy_regression": efficiency_cfg.get("max_accuracy_regression", 0.01),
+        "max_loop_increase": efficiency_cfg.get("max_loop_increase"),
+    }
+    
+    gate_results = evaluate_efficiency_gates(
+        current_metrics,
+        baseline_metrics,
+        **gate_config,
+    )
+    
+    if not gate_results["all_gates_passed"]:
+        gates_passed = False
+        if not gate_results["token_reduction_gate"]:
+            errors.append(
+                f"Token reduction gate failed: {gate_results['details']['token_reduction']:.1%} "
+                f"(required: {gate_config['min_token_reduction']:.1%}-{gate_config['max_token_reduction']:.1%})"
+            )
+        if not gate_results["accuracy_gate"]:
+            errors.append(
+                f"Accuracy gate failed: delta={gate_results['details']['accuracy_delta']:.3f} "
+                f"(max regression: {gate_config['max_accuracy_regression']:.3f})"
+            )
+        if not gate_results["loop_gate"]:
+            errors.append(
+                f"Loop gate failed: loop delta={gate_results['details']['loop_delta']}"
+            )
+        if not gate_results["latency_gate"]:
+            errors.append(
+                f"Latency gate failed: time delta={gate_results['details']['time_delta_percent']:.1f}%"
+            )
+    
+    return {
+        "gates_passed": gates_passed,
+        "token_reduction_gate": gate_results["token_reduction_gate"],
+        "accuracy_gate": gate_results["accuracy_gate"],
+        "loop_gate": gate_results["loop_gate"],
+        "latency_gate": gate_results["latency_gate"],
+        "details": gate_results["details"],
+        "current_metrics": {
+            "accuracy": current_metrics.accuracy,
+            "generated_tokens": current_metrics.generated_tokens,
+            "wall_clock_time_ms": current_metrics.wall_clock_time_ms,
+            "refinement_loops": current_metrics.refinement_loops,
+        },
+        "baseline_metrics": {
+            "accuracy": baseline_metrics.accuracy,
+            "generated_tokens": baseline_metrics.generated_tokens,
+            "wall_clock_time_ms": baseline_metrics.wall_clock_time_ms,
+            "refinement_loops": baseline_metrics.refinement_loops,
+        },
+        "errors": errors,
     }
 
 

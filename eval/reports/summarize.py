@@ -340,6 +340,17 @@ def summarize_results(
         "config": config,
         "gates": gates,
     }
+    
+    # Add code-mode metadata if evaluation was run with code-mode enabled
+    # Config is single source of truth (env var kept for backward compatibility)
+    import os
+    eval_code_mode_cfg = config.get("eval", {}).get("code_mode", {}).get("enabled", False)
+    eval_code_mode = eval_code_mode_cfg or os.getenv("EVAL_CODE_MODE", "0") == "1"
+    if eval_code_mode:
+        report_header["code_mode"] = {
+            "enabled": True,
+            "config_path": "eval/configs/code_mode.yaml",
+        }
 
     # Add speed metrics and hardware to header if provided
     if speed_metrics is not None:
@@ -356,16 +367,75 @@ def summarize_results(
     if current_hw_profile_key:
         report_header["hardware_profile_key"] = current_hw_profile_key
 
+    # Evaluate code-mode gates if EVAL_CODE_MODE=1
+    code_mode_gates_ok = True
+    code_mode_gates_result = None
+    import os
+    eval_code_mode = os.getenv("EVAL_CODE_MODE", "0") == "1"
+    
+    if eval_code_mode:
+        from eval.scoring.scorer import evaluate_code_mode_gates
+        import yaml
+        from pathlib import Path
+        
+        # Load code-mode config
+        code_mode_config = {}
+        code_mode_config_path = Path("eval/configs/code_mode.yaml")
+        if code_mode_config_path.exists():
+            try:
+                with open(code_mode_config_path, 'r') as f:
+                    code_mode_config = yaml.safe_load(f) or {}
+            except Exception as e:
+                print(f"[summarize] WARN: Failed to load code-mode config: {e}")
+        
+        # Get baseline summary for CES comparison
+        baseline_summary_for_ces = None
+        if baseline_report_path:
+            try:
+                import json
+                from pathlib import Path
+                baseline_path = Path(baseline_report_path)
+                if baseline_path.exists():
+                    with open(baseline_path, 'r') as f:
+                        baseline_report = json.load(f)
+                    baseline_summary_for_ces = baseline_report.get("summary", {})
+            except Exception as e:
+                print(f"[summarize] WARN: Failed to load baseline summary for CES: {e}")
+        
+        code_mode_gates_result = evaluate_code_mode_gates(
+            results=results,
+            config=code_mode_config,
+            baseline_summary=baseline_summary_for_ces,
+        )
+        code_mode_gates_ok = code_mode_gates_result.get("gates_passed", True)
+        
+        # Add code-mode metrics to summary (absolute CES and %Δ vs baseline)
+        summary["ces_tokens_total"] = code_mode_gates_result.get("ces_tokens_total", 0)
+        summary["ces_tokens_direct_tool"] = code_mode_gates_result.get("ces_tokens_direct_tool", 0)
+        summary["ces_tokens_code_mode"] = code_mode_gates_result.get("ces_tokens_code_mode", 0)
+        summary["data_leak_events"] = code_mode_gates_result.get("data_leak_events", 0)
+        summary["code_mode_adoption_rate"] = code_mode_gates_result.get("code_mode_adoption_rate", 0.0)
+        
+        # Add baseline comparison metrics
+        summary["abs_ces"] = code_mode_gates_result.get("abs_ces", code_mode_gates_result.get("ces_tokens_total", 0))
+        summary["ces_delta_percent"] = code_mode_gates_result.get("ces_delta_percent")
+        summary["ces_improvement_percent"] = code_mode_gates_result.get("ces_improvement_percent")
+        summary["baseline_ces"] = code_mode_gates_result.get("baseline_ces")
+
     # Build full report
     report = {
         "header": report_header,
         "summary": summary,
-        # Co-gate: both quality and speed must pass
-        "gates_ok": gates_ok and speed_gates_ok,
+        # Co-gate: quality, speed, and code-mode gates must all pass
+        "gates_ok": gates_ok and speed_gates_ok and code_mode_gates_ok,
     }
 
     # Add speed gates result if available
     if speed_gates_result is not None:
         report["speed_gates"] = speed_gates_result
+    
+    # Add code-mode gates result if available
+    if code_mode_gates_result is not None:
+        report["code_mode_gates"] = code_mode_gates_result
 
     return report

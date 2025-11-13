@@ -8,11 +8,39 @@ losses:
   kl_div: true
   kd_temperature: 2.0
   kl_weight: 0.5
+distill:
+  code_mode:
+    enabled: false  # Set to true to enable code-mode training (or use TRAIN_CODE_MODE=1)
+    weight: 0.3
+    weight_schedule:
+      warmup_steps: 5000  # Ramp from 0.1 to weight over first 5k steps
+      start_weight: 0.1
+    code_mode_pref:
+      eligibility_rules:
+        min_tools: 2
+        min_intermediate_chars: 10000
+        pii_patterns: ["EMAIL", "PHONE", "SSN"]
+      reward:
+        prefer_ts_api_over_direct_tool: true
+        penalize_tool_result_roundtrip: true
+      weights:
+        pos: 1.0
+        neg: 1.0
 sampling:
   mix:
     general: 0.5
     domain_specific: 0.3
     tool_traces: 0.2
+data:
+  curriculum:
+    - name: mcp_code_mode
+      p: 0.20
+latent:
+  enabled: false  # Set to true to enable latent training (or use TRAIN_LATENT=1)
+  m: 2  # Steps to replace
+  c: 1  # Latent slots (start with 1, enable c=2 when stable)
+  p: 0.5  # Curriculum probability
+  training_loops: 4  # More loops during training (4-6 range)
 caching:
   enable_logit_cache: true
   cache_dir: data/logits/
