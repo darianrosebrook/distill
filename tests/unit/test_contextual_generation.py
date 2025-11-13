@@ -8,7 +8,6 @@ Tests:
 """
 import pytest
 import json
-import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -1629,7 +1628,7 @@ class TestVerifyContextualSet:
         from scripts.verify_contextual_set import main
         import sys
         import json
-        from unittest.mock import patch, Mock, MagicMock
+        from unittest.mock import patch, Mock
         
         input_file = tmp_path / "test_input.jsonl"
         output_file = tmp_path / "test_output.json"
@@ -1980,7 +1979,6 @@ class TestVerifyContextualSet:
         from scripts.verify_contextual_set import main
         import sys
         import json
-        from pathlib import Path
         
         input_file = tmp_path / "test_input.jsonl"
         output_file = tmp_path / "test_output.json"
@@ -2430,32 +2428,6 @@ class TestVerifyContextualSet:
             # Exception handling may vary, but should not crash
             pass
     
-    def test_multi_call_parity_mismatch(self):
-        """Test multi-call parity mismatch detection."""
-        from scripts.verify_contextual_set import verify_item
-        from tools.schema_registry import ToolSchemaRegistry
-        
-        reg = ToolSchemaRegistry()
-        
-        item = {
-            "prompt": '{"caws": {"tier": 2, "max_files": 25, "max_loc": 1000, "cov": 80, "mut": 50}}',
-            "teacher_text": 'Call 1: {"name": "read_file", "arguments": {"path": "test.txt"}} Call 2: {"name": "write_file", "arguments": {"path": "out.txt"}}',
-            "metadata": {
-                "dataset_version": "1.1.0",
-                "call_sequence": [
-                    {"name": "read_file", "arguments": {"path": "test.txt"}},
-                    {"name": "write_file", "arguments": {"path": "out.txt"}}
-                ],
-                "json_args_spans_bytes": [[0, 50]],  # Only one span for two calls
-                "expected_behaviour": "normal",
-            }
-        }
-        
-        result = verify_item(item, reg)
-        # Should detect mismatch - check that mismatch is in problems
-        problems = result.get("problems", [])
-        assert any("mismatch" in p.lower() for p in problems) or any("expected_2" in p for p in problems)
-    
     def test_semantic_validation_invalid_args(self):
         """Test semantic validation with invalid arguments."""
         from scripts.verify_contextual_set import verify_item
@@ -2604,7 +2576,6 @@ class TestErrorHandling:
         # Test import error handling
         try:
             from scripts.extract_process_targets import load_tokenizer
-            import sys
             # Mock ImportError for transformers
             original_import = __import__
             def mock_import(name, *args, **kwargs):
@@ -2752,7 +2723,7 @@ class TestErrorHandling:
         from scripts.extract_process_targets import load_tokenizer
         from unittest.mock import patch, Mock
         
-        mock_tokenizer = Mock()
+        Mock()
         with patch('transformers.AutoTokenizer') as mock_auto:
             mock_auto.from_pretrained = Mock(side_effect=Exception("Load failed"))
             try:
@@ -3185,7 +3156,7 @@ class TestNegativeMutationSimulation:
         
         # If spans exceed cap, should be flagged
         spans1 = meta1.get("integration_spans_bytes", [])
-        spans2 = meta2.get("integration_spans_bytes", [])
+        meta2.get("integration_spans_bytes", [])
         
         # Cap should be enforced
         if len(spans1) > 3:

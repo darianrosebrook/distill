@@ -5,7 +5,6 @@ import json
 import os
 import subprocess
 import time
-from pathlib import Path
 
 
 def run_eval_for_checkpoint(
@@ -75,7 +74,7 @@ def run_eval_for_checkpoint(
         ]
 
         try:
-            result = subprocess.run(
+            subprocess.run(
                 cmd, check=True, capture_output=True, text=True)
         except subprocess.CalledProcessError as e:
             raise RuntimeError(

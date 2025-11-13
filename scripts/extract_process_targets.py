@@ -22,7 +22,6 @@ from training.extractors import (
 from tools.schema_registry import ToolSchemaRegistry, validate_args
 from scripts.util_token_spans import (
     bytes_to_token_span,
-    byte_spans_to_token_spans,
     normalize_text_for_alignment,
 )
 

@@ -19,8 +19,8 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from dataclasses import dataclass
-from typing import Optional, Dict, Any, List, Union, Tuple
+from typing import Optional, Dict, Any, List
+import re
 
 
 def kl_divergence(
@@ -485,6 +485,9 @@ def combined_kd_loss(
     Returns:
         Dictionary with individual losses and total loss
     """
+    # Cast student logits to FP32 for loss computation (model may output FP16)
+    student_logits = student_logits.float()
+
     losses = {}
     total_loss = torch.tensor(
         0.0, device=student_logits.device, dtype=student_logits.dtype)
@@ -655,18 +658,218 @@ class CodeModePreferenceLoss(nn.Module):
         if not eligible:
             return torch.tensor(0.0, device=student_logits.device, requires_grad=True)
 
-        # Compute reward based on student output
-        # This is a simplified version - full implementation would decode and check patterns
-        reward = 0.0
 
-        if self.reward_cfg.get("prefer_ts_api_over_direct_tool", False):
-            # Positive reward for TS API usage (would need span_targets for full implementation)
-            reward += self.weights["pos"]
+def caws_compliance_loss(
+    student_output: str,
+    teacher_output: str,
+    claim_extractor=None,
+) -> torch.Tensor:
+    """
+    CAWS compliance loss for self-evaluation training.
 
-        if self.reward_cfg.get("penalize_tool_result_roundtrip", False):
-            # Negative reward for tool result roundtrips (would need detection logic)
-            reward -= self.weights["neg"]
+    Evaluates how well the student output complies with CAWS requirements:
+    - Budget constraints (tier limits for loops and latent spans)
+    - Quality requirements (supported claims, proper reasoning)
+    - Feature usage appropriateness
 
-        # Convert reward to loss (negative reward = positive loss)
-        loss = -reward
-        return torch.tensor(loss, device=student_logits.device, requires_grad=True)
+    Args:
+        student_output: The model's generated text output
+        teacher_output: The teacher's reference output
+        claim_extractor: Optional claim extractor for claim evaluation
+
+    Returns:
+        Loss tensor where lower values indicate better CAWS compliance
+    """
+    loss_components = []
+
+    # 1. Evaluate budget compliance (latent spans, loop count)
+    budget_penalty = _evaluate_budget_compliance(student_output)
+    loss_components.append(budget_penalty)
+
+    # 2. Evaluate quality compliance (claim support, reasoning structure)
+    quality_penalty = _evaluate_quality_compliance(student_output, teacher_output, claim_extractor)
+    loss_components.append(quality_penalty)
+
+    # 3. Evaluate feature usage compliance (appropriate use of code-mode, latent reasoning)
+    feature_penalty = _evaluate_feature_usage_compliance(student_output)
+    loss_components.append(feature_penalty)
+
+    # Combine penalties (sum with equal weights for now)
+    total_loss = sum(loss_components)
+
+    # Ensure loss is non-negative and requires gradients for training
+    return torch.clamp(torch.tensor(float(total_loss), requires_grad=True), min=0.0)
+
+
+def _evaluate_budget_compliance(student_output: str) -> float:
+    """
+    Evaluate if output complies with CAWS budget constraints.
+
+    Penalizes:
+    - Excessive latent spans (>3 for tier 3)
+    - Excessive refinement loops
+    - Over-budget feature usage
+
+    Returns:
+        Penalty score (0.0 = compliant, >0.0 = violation)
+    """
+    penalty = 0.0
+
+    # Count latent spans (<bot>...</bot> pairs)
+    bot_count = student_output.count("<bot>")
+    eot_count = student_output.count("<eot>")
+
+    # Penalize mismatched latent spans
+    if bot_count != eot_count:
+        penalty += 1.0
+
+    # Penalize excessive latent spans (beyond tier 3 limits)
+    max_allowed_latent = 3  # Tier 3 max
+    if bot_count > max_allowed_latent:
+        penalty += (bot_count - max_allowed_latent) * 0.5
+
+    # Penalize excessive refinement loops (rough heuristic: multiple "Step X:" patterns)
+    step_patterns = len(re.findall(r'Step \d+:', student_output, re.IGNORECASE))
+    max_allowed_steps = 5  # Reasonable limit
+    if step_patterns > max_allowed_steps:
+        penalty += (step_patterns - max_allowed_steps) * 0.2
+
+    return penalty
+
+
+def _evaluate_quality_compliance(
+    student_output: str,
+    teacher_output: str,
+    claim_extractor=None
+) -> float:
+    """
+    Evaluate quality compliance of student output.
+
+    Penalizes:
+    - Unsupported claims
+    - Contradictory information
+    - Poor reasoning structure
+
+    Returns:
+        Penalty score (0.0 = high quality, >0.0 = quality issues)
+    """
+    penalty = 0.0
+
+    # Use claim extractor if available
+    if claim_extractor:
+        try:
+            student_claims = claim_extractor.extract_claims(student_output)
+            teacher_claims = claim_extractor.extract_claims(teacher_output)
+
+            # Penalize unsupported claims
+            unsupported_claims = 0
+            for claim in student_claims:
+                if not _claim_supported_by_teacher(claim, teacher_claims):
+                    unsupported_claims += 1
+
+            penalty += unsupported_claims * 0.3
+        except Exception:
+            # Fallback to heuristic evaluation if claim extraction fails
+            penalty += 0.1
+
+    # Heuristic quality checks
+    # Penalize very short outputs (likely incomplete reasoning)
+    if len(student_output.strip()) < 50:
+        penalty += 1.0
+
+    # Penalize outputs with contradiction markers
+    contradiction_indicators = ["however", "but", "contrary", "despite", "although"]
+    contradiction_count = sum(1 for word in contradiction_indicators
+                            if word.lower() in student_output.lower())
+    penalty += contradiction_count * 0.1
+
+    # Penalize outputs that don't have clear conclusion/answer
+    if not re.search(r'(answer|conclusion|result|therefore)', student_output, re.IGNORECASE):
+        penalty += 0.2
+
+    return penalty
+
+
+def _evaluate_feature_usage_compliance(student_output: str) -> float:
+    """
+    Evaluate appropriate usage of CAWS features.
+
+    Penalizes:
+    - Code-mode when not needed (no API calls)
+    - Latent reasoning when direct reasoning would suffice
+    - Inappropriate feature combinations
+
+    Returns:
+        Penalty score (0.0 = appropriate usage, >0.0 = inappropriate usage)
+    """
+    penalty = 0.0
+
+    # Check for code-mode indicators when no API usage
+    code_indicators = ["import", "from", "callMCPTool", "await", "function", "const", "let"]
+    has_code_patterns = any(indicator in student_output for indicator in code_indicators)
+
+    # Check for actual tool usage (rough heuristic)
+    tool_usage_indicators = ["google_drive", "salesforce", "api", "tool", "call"]
+    has_tool_usage = any(indicator.lower() in student_output.lower()
+                        for indicator in tool_usage_indicators)
+
+    # Penalize code-mode syntax without tool usage (inappropriate code-mode)
+    if has_code_patterns and not has_tool_usage:
+        penalty += 0.5
+
+    # Penalize excessive latent spans for simple tasks
+    latent_span_count = student_output.count("<bot>")
+    output_length = len(student_output)
+
+    # For short outputs, penalize heavy latent usage
+    if output_length < 200 and latent_span_count > 2:
+        penalty += 0.3
+
+    # Penalize missing tool integration when tools are mentioned
+    if has_tool_usage and not has_code_patterns and "<bot>" not in student_output:
+        # Should probably use some form of integration (code-mode or latent)
+        penalty += 0.2
+
+    return penalty
+
+
+def _claim_supported_by_teacher(student_claim: Any, teacher_claims: List[Any]) -> bool:
+    """
+    Check if a student claim is supported by teacher claims.
+
+    Uses simplified text similarity and keyword matching.
+    Real implementation would use semantic similarity and entailment checking.
+    """
+    if not teacher_claims:
+        return False
+
+    # Extract claim text (handle both ExtractedClaim objects and strings)
+    if hasattr(student_claim, 'statement'):
+        student_text = student_claim.statement.lower()
+    else:
+        student_text = str(student_claim).lower()
+
+    # Simple keyword matching approach
+    student_words = set(re.findall(r'\b\w+\b', student_text))
+
+    for teacher_claim in teacher_claims:
+        # Extract teacher claim text
+        if hasattr(teacher_claim, 'statement'):
+            teacher_text = teacher_claim.statement.lower()
+        else:
+            teacher_text = str(teacher_claim).lower()
+
+        teacher_words = set(re.findall(r'\b\w+\b', teacher_text))
+
+        # Check for significant overlap (Jaccard similarity > 0.3)
+        intersection = student_words & teacher_words
+        union = student_words | teacher_words
+
+        if union and len(intersection) / len(union) > 0.3:
+            return True
+
+        # Check for substring containment
+        if student_text in teacher_text or teacher_text in student_text:
+            return True
+
+    return False

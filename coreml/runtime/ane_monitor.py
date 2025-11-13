@@ -10,8 +10,6 @@ from __future__ import annotations
 import time
 import subprocess
 import platform
-import json
-from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 import numpy as np
 
@@ -297,8 +295,8 @@ class ANEResidencyMonitor:
                         ops.append(b.type)
             else:
                 # Fallback for neuralNetwork
-                layer_names = [l.WhichOneof("layer")
-                               for l in spec.neuralNetwork.layers]
+                layer_names = [layer.WhichOneof("layer")
+                               for layer in spec.neuralNetwork.layers]
                 ops.extend(filter(None, layer_names))
 
             op_counts = Counter(ops)

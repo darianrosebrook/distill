@@ -8,7 +8,7 @@ Author: @darianrosebrook
 """
 
 import re
-from typing import List, Dict, Optional
+from typing import List, Dict
 
 
 def caws_structure_score(text: str) -> float:

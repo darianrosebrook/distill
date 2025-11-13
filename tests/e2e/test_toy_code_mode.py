@@ -7,18 +7,12 @@ the standard toy training pipeline.
 Author: @darianrosebrook
 """
 import pytest
-import subprocess
-import sys
-import tempfile
-import json
 import os
-from pathlib import Path
 import torch
 
 from training.losses import CodeModePreferenceLoss, combined_kd_loss
 from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
 from data.generators.mcp_code_mode import compute_span_targets_from_tokenized
-from unittest.mock import Mock
 
 
 def test_toy_training_without_code_mode():
@@ -412,7 +406,6 @@ def test_toy_code_mode_with_span_targets():
     # Convert span targets dict to tensor format (if needed)
     # For now, pass as dict since CodeModePreferenceLoss accepts Dict[str, torch.Tensor]
     # The actual implementation may need tensor conversion, but for toy test we verify structure
-    span_targets_tensor = None
     if span_targets_dict["ts_mode_spans"]:
         # Create a simple tensor representation for testing
         # In real implementation, this would be token position tensors

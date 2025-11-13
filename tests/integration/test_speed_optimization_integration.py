@@ -5,14 +5,12 @@ Tests the full integration of speed optimizations into training pipeline.
 These tests verify that features work together before expensive API calls.
 """
 import json
-import tempfile
-from pathlib import Path
 
 import pytest
 import torch
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
-from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
+from models.student.architectures.gqa_transformer import StudentLM
 from training.dataset import KDDataset, collate_kd_batch
 from training.distill_kd import (
     sample_enumerated_shape,
@@ -138,7 +136,7 @@ class TestLatencyAwareLossesIntegration:
         input_ids = torch.randint(0, small_model_cfg.vocab_size, (b, t), device=device)
         
         # Forward pass
-        student_logits = model(input_ids)
+        model(input_ids)
         
         # Create attention masks
         student_attn_mask = torch.ones(b, t, device=device)

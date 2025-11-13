@@ -110,14 +110,14 @@ def validate_json(text: str) -> bool:
             try:
                 json.loads(match)
                 return True
-            except:
+            except json.JSONDecodeError:
                 continue
     
     # Try parsing entire text
     try:
         json.loads(text.strip())
         return True
-    except:
+    except json.JSONDecodeError:
         pass
     
     return False
@@ -136,7 +136,7 @@ def extract_tool_call(text: str) -> Optional[Dict[str, Any]]:
             obj = json.loads(match)
             if isinstance(obj, dict) and 'name' in obj:
                 return obj
-        except:
+        except json.JSONDecodeError:
             continue
     
     # Try parsing entire text
@@ -144,7 +144,7 @@ def extract_tool_call(text: str) -> Optional[Dict[str, Any]]:
         obj = json.loads(text.strip())
         if isinstance(obj, dict) and 'name' in obj:
             return obj
-    except:
+    except json.JSONDecodeError:
         pass
     
     return None
@@ -349,7 +349,7 @@ def main():
             {'prompt': 'Read the file config.yaml', 'expected_tool': 'read_file'},
             {'prompt': 'Write "Hello World" to output.txt', 'expected_tool': 'write_file'},
         ]
-        print(f"[tool_use_eval] WARN: Test data not found, using default prompts")
+        print("[tool_use_eval] WARN: Test data not found, using default prompts")
     
     # Run evaluation
     print(f"[tool_use_eval] Evaluating on {len(test_prompts)} test cases...")
@@ -378,7 +378,7 @@ def main():
     with open(output_path, 'w') as f:
         json.dump(report, f, indent=2)
     
-    print(f"[tool_use_eval] ✅ Evaluation complete:")
+    print("[tool_use_eval] ✅ Evaluation complete:")
     print(f"  JSON validity: {results['json_validity_rate']:.2%}")
     print(f"  Tool selection: {results['tool_selection_rate']:.2%}")
     print(f"  Repair rate: {results['repair_rate']:.2%}")

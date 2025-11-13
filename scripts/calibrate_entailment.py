@@ -1,7 +1,11 @@
 
 #!/usr/bin/env python3
 
-import argparse, json, math, itertools, sys, pathlib, statistics
+import argparse
+import json
+import math
+import sys
+import statistics
 
 def _tokenize(s):
     return [t for t in s.lower().split() if t.strip()]

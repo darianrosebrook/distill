@@ -11,13 +11,10 @@ Usage:
     python -m evaluation.toy_contracts --model toy.mlpackage --report toy_e2e.json --seq 64 128 256
 """
 import argparse
-import hashlib
 import json
-import math
-import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List
 
 try:
     import coremltools as ct
@@ -171,7 +168,7 @@ def main():
         """Load CoreML model, return None on failure."""
         try:
             return load_coreml_model(path)
-        except Exception as e:
+        except Exception:
             return None
 
     per_shape = {}
@@ -268,7 +265,7 @@ def main():
         json.dump(out, f, indent=2)
 
     # Print summary
-    print(f"[toy_contracts] Verification complete:")
+    print("[toy_contracts] Verification complete:")
     print(f"  Shapes requested: {args.seq}")
     print(f"  Shapes compiled: {compiled}/{len(args.seq)}")
     print(f"  Shapes OK: {shapes_ok}")

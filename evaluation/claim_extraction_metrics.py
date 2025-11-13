@@ -8,9 +8,8 @@ Reference: CLAIM_EXTRACTION_SKEPTICISM_GUARD_RAILS.md
 @author: @darianrosebrook
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Optional
 from dataclasses import dataclass
-import json
 
 from training.claim_extraction import SimpleClaimExtractor, compute_claim_extraction_metrics
 

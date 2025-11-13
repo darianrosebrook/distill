@@ -47,7 +47,7 @@ class TestSafetyEdgeCases:
         
         # Process tokens
         for i, token_id in enumerate(tokens):
-            result = engine.process_token(
+            engine.process_token(
                 token_id,
                 hidden_state[:, i:i+1, :] if i < len(tokens) - 1 else hidden_state[:, -1:, :],
                 None,
@@ -71,7 +71,7 @@ class TestSafetyEdgeCases:
         
         # Process tokens
         for i, token_id in enumerate(tokens):
-            result = engine.process_token(
+            engine.process_token(
                 token_id,
                 hidden_state[:, i:i+1, :] if i < len(tokens) - 1 else hidden_state[:, -1:, :],
                 None,
@@ -100,7 +100,7 @@ class TestSafetyEdgeCases:
         
         # Process tokens
         for i, token_id in enumerate(tokens):
-            result = engine.process_token(
+            engine.process_token(
                 token_id,
                 hidden_state[:, i:i+1, :] if i < len(tokens) - 1 else hidden_state[:, -1:, :],
                 None,
@@ -126,7 +126,7 @@ class TestSafetyEdgeCases:
         
         # Process tokens beyond max length
         for i in range(max_length + 2):
-            result = engine.process_token(
+            engine.process_token(
                 100 + i,
                 torch.randn(1, 1, 128),
                 None,
@@ -152,7 +152,7 @@ class TestSafetyEdgeCases:
         engine.process_token(BOT_TOKEN_ID, torch.randn(1, 1, 128), None, 0)
         
         # Process token without hidden state
-        result = engine.process_token(100, None, None, 1)
+        engine.process_token(100, None, None, 1)
         
         # Should fallback to language mode
         assert engine.current_mode == "language" or len(engine.errors) > 0
@@ -171,7 +171,7 @@ class TestSafetyEdgeCases:
         engine.process_token(BOT_TOKEN_ID, torch.randn(1, 1, 128), None, 0)
         
         # Process token (should trigger forward_hidden error)
-        result = engine.process_token(100, torch.randn(1, 1, 128), None, 1)
+        engine.process_token(100, torch.randn(1, 1, 128), None, 1)
         
         # Should fallback to language mode on error
         assert engine.current_mode == "language" or len(engine.errors) > 0
@@ -192,7 +192,7 @@ class TestSafetyEdgeCases:
         
         # Call generate_with_latent_mode and check final mode
         input_ids = torch.tensor([[1, 2, 3]])
-        result = engine.generate_with_latent_mode(
+        engine.generate_with_latent_mode(
             input_ids,
             max_new_tokens=10,
         )

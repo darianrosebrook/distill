@@ -12,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 import json
-import shutil
+import torch
 from pathlib import Path
 
 
@@ -195,8 +195,8 @@ def test_toy_pipeline_with_code_mode(temp_dir):
     dataset_path = temp_dir / "toy_kd.jsonl"
     checkpoint_path = temp_dir / "toy_code_mode.ckpt"
     export_dir = temp_dir / "exported_code_mode"
-    mlpackage_path = temp_dir / "toy_code_mode_T128.mlpackage"
-    report_path = temp_dir / "toy_code_mode_e2e.json"
+    temp_dir / "toy_code_mode_T128.mlpackage"
+    temp_dir / "toy_code_mode_e2e.json"
     
     # Set code-mode environment variable
     env = os.environ.copy()
@@ -282,8 +282,8 @@ def test_toy_pipeline_with_latent_mode(temp_dir):
     dataset_path = temp_dir / "toy_kd.jsonl"
     checkpoint_path = temp_dir / "toy_latent.ckpt"
     export_dir = temp_dir / "exported_latent"
-    mlpackage_path = temp_dir / "toy_latent_T128.mlpackage"
-    report_path = temp_dir / "toy_latent_e2e.json"
+    temp_dir / "toy_latent_T128.mlpackage"
+    temp_dir / "toy_latent_e2e.json"
     
     # Set latent mode environment variable
     env = os.environ.copy()
@@ -370,8 +370,8 @@ def test_toy_pipeline_with_both_features(temp_dir):
     dataset_path = temp_dir / "toy_kd.jsonl"
     checkpoint_path = temp_dir / "toy_both.ckpt"
     export_dir = temp_dir / "exported_both"
-    mlpackage_path = temp_dir / "toy_both_T128.mlpackage"
-    report_path = temp_dir / "toy_both_e2e.json"
+    temp_dir / "toy_both_T128.mlpackage"
+    temp_dir / "toy_both_e2e.json"
     
     # Set both environment variables
     env = os.environ.copy()

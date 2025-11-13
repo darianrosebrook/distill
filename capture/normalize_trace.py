@@ -1,6 +1,10 @@
 
 from __future__ import annotations
-import os, json, argparse, glob, time
+import os
+import json
+import argparse
+import glob
+import time
 from typing import Dict, Any, List
 from capture.validators import validate_trace, redact
 
@@ -15,7 +19,8 @@ def parse_raw_lines(lines: List[str]) -> List[dict]:
             obj = json.loads(s)
             t = obj.get("type")
             if t in ("assistant.delta","assistant.final","assistant.tool_call","tool.result"):
-                events.append(obj); continue
+                events.append(obj)
+                continue
         except Exception:
             pass
         # Try SSE: "data: {json}"
@@ -25,9 +30,11 @@ def parse_raw_lines(lines: List[str]) -> List[dict]:
                 obj = json.loads(payload)
                 t = obj.get("type")
                 if t in ("assistant.delta","assistant.final","assistant.tool_call","tool.result"):
-                    events.append(obj); continue
+                    events.append(obj)
+                    continue
             except Exception:
-                events.append({"type":"assistant.delta","text":payload}); continue
+                events.append({"type":"assistant.delta","text":payload})
+                continue
         # Fallback: treat line as free-text delta
         events.append({"type":"assistant.delta","text": s})
     return events
@@ -54,7 +61,8 @@ def build_trace(raw_file: str, schema: Dict[str, Any]) -> Dict[str, Any]:
     tool_calls = 0
     for e in events:
         et = e.get("type")
-        if et == "assistant.tool_call": tool_calls += 1
+        if et == "assistant.tool_call":
+            tool_calls += 1
         trace["events"].append(e)
 
     trace["telemetry"]["tool_calls"] = tool_calls

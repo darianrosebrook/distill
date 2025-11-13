@@ -43,7 +43,7 @@ class TestHaltHead:
     def test_halt_head_not_initialized(self, model_without_halt):
         """Test that halt head is not initialized when use_halt_head=False."""
         assert model_without_halt.use_halt_head is False
-        assert not hasattr(model_without_halt, "halt_head") or model_with_halt.halt_head is None
+        assert not hasattr(model_without_halt, "halt_head") or model_without_halt.halt_head is None
     
     def test_forward_returns_halt_logits(self, model_with_halt):
         """Test that forward returns halt logits when requested."""

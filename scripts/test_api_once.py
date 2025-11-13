@@ -86,14 +86,14 @@ def main():
 
             # Display tier info if available
             if tier and tier_limits:
-                print(f"\n  API Tier Information:")
+                print("\n  API Tier Information:")
                 print(f"    Tier: {tier.value}")
                 print(f"    RPM: {tier_limits.rpm}")
                 print(f"    TPM: {tier_limits.tpm:,}")
                 if tier_limits.tpd:
                     print(f"    TPD: {tier_limits.tpd:,}")
                 else:
-                    print(f"    TPD: Unlimited")
+                    print("    TPD: Unlimited")
                 print(f"    Concurrency: {tier_limits.concurrency}")
                 print(f"    Recommended delay: {tier_limits.delay}s")
                 print(
@@ -102,7 +102,7 @@ def main():
                 print("  ⚠️ Tier info: Not available (using defaults)")
 
             # Sample response
-            print(f"\n  Sample Response:")
+            print("\n  Sample Response:")
             print(f"    Prompt: {test_prompt}")
             print(f"    Response: {results[0]['text'][:100]}...")
 
@@ -119,7 +119,7 @@ def main():
             # Error case - still try to extract tier info if available
             error_msg = results[0].get(
                 "error", "Unknown error") if results else "No response"
-            print(f"\n[test_api_once] ❌ API Test Failed:")
+            print("\n[test_api_once] ❌ API Test Failed:")
             print(f"  Error: {error_msg}")
 
             # Try to get tier info (might have been set from response headers)
@@ -139,7 +139,7 @@ def main():
                     print(
                         f"  💡 Tier-aware backoff sequence: {', '.join([f'{d:.1f}s' for d in backoff_sequence])}")
 
-            print(f"\n[test_api_once] Debug info:")
+            print("\n[test_api_once] Debug info:")
             print(f"  Results: {results}")
             if results and results[0].get("error"):
                 print(f"  Full error: {results[0]}")

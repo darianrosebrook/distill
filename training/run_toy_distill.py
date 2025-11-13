@@ -9,14 +9,11 @@ Usage:
 """
 from training.utils import sha256_state_dict
 import argparse
-import hashlib
-import json
 import subprocess
 import sys
 from pathlib import Path
 
 import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
@@ -74,7 +71,7 @@ def main():
     else:
         device = torch.device('cpu')
 
-    print(f"[run_toy_distill] Starting toy distillation training")
+    print("[run_toy_distill] Starting toy distillation training")
     print(f"  Device: {device}")
     print(f"  Epochs: {args.epochs}")
     print(f"  Micro batch size: {args.micro_batch_size}")
@@ -221,7 +218,7 @@ def main():
     output_path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(checkpoint, output_path)
 
-    print(f"[run_toy_distill] ✅ Training complete")
+    print("[run_toy_distill] ✅ Training complete")
     print(f"  Checkpoint saved: {output_path}")
     print(f"  Model SHA256: {state_sha256[:16]}...")
     print(f"  Git SHA: {git_sha}")

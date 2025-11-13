@@ -8,7 +8,6 @@ Tests:
 4. Entropy scheduling integrates with training loop
 """
 import torch
-import torch.nn.functional as F
 from training.losses import entropy_weighting
 
 

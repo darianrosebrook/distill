@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import pytest
 import torch
-import torch.nn as nn
 from training.losses import CodeModePreferenceLoss
 
 
@@ -103,9 +102,6 @@ def test_code_mode_loss_forward_method_torchscript():
     
     Creates a wrapper function that can be scripted.
     """
-    batch_size = 2
-    seq_len = 10
-    vocab_size = 1000
     
     @torch.jit.script
     def compute_eligibility_mask_vectorized(
@@ -137,6 +133,6 @@ def test_code_mode_loss_forward_method_torchscript():
     )
     
     assert eligible.shape == (2,), "Eligibility mask should have batch dimension"
-    assert eligible[0].item() == True, "First sample should be eligible"
-    assert eligible[1].item() == False, "Second sample should be ineligible"
+    assert eligible[0].item(), "First sample should be eligible"
+    assert not eligible[1].item(), "Second sample should be ineligible"
 

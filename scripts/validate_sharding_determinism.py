@@ -9,7 +9,7 @@ import re
 import subprocess
 import sys
 import tempfile
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -244,7 +244,7 @@ def extract_fingerprints_from_report(report: Dict[str, Any], results: List[Dict[
     Fingerprints may be in header (dataset, registry, tokenizer) or in results (runner, model).
     """
     header = report.get("header", {})
-    config = header.get("config", {})
+    header.get("config", {})
 
     fingerprints = {
         "dataset_sha256": header.get("dataset_sha256"),
@@ -554,7 +554,7 @@ def main() -> int:
 
     try:
         # 1. Run baseline evaluation (no sharding)
-        print(f"[VALIDATION] Running baseline evaluation...")
+        print("[VALIDATION] Running baseline evaluation...")
         baseline_results_path = temp_dir / "results.baseline.jsonl"
         baseline_report_path = temp_dir / "report.baseline.json"
 
@@ -611,7 +611,7 @@ def main() -> int:
                 f"[VALIDATION] Shard {shard_idx}: {len(shard_results)} results")
 
         # 3. Concatenate and sort shard results
-        print(f"[VALIDATION] Concatenating and sorting shard results...")
+        print("[VALIDATION] Concatenating and sorting shard results...")
         all_sharded_results = []
         for shard_results in shard_results_list:
             all_sharded_results.extend(shard_results)
@@ -621,7 +621,7 @@ def main() -> int:
             get_sample_id(r), r.get("tool_trace", [])))
 
         # 4. Re-summarize concatenated results
-        print(f"[VALIDATION] Re-summarizing concatenated results...")
+        print("[VALIDATION] Re-summarizing concatenated results...")
         if summarize_results is None:
             print(
                 "[VALIDATION] WARNING: summarize_results not available, skipping metric comparison")
@@ -653,7 +653,7 @@ def main() -> int:
             )
 
         # 5. Validate fingerprints
-        print(f"[VALIDATION] Validating fingerprints...")
+        print("[VALIDATION] Validating fingerprints...")
         fingerprints_ok, fingerprint_mismatches = compare_fingerprints(
             baseline_report, baseline_results, shard_reports_list, shard_results_list
         )
@@ -667,7 +667,7 @@ def main() -> int:
         print("[VALIDATION] Fingerprints match")
 
         # 6. Validate shard completeness
-        print(f"[VALIDATION] Validating shard completeness and uniqueness...")
+        print("[VALIDATION] Validating shard completeness and uniqueness...")
         completeness_ok, completeness_diag = validate_shard_completeness(
             baseline_results, shard_results_list
         )
@@ -682,7 +682,7 @@ def main() -> int:
         print("[VALIDATION] Shard completeness OK")
 
         # 7. Compare per-example outputs
-        print(f"[VALIDATION] Comparing per-example outputs...")
+        print("[VALIDATION] Comparing per-example outputs...")
         mismatch_count, mismatch_details = compare_per_example(
             baseline_results, all_sharded_results
         )
@@ -705,7 +705,7 @@ def main() -> int:
             metrics_ok = True
             metric_diffs = {}
         else:
-            print(f"[VALIDATION] Comparing metrics...")
+            print("[VALIDATION] Comparing metrics...")
             metrics_ok, metric_diffs = compare_metrics(
                 baseline_report, sharded_report, atol=args.atol, rtol=args.rtol
             )

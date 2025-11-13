@@ -1,9 +1,7 @@
 """
 Unit tests for GQA Transformer architecture components.
 """
-import pytest
 import torch
-import torch.nn as nn
 
 from models.student.architectures.gqa_transformer import (
     ModelCfg,

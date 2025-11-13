@@ -2,18 +2,17 @@
 from __future__ import annotations
 import argparse
 import json
-import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
 try:
     import coremltools as ct
     from coremltools.models import MLModel
-except Exception as e:
+except Exception:
     ct = None
     MLModel = None
 

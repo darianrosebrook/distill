@@ -93,6 +93,7 @@ def main():
     
     # Try to load config from checkpoint
     cfg = None
+    model_arch = None
     if 'config' in checkpoint:
         config_data = checkpoint['config']
         arch_cfg = config_data.get('arch', {})
@@ -107,12 +108,18 @@ def main():
             rope_scaling=arch_cfg.get('rope_scaling', 'dynamic'),
             dropout=arch_cfg.get('dropout', 0.0),
         )
-        print(f"[export_student] Loaded config from checkpoint")
+
+        # Load model architecture flags
+        if 'model_arch' in checkpoint:
+            model_arch = checkpoint['model_arch']
+            print(f"[export_student] Loaded model arch from checkpoint: {model_arch}")
+
+        print("[export_student] Loaded config from checkpoint")
     
     if cfg is None:
         # Fallback to default config
         cfg = ModelCfg()
-        print(f"[export_student] WARN: No config in checkpoint, using defaults")
+        print("[export_student] WARN: No config in checkpoint, using defaults")
     
     # Load state dict
     if 'model_state_dict' in checkpoint:
@@ -120,8 +127,17 @@ def main():
     else:
         state_dict = checkpoint
     
-    model = StudentLM(cfg)
+    # Create model with architecture flags
+    use_halt_head = model_arch.get('use_halt_head', False) if model_arch else False
+    use_self_evaluation = model_arch.get('use_self_evaluation', False) if model_arch else False
+
+    model = StudentLM(cfg, use_halt_head=use_halt_head, use_self_evaluation=use_self_evaluation)
     model.load_state_dict(state_dict, strict=False)
+
+    if use_halt_head:
+        print("[export_student] Model loaded with halt head support")
+    if use_self_evaluation:
+        print("[export_student] Model loaded with self-evaluation support")
     model.eval()
     
     # Create example input

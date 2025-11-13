@@ -9,7 +9,6 @@ Usage:
     python -m training.distill_process --checkpoint models/student/checkpoints/latest.pt --config configs/worker_9b.yaml configs/process_supervision.yaml
 """
 import argparse
-import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
@@ -106,7 +105,7 @@ def generate_text_from_logits(logits: torch.Tensor, tokenizer, max_new_tokens: i
         try:
             text = tokenizer.decode(tokens, skip_special_tokens=True)
             texts.append(text)
-        except:
+        except Exception:
             texts.append("")
     
     return texts
@@ -334,7 +333,7 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    print(f"[distill_process] Starting process supervision training:")
+    print("[distill_process] Starting process supervision training:")
     print(f"  Device: {device}")
     print(f"  Steps: {args.steps}")
     print(f"  JSON validity weight: {proc_cfg.get('loss_json_validity_weight', 0.3)}")

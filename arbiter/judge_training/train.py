@@ -3,10 +3,8 @@
 # @author: @darianrosebrook
 
 import os
-import math
 import json
 import typer
-from typing import List
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader

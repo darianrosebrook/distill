@@ -8,7 +8,7 @@ Author: @darianrosebrook
 """
 
 import re
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, List
 import json
 
 
@@ -52,7 +52,7 @@ def compute_heuristic_quality_score(
 
     # Check length appropriateness
     word_count = len(teacher_output.split())
-    char_count = len(teacher_output)
+    len(teacher_output)
 
     # Reward reasonable length (not too short, not too long)
     if 50 <= word_count <= 500:

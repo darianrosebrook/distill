@@ -4,8 +4,6 @@ Unit tests for enumerated shape training functionality.
 Tests shape sampling and batch truncation for enumerated shape training.
 """
 import torch
-import pytest
-from unittest.mock import Mock, patch
 
 from training.distill_kd import sample_enumerated_shape, truncate_batch_to_shape
 

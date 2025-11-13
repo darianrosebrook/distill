@@ -124,7 +124,7 @@ def main(config: str = "conversion/shape_sets.json", mode: str = "both"):
         for i in range(cfg.n_layers):
             output_names.extend([f"k_cache_out_{i}", f"v_cache_out_{i}"])
 
-        path = f"artifacts/onnx/student_decode.onnx"
+        path = "artifacts/onnx/student_decode.onnx"
         torch.onnx.export(
             decode_model,
             (dummy_input_ids, *dummy_kv_inputs),

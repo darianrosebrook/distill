@@ -9,7 +9,6 @@ Supports:
 - Final answer generation
 """
 from typing import Dict, Any, List, Optional
-from pathlib import Path
 import json
 import numpy as np
 
@@ -52,6 +51,7 @@ def generate_tool_call(
     prompt: str,
     tools: List[Dict[str, Any]],
     device: Optional[str] = None,
+    return_halt_logits: bool = False,
 ) -> Dict[str, Any]:
     """
     Generate a tool call using constrained decoding.
@@ -62,9 +62,11 @@ def generate_tool_call(
         prompt: Input prompt
         tools: List of available tools with schemas
         device: Device to run on (for PyTorch models)
+        return_halt_logits: If True, include halt logits in return value
 
     Returns:
         Dictionary with tool call: {"name": "...", "arguments": {...}}
+        If return_halt_logits=True, also includes "halt_logits" key
     """
     # Create generic tool call schema
     tool_schema = {
@@ -91,6 +93,7 @@ def generate_tool_call(
 
     generated_tokens = []
     max_new_tokens = 512
+    halt_logits = None  # Track halt logits throughout generation
 
     # Determine if this is CoreML or PyTorch model
     is_coreml = hasattr(model, "prediction") or (
@@ -135,7 +138,7 @@ def generate_tool_call(
                 # Try to find logits key (case-insensitive)
                 logits_key = None
                 for key in outputs.keys():
-                    if "logit" in key.lower():
+                    if "logit" in key.lower() and "halt" not in key.lower():
                         logits_key = key
                         break
                 if logits_key:
@@ -144,6 +147,19 @@ def generate_tool_call(
                     raise ValueError(
                         f"Could not find logits in CoreML model output. Available keys: {list(outputs.keys())}"
                     )
+
+            # Extract halt logits if available (update on each iteration)
+            if "halt_logits" in outputs:
+                halt_logits = outputs["halt_logits"]
+            else:
+                # Try to find halt logits key (case-insensitive)
+                halt_key = None
+                for key in outputs.keys():
+                    if "halt" in key.lower() and "logit" in key.lower():
+                        halt_key = key
+                        break
+                if halt_key:
+                    halt_logits = outputs[halt_key]
 
             # Convert to numpy if needed and extract last token logits
             if isinstance(logits, np.ndarray):
@@ -175,8 +191,23 @@ def generate_tool_call(
                     "PyTorch required for PyTorch model inference")
             model.eval()
             with torch.no_grad():
-                outputs = model(input_ids)
-                logits = outputs[0] if isinstance(outputs, tuple) else outputs
+                # Check if model supports halt head
+                if hasattr(model, 'use_halt_head') and model.use_halt_head and return_halt_logits:
+                    outputs = model(input_ids, return_halt_logits=True)
+                    if isinstance(outputs, tuple) and len(outputs) == 2:
+                        logits, halt_logits_tensor = outputs
+                        # Extract halt logits from tensor
+                        if isinstance(halt_logits_tensor, torch.Tensor):
+                            halt_logits = halt_logits_tensor.cpu().numpy()
+                        else:
+                            halt_logits = halt_logits_tensor
+                    else:
+                        logits = outputs[0] if isinstance(
+                            outputs, tuple) else outputs
+                else:
+                    outputs = model(input_ids)
+                    logits = outputs[0] if isinstance(
+                        outputs, tuple) else outputs
                 next_token_logits = logits[0, -1, :].cpu().numpy()  # [V]
 
         # Apply constrained decoding mask
@@ -214,6 +245,24 @@ def generate_tool_call(
     # Finalize and validate
     try:
         tool_call = decoder.finalize(state)
+
+        # Add halt logits to return value if requested and available
+        if return_halt_logits and halt_logits is not None:
+            # Convert halt logits to appropriate format
+            if isinstance(halt_logits, np.ndarray):
+                # Take the last halt logits if shape is [B, 2] or [T, 2]
+                if len(halt_logits.shape) == 2:
+                    if halt_logits.shape[0] > 1:
+                        # [B, 2] or [T, 2] -> take last
+                        halt_logits_final = halt_logits[-1]
+                    else:
+                        halt_logits_final = halt_logits[0]
+                else:
+                    halt_logits_final = halt_logits
+                tool_call["halt_logits"] = halt_logits_final.tolist()
+            else:
+                tool_call["halt_logits"] = halt_logits
+
         return tool_call
     except ValueError as e:
         # Invalid JSON - try to extract anyway
@@ -221,6 +270,16 @@ def generate_tool_call(
             generated_tokens, skip_special_tokens=True)
         tool_call = extract_tool_call_fallback(generated_text)
         if tool_call:
+            # Add halt logits if available
+            if return_halt_logits and halt_logits is not None:
+                if isinstance(halt_logits, np.ndarray):
+                    if len(halt_logits.shape) == 2:
+                        halt_logits_final = halt_logits[-1] if halt_logits.shape[0] > 1 else halt_logits[0]
+                    else:
+                        halt_logits_final = halt_logits
+                    tool_call["halt_logits"] = halt_logits_final.tolist()
+                else:
+                    tool_call["halt_logits"] = halt_logits
             return tool_call
         raise ValueError(f"Failed to generate valid tool call: {e}")
 
@@ -236,14 +295,14 @@ def extract_tool_call_fallback(text: str) -> Optional[Dict[str, Any]]:
             obj = json.loads(match)
             if isinstance(obj, dict) and 'name' in obj:
                 return obj
-        except:
+        except json.JSONDecodeError:
             continue
 
     try:
         obj = json.loads(text.strip())
         if isinstance(obj, dict) and 'name' in obj:
             return obj
-    except:
+    except json.JSONDecodeError:
         pass
 
     return None
@@ -466,13 +525,15 @@ def main():
 
         model.eval()
 
-        # Set device for PyTorch model
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = model.to(device)
-        device_str = str(device)  # For passing to generate functions
-    else:
-        # CoreML model - no device needed
-        device_str = None
+        # Set device for PyTorch model (not CoreML)
+        if not isinstance(model, str):  # CoreML models are loaded as file paths
+            device = torch.device(
+                "cuda" if torch.cuda.is_available() else "cpu")
+            model = model.to(device)
+            device_str = str(device)  # For passing to generate functions
+        else:
+            # CoreML model - no device needed
+            device_str = None
 
     # Load tools if provided
     tools = []

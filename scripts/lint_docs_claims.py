@@ -5,7 +5,6 @@
 
 import sys
 import re
-import json
 import pathlib
 import argparse
 
@@ -89,7 +88,7 @@ def main():
                 break  # Only report once per line
 
         # Check if document has any evidence anchors (to skip overly strict checking)
-        has_any_anchor = ANCHOR.search(text) is not None
+        ANCHOR.search(text) is not None
 
         # Status/bench/quant must carry an evidence anchor on the same line
         # Skip code blocks and example/documentation lines

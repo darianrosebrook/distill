@@ -10,10 +10,9 @@ Usage:
     python -m training.distill_kd --config configs/worker_9b.yaml configs/kd_recipe.yaml
 """
 import argparse
-import json
-import math
 import os
 import random
+import sys
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
@@ -36,7 +35,7 @@ from training.losses import (
     CodeModePreferenceLoss,
 )
 from training.dataset import KDDataset, collate_kd_batch, load_tokenizer
-from training.tracing import TrainingTracer, create_tracer_from_config
+from training.tracing import create_tracer_from_config
 
 # Latent curriculum import (optional)
 try:
@@ -354,13 +353,24 @@ def create_model(cfg: Dict[str, Any], device: torch.device) -> nn.Module:
     init_cfg = cfg.get("init", {})
     base_checkpoint = init_cfg.get("base_checkpoint")
     if base_checkpoint and Path(base_checkpoint).exists():
-        print(f"[distill_kd] Loading checkpoint: {base_checkpoint}")
-        checkpoint = torch.load(base_checkpoint, map_location='cpu')
-        if 'model_state_dict' in checkpoint:
-            model.load_state_dict(checkpoint['model_state_dict'], strict=False)
-        else:
-            model.load_state_dict(checkpoint, strict=False)
-        print(f"[distill_kd] Checkpoint loaded")
+        try:
+            print(f"[distill_kd] Loading checkpoint: {base_checkpoint}")
+            checkpoint = torch.load(base_checkpoint, map_location='cpu')
+            if 'model_state_dict' in checkpoint:
+                model.load_state_dict(
+                    checkpoint['model_state_dict'], strict=False)
+            else:
+                model.load_state_dict(checkpoint, strict=False)
+            print("[distill_kd] Checkpoint loaded")
+        except Exception as e:
+            print(
+                f"[distill_kd] ERROR: Failed to load checkpoint {base_checkpoint}: {e}")
+            import traceback
+            traceback.print_exc()
+            print("[distill_kd] Continuing with randomly initialized model")
+    elif base_checkpoint:
+        print(
+            f"[distill_kd] WARN: Base checkpoint not found: {base_checkpoint}")
 
     model = model.to(device)
 
@@ -630,7 +640,7 @@ def check_qat_stability(
                                 return_hidden_states=True
                             )
                             if isinstance(current_outputs, tuple) and len(current_outputs) >= 2:
-                                current_logits, current_hidden_states = current_outputs[
+                                _current_logits, current_hidden_states = current_outputs[
                                     0], current_outputs[1]
                             else:
                                 current_hidden_states = None
@@ -719,7 +729,7 @@ def check_qat_stability(
                     elif current_hidden_states is not None:
                         # No baseline available - can't compute similarity
                         cosine_sim = 1.0  # Default: assume stable
-                except Exception as e:
+                except Exception:
                     # If hidden state extraction fails, fall back to default
                     cosine_sim = 1.0
 
@@ -822,21 +832,32 @@ def save_checkpoint(
         "optimizer_state_dict": optimizer.state_dict(),
         "loss": loss,
         "config": config,
+        "model_arch": {
+            "use_halt_head": getattr(model, 'use_halt_head', False),
+            "use_self_evaluation": getattr(model, 'use_self_evaluation', False),
+        },
         "meta": {
             "sha256_state": state_sha256,
             "code_mode": code_mode_meta,
         },
     }
 
-    # Save latest
-    latest_path = output_dir / "latest.pt"
-    torch.save(checkpoint, latest_path)
+    try:
+        # Save latest
+        latest_path = output_dir / "latest.pt"
+        torch.save(checkpoint, latest_path)
 
-    # Save numbered checkpoint
-    checkpoint_path = output_dir / f"checkpoint_step_{step}.pt"
-    torch.save(checkpoint, checkpoint_path)
+        # Save numbered checkpoint
+        checkpoint_path = output_dir / f"checkpoint_step_{step}.pt"
+        torch.save(checkpoint, checkpoint_path)
 
-    print(f"[distill_kd] Saved checkpoint: {checkpoint_path}")
+        print(f"[distill_kd] Saved checkpoint: {checkpoint_path}")
+    except Exception as e:
+        print(
+            f"[distill_kd] ERROR: Failed to save checkpoint at step {step}: {e}")
+        import traceback
+        traceback.print_exc()
+        print("[distill_kd] Continuing training without saving checkpoint")
 
 
 def train_step(
@@ -1113,6 +1134,10 @@ def train_step(
             else:
                 code_mode_weight = code_mode_weight_base
 
+            # Initialize loss_dict if not yet defined
+            if 'loss_dict' not in locals():
+                loss_dict = {}
+
             # Add weight to loss_dict for logging
             loss_dict["code_mode_weight"] = code_mode_weight
 
@@ -1234,7 +1259,7 @@ def train_step(
             except ImportError:
                 if current_step % 100 == 0:
                     print(
-                        f"[distill_kd] WARN: Halt targets not available, skipping halt loss")
+                        "[distill_kd] WARN: Halt targets not available, skipping halt loss")
 
         loss_dict = combined_kd_loss(
             student_logits=student_logits,
@@ -1469,7 +1494,7 @@ def train_step(
                                 text = tokenizer.decode(
                                     tokens, skip_special_tokens=True)
                                 generated_texts.append(text)
-                            except:
+                            except Exception:
                                 generated_texts.append("")
 
                         # Check repair needs for batch
@@ -1572,7 +1597,7 @@ def train_step(
                                 text = tokenizer.decode(
                                     tokens, skip_special_tokens=True)
                                 student_texts.append(text)
-                            except:
+                            except Exception:
                                 student_texts.append("")
 
                         # Compute structure scores
@@ -1819,6 +1844,64 @@ def train_step(
     return loss_dict_float
 
 
+def validate_config(cfg: Dict[str, Any]) -> None:
+    """Validate critical configuration parameters to prevent runtime errors."""
+    errors = []
+
+    # Check required sections
+    if "model" not in cfg:
+        errors.append("Missing required 'model' configuration section")
+
+    if "training" not in cfg:
+        errors.append("Missing required 'training' configuration section")
+
+    # Validate model config
+    model_cfg = cfg.get("model", {})
+    if "d_model" in model_cfg and model_cfg["d_model"] <= 0:
+        errors.append("model.d_model must be positive")
+
+    if "n_layers" in model_cfg and model_cfg["n_layers"] <= 0:
+        errors.append("model.n_layers must be positive")
+
+    if "n_heads" in model_cfg and model_cfg["n_heads"] <= 0:
+        errors.append("model.n_heads must be positive")
+
+    if "vocab_size" in model_cfg and model_cfg["vocab_size"] <= 0:
+        errors.append("model.vocab_size must be positive")
+
+    # Validate training config
+    train_cfg = cfg.get("training", {})
+    if "steps" in train_cfg and train_cfg["steps"] <= 0:
+        errors.append("training.steps must be positive")
+
+    if "batch_size" in train_cfg and train_cfg["batch_size"] <= 0:
+        errors.append("training.batch_size must be positive")
+
+    # Validate optimizer config
+    opt_cfg = cfg.get("optimizer", {})
+    if "lr" in opt_cfg and opt_cfg["lr"] <= 0:
+        errors.append("optimizer.lr must be positive")
+
+    # Check for incompatible settings
+    distillation_cfg = cfg.get("distillation", {})
+    code_mode_cfg = cfg.get("distill", {}).get("code_mode", {})
+    latent_cfg = cfg.get("latent", {})
+
+    if distillation_cfg.get("enabled", False) and code_mode_cfg.get("enabled", False):
+        print(
+            "[distill_kd] WARN: Both distillation and code_mode enabled - this may cause conflicts")
+
+    if latent_cfg.get("enabled", False) and code_mode_cfg.get("enabled", False):
+        print(
+            "[distill_kd] WARN: Both latent reasoning and code_mode enabled - ensure compatibility")
+
+    # Raise errors if any found
+    if errors:
+        error_msg = "Configuration validation failed:\n" + \
+            "\n".join(f"  - {e}" for e in errors)
+        raise ValueError(error_msg)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Knowledge distillation training")
     ap.add_argument('--config', nargs='+', required=True,
@@ -1843,10 +1926,17 @@ def main():
     # Load configs (with env var overrides)
     cfg = merge_configs(args.config)
 
+    # Validate configuration
+    try:
+        validate_config(cfg)
+    except ValueError as e:
+        print(f"[distill_kd] ERROR: {e}")
+        sys.exit(1)
+
     # Log provenance for reproducibility
     if is_main_process and "_provenance" in cfg:
         provenance = cfg["_provenance"]
-        print(f"[distill_kd] Config provenance:")
+        print("[distill_kd] Config provenance:")
         print(f"  Config files: {provenance['config_files']}")
         if provenance.get("env_overrides"):
             print(f"  Env overrides: {provenance['env_overrides']}")
@@ -1874,7 +1964,7 @@ def main():
                 init_special_tokens=True,
             )
             if is_main_process:
-                print(f"[distill_kd] Tokenizer migration completed:")
+                print("[distill_kd] Tokenizer migration completed:")
                 print(
                     f"  - Embedding resized: {migration_metadata['resize'].get('embedding_resized', False)}")
                 print(
@@ -1988,7 +2078,8 @@ def main():
     # Initialize code-mode loss module if enabled (once, before training loop)
     code_mode_loss_module = None
     code_mode_cfg = cfg.get("distill", {}).get("code_mode", {})
-    train_code_mode = code_mode_cfg.get("enabled", False)
+    train_code_mode = code_mode_cfg.get("enabled", False) or (
+        os.getenv("TRAIN_CODE_MODE", "0") == "1")
 
     if train_code_mode:
         from training.dataset import load_tokenizer
@@ -2070,7 +2161,7 @@ def main():
             "ce_ground_truth_weight": dist_cfg.get("ce_ground_truth_weight", 0.2),
         })
 
-    print(f"[distill_kd] Starting training:")
+    print("[distill_kd] Starting training:")
     print(f"  Device: {device}")
     print(f"  Total steps: {total_steps}")
     print(f"  Effective batch size: {effective_batch_size}")
@@ -2099,17 +2190,19 @@ def main():
             if step >= total_steps:
                 break
 
-            # Check if QAT should be enabled
-            qat_should_enable = should_enable_qat(step, total_steps, qat_cfg)
-            if qat_should_enable and not qat_applied:
-                # Apply QAT to model
-                print(
-                    f"[distill_kd] Step {step}: Enabling QAT (last {int((1 - qat_cfg.get('start_fraction', 0.8)) * 100)}% of training)")
-                if isinstance(model, DDP):
-                    model.module = apply_qat_to_model(
-                        model.module, qat_cfg, device)
-                else:
-                    model = apply_qat_to_model(model, qat_cfg, device)
+            try:
+                # Check if QAT should be enabled
+                qat_should_enable = should_enable_qat(
+                    step, total_steps, qat_cfg)
+                if qat_should_enable and not qat_applied:
+                    # Apply QAT to model
+                    print(
+                        f"[distill_kd] Step {step}: Enabling QAT (last {int((1 - qat_cfg.get('start_fraction', 0.8)) * 100)}% of training)")
+                    if isinstance(model, DDP):
+                        model.module = apply_qat_to_model(
+                            model.module, qat_cfg, device)
+                    else:
+                        model = apply_qat_to_model(model, qat_cfg, device)
 
                 # Recreate optimizer with lower LR for QAT
                 qat_lr = base_lr * qat_lr_multiplier
@@ -2123,51 +2216,68 @@ def main():
                 qat_applied = True
                 qat_enabled = True
 
-            # Check QAT stability periodically (every 100 steps)
-            if qat_enabled and step % 100 == 0:
-                stability_metrics = check_qat_stability(
-                    model.module if isinstance(model, DDP) else model,
-                    batch,
-                    device,
+                # Check QAT stability periodically (every 100 steps)
+                if qat_enabled and step % 100 == 0:
+                    stability_metrics = check_qat_stability(
+                        model.module if isinstance(model, DDP) else model,
+                        batch,
+                        device,
+                    )
+                    if stability_metrics.get("qat_stability.has_nan", 0.0) > 0:
+                        print(
+                            f"[distill_kd] WARN: NaN detected in QAT model at step {step}")
+                    if stability_metrics.get("qat_stability.cosine_sim", 1.0) < 0.999:
+                        print(
+                            f"[distill_kd] WARN: Low cosine similarity in QAT model at step {step}")
+
+                # Sample sequence length (enumerated shapes or curriculum)
+                if use_enumerated_shapes:
+                    current_seq_len = sample_enumerated_shape(
+                        seq_lengths=seq_lengths,
+                        shape_probs=shape_probs,
+                        step=step,
+                        periodic_upweight_rare=train_cfg.get(
+                            "periodic_upweight_rare", True),
+                    )
+                    # Truncate batch to sampled shape
+                    batch = truncate_batch_to_shape(batch, current_seq_len)
+                else:
+                    # Fallback to curriculum learning
+                    current_seq_len = get_sequence_length(
+                        step, seq_lengths, cfg.get("curriculum", {}).get("schedule"))
+
+                # Training step
+                loss_dict = train_step(
+                    model=model,
+                    batch=batch,
+                    optimizer=optimizer,
+                    scaler=scaler,
+                    cfg=cfg,
+                    device=device,
+                    grad_accum_steps=grad_accum,
+                    grad_accum_counter=grad_accum_counter,
+                    current_step=step,
                 )
-                if stability_metrics.get("qat_stability.has_nan", 0.0) > 0:
-                    print(
-                        f"[distill_kd] WARN: NaN detected in QAT model at step {step}")
-                if stability_metrics.get("qat_stability.cosine_sim", 1.0) < 0.999:
-                    print(
-                        f"[distill_kd] WARN: Low cosine similarity in QAT model at step {step}")
 
-            # Sample sequence length (enumerated shapes or curriculum)
-            if use_enumerated_shapes:
-                current_seq_len = sample_enumerated_shape(
-                    seq_lengths=seq_lengths,
-                    shape_probs=shape_probs,
-                    step=step,
-                    periodic_upweight_rare=train_cfg.get(
-                        "periodic_upweight_rare", True),
-                )
-                # Truncate batch to sampled shape
-                batch = truncate_batch_to_shape(batch, current_seq_len)
-            else:
-                # Fallback to curriculum learning
-                current_seq_len = get_sequence_length(
-                    step, seq_lengths, cfg.get("curriculum", {}).get("schedule"))
+                grad_accum_counter = (grad_accum_counter + 1) % grad_accum
+                step += 1
+            except Exception as e:
+                print(f"[distill_kd] ERROR: Training step {step} failed: {e}")
+                import traceback
+                traceback.print_exc()
 
-            # Training step
-            loss_dict = train_step(
-                model=model,
-                batch=batch,
-                optimizer=optimizer,
-                scaler=scaler,
-                cfg=cfg,
-                device=device,
-                grad_accum_steps=grad_accum,
-                grad_accum_counter=grad_accum_counter,
-                current_step=step,
-            )
+                # Clear GPU cache on failure to prevent memory leaks
+                if device.type == 'cuda':
+                    try:
+                        torch.cuda.empty_cache()
+                        print("[distill_kd] Cleared GPU cache after error")
+                    except Exception as cache_e:
+                        print(
+                            f"[distill_kd] WARN: Failed to clear GPU cache: {cache_e}")
 
-            grad_accum_counter = (grad_accum_counter + 1) % grad_accum
-            step += 1
+                # Continue to next step instead of crashing
+                step += 1
+                continue
 
             # Speed metrics during validation (every N steps)
             # Default: every 1000 steps
@@ -2277,6 +2387,14 @@ def main():
             print(f"[distill_kd] Training logs: {tracer.log_dir}")
 
         print(f"[distill_kd] ✅ Training complete: {output_dir}")
+
+        # Clean up GPU memory
+        if device.type == 'cuda':
+            try:
+                torch.cuda.empty_cache()
+                print("[distill_kd] Cleared GPU cache after training completion")
+            except Exception as e:
+                print(f"[distill_kd] WARN: Failed to clear GPU cache: {e}")
 
 
 if __name__ == '__main__':

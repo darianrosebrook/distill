@@ -20,7 +20,7 @@ from scripts.util_token_spans import (
     bytes_to_token_span,
     normalize_text_for_alignment,
 )
-from scripts.util_sanitize import redact_pii, allowlist_urls
+from scripts.util_sanitize import allowlist_urls
 
 # ---- Small helpers for macro/micro over verify_item results ----
 
@@ -245,11 +245,11 @@ def parse_tool_json_slice(text: str, start: int, end: int):
     """Parse JSON slice from text."""
     try:
         s = text[start:end]
-        l = s.find("{")
+        left_brace = s.find("{")
         r = s.rfind("}")
-        if l == -1 or r == -1:
+        if left_brace == -1 or r == -1:
             return None
-        return json.loads(s[l: r + 1])
+        return json.loads(s[left_brace: r + 1])
     except Exception:
         return None
 
@@ -445,7 +445,6 @@ def grounded_values_in_span_strict(seg: str, fields: Dict[str, str]) -> bool:
                 # Try with tolerance: strip commas, handle percentages, allow 2 ULP difference
                 # Normalize: remove commas, handle % -> divide by 100, handle locale formatting
                 # Locale-aware: handle different decimal separators (1.234,56 vs 1,234.56)
-                seg_normalized = seg_norm
                 # Try to detect locale format: if comma appears after period (or vice versa), it's likely locale-formatted
                 # For now, normalize by removing all non-digit characters except one decimal point
                 seg_digits = re.sub(r'[^\d.]', '', seg_norm)
@@ -943,7 +942,6 @@ def verify_item(
 def check_stratification_backbone(items: List[Dict[str, Any]], total: int) -> Tuple[bool, List[Dict[str, Any]]]:
     """Check minimal backbone for N<36, scaled targets for larger N."""
     SCENARIOS = ["file_ops", "web_search", "code_exec", "multi_step"]
-    COMPLEXITY = ["single_call", "multi_call", "branching_error_recovery"]
 
     # Build coverage map
     coverage = defaultdict(int)
@@ -1223,7 +1221,7 @@ def main():
 
     # Fail fast on schema validation errors
     if schema_validation_errors:
-        print(f"[VERIFY] FAIL: Schema validation errors found:")
+        print("[VERIFY] FAIL: Schema validation errors found:")
         for err in schema_validation_errors[:5]:
             print(f"  Line {err['line']}: {err['path']} - {err['error']}")
         if len(schema_validation_errors) > 5:
@@ -1292,7 +1290,7 @@ def main():
             print(f"[VERIFY] WARN: {warn}")
 
     if fingerprint_errors:
-        print(f"[VERIFY] FAIL: Fingerprint verification errors:")
+        print("[VERIFY] FAIL: Fingerprint verification errors:")
         for err in fingerprint_errors:
             print(f"  {err}")
         if args.fail_on_fingerprint_mismatch:
@@ -1582,16 +1580,24 @@ def main():
 
     multi_call_parity_rate = round(
         multi_call_parity_ok / multi_call_parity_total, 3) if multi_call_parity_total > 0 else None
+    # Initialize variables that may be referenced in summary
+    num_eligible = len(eligible_items)
+    num_controls = sum(1 for item in items if item.get("metadata", {}).get(
+        "expected_behaviour") in {"no_tool", "decline"})
+    num_negative_controls = sum(1 for item in items if item.get(
+        "metadata", {}).get("negative_control", False))
+    controls_with_integration = 0
+
     allowed_multi_call_misses = max(1, math.ceil(
         0.05 * multi_call_parity_total)) if multi_call_parity_total > 0 else 1
     multi_call_misses_count = len(multi_call_parity_misses)
 
     summary = {
         "total": total,
-        "num_eligible": num_eligible if 'num_eligible' in locals() else len(eligible_items),
-        "num_controls": num_controls if 'num_controls' in locals() else sum(1 for item in items if item.get("metadata", {}).get("expected_behaviour") in {"no_tool", "decline"}),
-        "num_negative_controls": num_negative_controls if 'num_negative_controls' in locals() else sum(1 for item in items if item.get("metadata", {}).get("negative_control", False)),
-        "controls_with_integration": controls_with_integration if 'controls_with_integration' in locals() else 0,
+        "num_eligible": num_eligible,
+        "num_controls": num_controls,
+        "num_negative_controls": num_negative_controls,
+        "controls_with_integration": controls_with_integration,
         "ok_rate": round(ok / total, 3) if total else 0,
         "semantic_ok_rate": round(sem_ok / total, 3) if total else 0,
         "token_align_ok_rate": round(token_ok / total, 3) if total else None,
@@ -1757,15 +1763,8 @@ def main():
     except Exception as e:
         print(f"[VERIFY] WARN: Could not compute dataset SHA256: {e}")
 
-    # Count controls and negative controls
-    num_controls = sum(1 for item in items if item.get("metadata", {}).get(
-        "expected_behaviour") in {"no_tool", "decline"})
-    num_negative_controls = sum(1 for item in items if item.get(
-        "metadata", {}).get("negative_control", False))
-    num_eligible = len(eligible_items)
-
     # Control contamination check: hard fail if controls have integration spans
-    controls_with_integration = 0
+    # (controls_with_integration already initialized above)
     control_contamination_items = []
     for item_idx, item in enumerate(items):
         meta = item.get("metadata", {})
@@ -1992,7 +1991,7 @@ def main():
         if num_eligible < args.min_eligible_for_gates:
             print(
                 f"[VERIFY] INCONCLUSIVE: Eligible items ({num_eligible}) < min_eligible_for_gates ({args.min_eligible_for_gates})")
-            print(f"[VERIFY] Skipping F1 gates due to insufficient eligible items")
+            print("[VERIFY] Skipping F1 gates due to insufficient eligible items")
             # Mark as inconclusive but don't fail
             summary["inconclusive"] = True
             summary["inconclusive_reason"] = f"eligible_items ({num_eligible}) < min_eligible_for_gates ({args.min_eligible_for_gates})"
@@ -2154,7 +2153,7 @@ def main():
 
     # CI-friendly failure surfacing: print first 5 failures with diffs
     if failing_items:
-        print(f"\n[VERIFY] First 5 failing items:")
+        print("\n[VERIFY] First 5 failing items:")
         for fail_item in failing_items[:5]:
             line_num = fail_item.get("line", "?")
             problems = fail_item.get(
@@ -2192,7 +2191,7 @@ def main():
                         "span_count": len(integration_spans),
                     })
         top_offenders.sort(key=lambda x: x["max_span_length"], reverse=True)
-        print(f"[VERIFY] Top 5 regex offenders (longest Integration spans):")
+        print("[VERIFY] Top 5 regex offenders (longest Integration spans):")
         for offender in top_offenders[:5]:
             print(
                 f"  - {offender['sample_id']}: {offender['max_span_length']} bytes, {offender['span_count']} spans")

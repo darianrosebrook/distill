@@ -8,7 +8,6 @@ from typing import Generator
 
 import pytest
 import torch
-import torch.nn as nn
 
 from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
 

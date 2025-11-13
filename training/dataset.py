@@ -4,12 +4,11 @@ Dataset loader for knowledge distillation training.
 Loads JSONL format from make_kd_mix.py and prepares batches for training.
 """
 import json
-import random
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 
 try:
     from transformers import AutoTokenizer
@@ -153,7 +152,7 @@ class KDDataset(Dataset):
             full_text = prompt + teacher_text
 
         # Tokenize prompt
-        prompt_tokens = self.tokenizer.encode(prompt, add_special_tokens=False)
+        self.tokenizer.encode(prompt, add_special_tokens=False)
 
         # Tokenize teacher response
         teacher_tokens = self.tokenizer.encode(

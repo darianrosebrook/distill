@@ -6,7 +6,7 @@ Tests the JSONConstrainedDecoder, JSONFSM, SchemaValidator, and TokenLexicon.
 import pytest
 import json
 import numpy as np
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 from coreml.runtime.constrained_decode import (
     JSONConstrainedDecoder,
@@ -558,7 +558,7 @@ class TestJSONConstrainedDecoder:
         if hasattr(tokenizer, "eos_token_id") and tokenizer.eos_token_id is not None:
             eos_id = tokenizer.eos_token_id
             # Check that EOS token is in the mask (should be True)
-            assert mask[eos_id] == True, f"EOS token {eos_id} should be allowed in mask"
+            assert mask[eos_id], f"EOS token {eos_id} should be allowed in mask"
 
     def test_push_token(self):
         """Test pushing a token."""
@@ -812,7 +812,7 @@ class TestDecoderIntegration:
         decoder._last_applied_tool = "test.tool"
 
         # Start should reset
-        state = decoder.start()
+        decoder.start()
 
         assert decoder.schema == base_schema
         assert decoder._last_applied_tool is None

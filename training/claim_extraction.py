@@ -11,8 +11,7 @@ Reference: CLAIM_EXTRACTION_SKEPTICISM_GUARD_RAILS.md
 """
 
 import re
-import json
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
 

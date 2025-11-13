@@ -55,14 +55,14 @@ class TestLossMaskCorrectness:
             # Tokenize to find positions
             tokens = mock_tokenizer.encode(result["training_text"], add_special_tokens=True)
             bot_positions = [i for i, t in enumerate(tokens) if t == BOT_TOKEN_ID]
-            eot_positions = [i for i, t in enumerate(tokens) if t == EOT_TOKEN_ID]
+            [i for i, t in enumerate(tokens) if t == EOT_TOKEN_ID]
             
             # Check that masked positions align with sentinel tokens
             if bot_positions and len(loss_mask) > max(bot_positions):
                 for pos in bot_positions:
                     if pos < len(loss_mask):
                         # Sentinel tokens should be masked (False)
-                        assert loss_mask[pos] == False
+                        assert not loss_mask[pos]
     
     def test_loss_mask_alignment_after_padding(self, curriculum, mock_tokenizer):
         """Test that loss mask aligns correctly after padding."""
@@ -84,7 +84,7 @@ class TestLossMaskCorrectness:
             padded_mask = torch.cat([loss_mask, torch.ones(pad_len, dtype=torch.bool)])
             
             # Padded positions should be supervised (True)
-            assert torch.all(padded_mask[original_len:] == True)
+            assert torch.all(padded_mask[original_len:])
     
     def test_loss_mask_excludes_latent_spans_from_supervision(self, curriculum, mock_tokenizer):
         """Test that latent spans are excluded from supervised token counts."""

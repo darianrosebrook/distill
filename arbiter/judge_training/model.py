@@ -2,8 +2,6 @@
 # Multi-task judge model: ranking score + clause labeling
 # @author: @darianrosebrook
 
-from typing import Tuple
-import torch
 import torch.nn as nn
 from transformers import AutoModel
 

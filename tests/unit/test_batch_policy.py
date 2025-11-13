@@ -4,7 +4,6 @@ Unit tests for batch policy enforcement.
 Tests automatic workload-aware batch size selection for M-series Apple Silicon optimization.
 """
 import pytest
-from unittest.mock import Mock
 
 try:
     from coreml.runtime.batch_policy import (

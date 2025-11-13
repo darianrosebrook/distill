@@ -11,7 +11,7 @@ supervising the decision-making process.
 """
 import json
 import re
-from typing import Optional, List, Dict, Tuple, Any
+from typing import Optional, List, Dict, Tuple
 
 
 def extract_tool_call(text: str, tool_names: Optional[List[str]] = None) -> Optional[Dict]:
@@ -34,7 +34,7 @@ def extract_tool_call(text: str, tool_names: Optional[List[str]] = None) -> Opti
             obj = json.loads(match)
             if isinstance(obj, dict) and 'name' in obj:
                 return obj
-        except:
+        except json.JSONDecodeError:
             continue
 
     # Try parsing entire text
@@ -42,7 +42,7 @@ def extract_tool_call(text: str, tool_names: Optional[List[str]] = None) -> Opti
         obj = json.loads(text.strip())
         if isinstance(obj, dict) and 'name' in obj:
             return obj
-    except:
+    except json.JSONDecodeError:
         pass
 
     return None
@@ -99,7 +99,7 @@ def extract_json_argument_spans(teacher_text: str) -> List[Tuple[int, int]]:
             # Validate it's valid JSON
             json.loads(match.group())
             spans.append((match.start(), match.end()))
-        except:
+        except json.JSONDecodeError:
             continue
 
     return spans

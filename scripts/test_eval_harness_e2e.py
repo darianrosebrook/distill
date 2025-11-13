@@ -9,10 +9,8 @@ Tests the complete pipeline:
 from __future__ import annotations
 
 import argparse
-import json
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 
@@ -123,7 +121,7 @@ def test_prompt_wrapper_loading():
         
         # Try to create runner with wrapper (won't actually run without model)
         try:
-            runner = OpenAIHTTPRunner(
+            OpenAIHTTPRunner(
                 model="test-model",
                 prompt_wrapper=str(wrapper_path),
             )

@@ -21,7 +21,6 @@ Usage:
 """
 import argparse
 import json
-import os
 import time
 import hashlib
 from pathlib import Path
@@ -29,7 +28,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 import sys
 
-from models.teacher.teacher_client import TeacherClient, APITier
+from models.teacher.teacher_client import TeacherClient
 from scripts.prompt_sources import get_prompt_mix, load_prompts_from_file
 from training.quality_scoring import compute_composite_quality_score
 from training.caws_context import extract_caws_context, format_caws_context_for_prompt, extract_caws_context_dict
@@ -37,7 +36,6 @@ from training.extractors import (
     extract_tool_name_span,
     extract_json_argument_spans,
     identify_integration_spans,
-    extract_tool_call,
 )
 from tools.schema_registry import get_registry
 
@@ -395,6 +393,9 @@ def main():
             print("[make_kd_mix_hardened] Cleared existing checkpoint")
 
 
+    # Initialize prompts variable (will be set below)
+    prompts = []
+
     # Resume from checkpoint if requested
     completed_indices = set()
     results = []
@@ -460,7 +461,7 @@ def main():
                 f"[make_kd_mix_hardened] WARN: Delay ({args.delay}s) doesn't match tier recommendation ({tier_limits.delay}s)")
             if not args.tier:
                 print(
-                    f"[make_kd_mix_hardened] WARN: If you're on a higher tier, specify with --tier tier1 (or tier2/tier3/etc)")
+                    "[make_kd_mix_hardened] WARN: If you're on a higher tier, specify with --tier tier1 (or tier2/tier3/etc)")
             print(
                 f"[make_kd_mix_hardened] WARN: Consider using --delay {tier_limits.delay} for optimal rate limit compliance")
 
@@ -484,11 +485,11 @@ def main():
                     f"[make_kd_mix_hardened] CAWS context loaded: {caws_context.spec_id} (Risk Tier {caws_context.risk_tier})")
             else:
                 print(
-                    f"[make_kd_mix_hardened] No CAWS context found (continuing without CAWS augmentation)")
+                    "[make_kd_mix_hardened] No CAWS context found (continuing without CAWS augmentation)")
         except Exception as e:
             print(
                 f"[make_kd_mix_hardened] WARN: Failed to extract CAWS context: {e}")
-            print(f"[make_kd_mix_hardened] Continuing without CAWS augmentation")
+            print("[make_kd_mix_hardened] Continuing without CAWS augmentation")
 
     # Load tokenizer for process-step supervision extraction
     tokenizer = None
@@ -705,13 +706,13 @@ def main():
                     # Check for specific error types
                     if "rate limit" in error_msg.lower() or "429" in error_msg:
                         print(
-                            f"[make_kd_mix_hardened] Rate limit hit, consider increasing --delay or upgrading tier")
+                            "[make_kd_mix_hardened] Rate limit hit, consider increasing --delay or upgrading tier")
                     elif "token" in error_msg.lower() and "limit" in error_msg.lower():
                         print(
-                            f"[make_kd_mix_hardened] Token limit exceeded, consider reducing --max-tokens")
+                            "[make_kd_mix_hardened] Token limit exceeded, consider reducing --max-tokens")
                     elif "connection" in error_msg.lower() or "network" in error_msg.lower():
                         print(
-                            f"[make_kd_mix_hardened] Network error, will retry on next attempt")
+                            "[make_kd_mix_hardened] Network error, will retry on next attempt")
 
                     # Stop if too many consecutive errors
                     if consecutive_errors >= max_consecutive_errors:
@@ -774,7 +775,7 @@ def main():
         # Final summary
         elapsed = time.time() - start_time
         budget_status = budget_tracker.get_status()
-        print(f"[make_kd_mix_hardened] ✅ Complete:")
+        print("[make_kd_mix_hardened] ✅ Complete:")
         print(f"  Samples: {len(results)}/{len(prompts)}")
         print(f"  Cached: {cached}")
         print(f"  Errors: {errors}")
@@ -788,7 +789,7 @@ def main():
         print(f"[make_kd_mix_hardened] Output: {output_path}")
 
     except KeyboardInterrupt:
-        print(f"\n[make_kd_mix_hardened] Interrupted by user")
+        print("\n[make_kd_mix_hardened] Interrupted by user")
         if checkpoint_manager:
             checkpoint_manager.save_checkpoint(
                 sorted(completed_indices),
@@ -797,7 +798,7 @@ def main():
                 start_time
             )
             print(
-                f"[make_kd_mix_hardened] Checkpoint saved. Resume with --resume flag")
+                "[make_kd_mix_hardened] Checkpoint saved. Resume with --resume flag")
         sys.exit(1)
 
 

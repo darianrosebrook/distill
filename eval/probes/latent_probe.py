@@ -8,9 +8,8 @@ Provides tools to:
 """
 # @author: @darianrosebrook
 
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 import torch
-import numpy as np
 from pathlib import Path
 import json
 

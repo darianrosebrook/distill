@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import sys
-import tempfile
 from pathlib import Path
 
 # Test the complete evaluation pipeline components
@@ -36,7 +35,7 @@ def test_dataset_loading():
             if missing:
                 print(f"❌ Missing required fields: {missing}")
                 return False
-            print(f"✅ All required fields present")
+            print("✅ All required fields present")
         
         return True
     except Exception as e:
@@ -88,7 +87,7 @@ def test_fixture_matching():
         print(f"✅ Fixture matching: {matches} hits, {misses} misses (hit rate: {hit_rate:.1%})")
         
         if hit_rate < 0.5:
-            print(f"⚠️  Low hit rate - may need more fixtures")
+            print("⚠️  Low hit rate - may need more fixtures")
         
         return True
     except Exception as e:
@@ -135,7 +134,7 @@ Integration: The file contains project documentation."""
             integration_span_cap=3,
         )
         
-        print(f"✅ Scorer executed successfully")
+        print("✅ Scorer executed successfully")
         print(f"   Scores keys: {list(scores.keys())[:5]}...")
         print(f"   Integration F1 eligible: {scores.get('integration_f1_eligible')}")
         
@@ -188,7 +187,7 @@ def test_report_generation():
             gates_overrides={"min_eligible_for_gates": 1},
         )
         
-        print(f"✅ Report generated successfully")
+        print("✅ Report generated successfully")
         print(f"   Report keys: {list(report.keys())}")
         print(f"   Summary keys: {list(report.get('summary', {}).keys())[:5]}...")
         print(f"   Gates OK: {report.get('gates_ok')}")

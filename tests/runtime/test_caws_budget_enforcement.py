@@ -45,7 +45,7 @@ class TestCAWSBudgetEnforcement:
         assert controller.max_loops == 1
         
         # Should halt after 1 loop
-        result = controller.refine(
+        controller.refine(
             initial_input_ids=Mock(),
             max_new_tokens=100,
             caws_tier="Tier-1",
@@ -65,7 +65,7 @@ class TestCAWSBudgetEnforcement:
         assert controller.max_loops == 2
         
         # Should halt after 2 loops
-        result = controller.refine(
+        controller.refine(
             initial_input_ids=Mock(),
             max_new_tokens=100,
             caws_tier="Tier-2",
@@ -85,7 +85,7 @@ class TestCAWSBudgetEnforcement:
         assert controller.max_loops == 3
         
         # Should halt after 3 loops
-        result = controller.refine(
+        controller.refine(
             initial_input_ids=Mock(),
             max_new_tokens=100,
             caws_tier="Tier-3",
@@ -105,7 +105,7 @@ class TestCAWSBudgetEnforcement:
         # Set low Judge score (would normally continue)
         mock_judge.score.return_value = {"score": 0.3}
         
-        result = controller.refine(
+        controller.refine(
             initial_input_ids=Mock(),
             max_new_tokens=100,
             caws_tier="Tier-1",

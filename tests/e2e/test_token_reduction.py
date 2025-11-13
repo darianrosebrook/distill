@@ -7,10 +7,9 @@ Tests long-chain task with measurable accuracy metric.
 
 import pytest
 import torch
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from runtime.engine.loop import LatentModeEngine
-from runtime.orchestration.refine import RefinementController
 from eval.scoring.efficiency import EfficiencyMetrics, calculate_token_reduction
 
 

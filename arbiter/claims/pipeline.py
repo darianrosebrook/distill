@@ -12,7 +12,6 @@ from abc import ABC, abstractmethod
 from enum import Enum, auto
 import json
 import re
-import uuid
 import hashlib
 import math
 from pathlib import Path
@@ -441,7 +440,7 @@ class VerifiableContentQualification:
         for pattern in self.SUBJECTIVE_PATTERNS:
             if re.search(pattern, sentence, re.IGNORECASE):
                 subjective_score += 0.3
-                indicators.append(f"subjective_language_detected")
+                indicators.append("subjective_language_detected")
 
         # Calculate confidence
         confidence = min(1.0, max(0.0, factual_score - subjective_score))
@@ -1637,7 +1636,6 @@ class CAWSClaimVerification:
 
         # Extract claim text and check against scope
         claim_text = claim.statement.lower()
-        claim_words = set(re.findall(r'\b\w+\b', claim_text))
 
         # Check if claim mentions out-of-scope items
         for out_item in scope_out:

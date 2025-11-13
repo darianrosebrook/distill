@@ -76,6 +76,9 @@ def score_item(
     model_output: str,
     tool_trace: List[Dict[str, Any]],
     integration_span_cap: int = 3,
+    latent_spans_used: int = 0,
+    refinement_loops: int = 1,
+    halt_logits: Optional[List[float]] = None,
 ) -> Dict[str, Any]:
     """
     Score a single evaluation item using verifier-parity logic.
@@ -92,7 +95,7 @@ def score_item(
     meta = item.get("metadata", {})
     expected_behaviour = meta.get("expected_behaviour", "normal")
     negative_control = meta.get("negative_control", False)
-    locale_probe = meta.get("locale_probe", False)
+    meta.get("locale_probe", False)
 
     # Extract expected call sequence
     expected_calls = meta.get("call_sequence", [])
@@ -211,7 +214,7 @@ def score_item(
     # Detect TS API usage vs direct tool calls
     used_code_mode = False
     used_direct_tool = False
-    
+
     ts_api_patterns = [
         "from './servers",
         "from \"./servers",
@@ -222,7 +225,7 @@ def score_item(
         "<|tool_call|>",
         "<|tool_result|>",
     ]
-    
+
     if any(pattern in model_output for pattern in ts_api_patterns):
         used_code_mode = True
     if any(pattern in model_output for pattern in direct_tool_patterns):
@@ -231,25 +234,27 @@ def score_item(
     # CES accounting: count what the model actually read/returned
     # Includes: prompt, model output, tool definitions loaded, tool results in context,
     # file reads (progressive disclosure), and log returns
-    
+
     # Prompt tokens (input)
-    tokens_in = len(model_output.split())  # Rough estimate - actual would use tokenizer
-    
+    # Rough estimate - actual would use tokenizer
+    tokens_in = len(model_output.split())
+
     # Model output tokens
     tokens_out = len(model_output.split())  # Rough estimate
-    
+
     # Tool definition tokens (loaded on demand in code-mode)
     tool_def_tokens = sum(
         len(str(tc.get("name", ""))) + len(str(tc.get("arguments", {})))
         for tc in observed_calls
     )
     tool_def_tokens = tool_def_tokens // 4  # Rough token estimate
-    
+
     # Tool result tokens that hit context (not sandbox-isolated)
     tool_result_tokens = 0
     if used_direct_tool:
         # Direct tool calls echo results into context
-        tool_result_tokens = sum(len(str(tc.get("result", {}))) for tc in tool_trace)
+        tool_result_tokens = sum(len(str(tc.get("result", {})))
+                                 for tc in tool_trace)
         tool_result_tokens = tool_result_tokens // 4
     elif used_code_mode:
         # Code-mode: results stay in sandbox, only summaries/logs returned
@@ -257,7 +262,7 @@ def score_item(
         log_pattern = re.compile(r'console\.log\([^)]+\)', re.IGNORECASE)
         log_matches = log_pattern.findall(model_output)
         tool_result_tokens = sum(len(match) for match in log_matches) // 4
-    
+
     # File read tokens (progressive disclosure - files read by sandbox)
     # This would be instrumented by sandbox runtime; for now estimate from metadata
     file_read_tokens = 0
@@ -267,7 +272,7 @@ def score_item(
         # Count as "read" but not "in context"
         file_read_bytes = sum(intermediate_sizes)
         file_read_tokens = file_read_bytes // 4  # Rough estimate
-    
+
     # CES tokens: total context efficiency tokens
     # Includes: prompt + model_out + tool_defs_loaded + tool_results_in_context + file_reads + log_returns
     ces_tokens_total = (
@@ -278,13 +283,15 @@ def score_item(
         file_read_tokens
     )
     ces_tokens_direct_tool = tool_result_tokens if used_direct_tool else 0
-    ces_tokens_code_mode = (tool_result_tokens + file_read_tokens) if used_code_mode else 0
+    ces_tokens_code_mode = (tool_result_tokens +
+                            file_read_tokens) if used_code_mode else 0
 
     # Data leak detection (PII in tokens when bindings exist)
     # Hardened: only count leaks when binding path exists AND snippet length > threshold
     data_leak = False
-    MIN_SNIPPET_LEN = 24  # Minimum length to avoid false positives (e.g., docstrings)
-    
+    # Minimum length to avoid false positives (e.g., docstrings)
+    MIN_SNIPPET_LEN = 24
+
     if tool_result_fields:
         # Compiled PII patterns (hardened, international support)
         pii_patterns = {
@@ -292,22 +299,22 @@ def score_item(
             "PHONE": re.compile(r'\b(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{2,4}\)?[-.\s]?){2,4}\d{2,4}\b'),
             "SSN": re.compile(r'\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b'),
         }
-        
+
         for pii_type, pattern in pii_patterns.items():
             matches_in_output = pattern.findall(model_output)
             matches_in_results = []
-            
+
             # Extract PII from tool results (binding path exists)
             for field_value in tool_result_fields.values():
                 matches_in_results.extend(pattern.findall(str(field_value)))
-            
+
             # Check if any match appears in both output and results (leak)
             # Only count if: (has_binding_path && matched && snippet_len >= MIN_SNIPPET_LEN)
             for match in matches_in_output:
                 if len(match) >= MIN_SNIPPET_LEN and match in matches_in_results:
                     data_leak = True
                     break
-            
+
             if data_leak:
                 break
 
@@ -352,7 +359,22 @@ def score_item(
         "used_code_mode": used_code_mode,
         "used_direct_tool": used_direct_tool,
         "eligible_for_code_mode": eligible_for_code_mode,
+        # Latent reasoning metrics
+        "latent_spans_used": latent_spans_used,
+        "refinement_loops": refinement_loops,
     }
+
+    # Add halt logits if provided
+    if halt_logits is not None:
+        scores["halt_logits"] = halt_logits
+        # Compute halt probability from logits [continue, halt]
+        if len(halt_logits) == 2:
+            import numpy as np
+            # Softmax to get probabilities
+            exp_logits = np.exp(halt_logits)
+            probs = exp_logits / exp_logits.sum()
+            scores["halt_probability"] = float(
+                probs[1])  # Probability of halting
 
     return scores
 
@@ -562,13 +584,13 @@ def capture_baseline_ces_metrics(
 ) -> Dict[str, Any]:
     """
     Capture baseline CES metrics from direct-tool runner for comparison.
-    
+
     Stores baseline metrics by task/seed for later comparison.
-    
+
     Args:
         results: Evaluation results from direct-tool runner
         output_path: Optional path to save baseline JSON file
-        
+
     Returns:
         Baseline metrics dict with ces_tokens_total and other CES metrics
     """
@@ -581,23 +603,29 @@ def capture_baseline_ces_metrics(
         "eligible_count": 0,
         "total_count": len(results),
     }
-    
+
     eligible_results = []
     for result in results:
         scores = result.get("scores", {})
         if scores.get("eligible_for_code_mode", False):
             eligible_results.append(result)
-            baseline_metrics["ces_tokens_total"] += scores.get("ces_tokens_total", 0)
-            baseline_metrics["ces_tokens_direct_tool"] += scores.get("ces_tokens_direct_tool", 0)
-            baseline_metrics["ces_tokens_code_mode"] += scores.get("ces_tokens_code_mode", 0)
-            baseline_metrics["data_leak_events"] += scores.get("data_leak_events", 0)
-    
+            baseline_metrics["ces_tokens_total"] += scores.get(
+                "ces_tokens_total", 0)
+            baseline_metrics["ces_tokens_direct_tool"] += scores.get(
+                "ces_tokens_direct_tool", 0)
+            baseline_metrics["ces_tokens_code_mode"] += scores.get(
+                "ces_tokens_code_mode", 0)
+            baseline_metrics["data_leak_events"] += scores.get(
+                "data_leak_events", 0)
+
     baseline_metrics["eligible_count"] = len(eligible_results)
-    
+
     if eligible_results:
-        code_adopted = sum(1 for r in eligible_results if r.get("scores", {}).get("used_code_mode", False))
-        baseline_metrics["code_mode_adoption_rate"] = code_adopted / len(eligible_results)
-    
+        code_adopted = sum(1 for r in eligible_results if r.get(
+            "scores", {}).get("used_code_mode", False))
+        baseline_metrics["code_mode_adoption_rate"] = code_adopted / \
+            len(eligible_results)
+
     # Save baseline if output path provided
     if output_path:
         import json
@@ -606,7 +634,7 @@ def capture_baseline_ces_metrics(
         baseline_path.parent.mkdir(parents=True, exist_ok=True)
         with open(baseline_path, 'w') as f:
             json.dump(baseline_metrics, f, indent=2)
-    
+
     return baseline_metrics
 
 
@@ -639,7 +667,7 @@ def evaluate_code_mode_gates(
     # Load gate config (defaults if not provided)
     if config is None:
         config = {}
-    
+
     gates_cfg = config.get("gates", {})
     context_efficiency_cfg = gates_cfg.get("context_efficiency", {})
     no_leakage_cfg = gates_cfg.get("no_leakage", {})
@@ -659,30 +687,26 @@ def evaluate_code_mode_gates(
         ces_direct += scores.get("ces_tokens_direct_tool", 0)
         ces_code += scores.get("ces_tokens_code_mode", 0)
         leaks += scores.get("data_leak_events", 0)
-        
+
         if scores.get("eligible_for_code_mode", False):
             code_eligible += 1
             if scores.get("used_code_mode", False):
                 code_adopted += 1
-    
+
     # Compute absolute CES and %Δ vs baseline
-    abs_ces = ces_total
-    ces_delta_percent = None
-    ces_improvement = None
-    
+
     if baseline_summary:
         baseline_ces = baseline_summary.get("ces_tokens_total", 0)
         if baseline_ces > 0:
             ces_delta = ces_total - baseline_ces
-            ces_delta_percent = (ces_delta / baseline_ces) * 100
-            ces_improvement = -ces_delta_percent  # Negative delta = improvement
+            (ces_delta / baseline_ces) * 100
 
     # Context Efficiency Score gate
     ces_gate = {"passed": True, "skipped": True}
     if context_efficiency_cfg.get("enabled", False):
         ces_gate["skipped"] = False
         min_improvement = context_efficiency_cfg.get("min_improvement", 0.25)
-        
+
         if baseline_summary:
             baseline_ces = baseline_summary.get("ces_tokens_total", 0)
             if baseline_ces > 0:
@@ -692,7 +716,7 @@ def evaluate_code_mode_gates(
                 ces_gate["current"] = ces_total
                 ces_gate["baseline"] = baseline_ces
                 ces_gate["min_improvement"] = min_improvement
-                
+
                 if not ces_gate["passed"]:
                     gates_passed = False
                     errors.append(
@@ -708,17 +732,18 @@ def evaluate_code_mode_gates(
         no_leakage_gate["skipped"] = False
         no_leakage_gate["passed"] = leaks == 0
         no_leakage_gate["leak_count"] = leaks
-        
+
         if leaks > 0:
             gates_passed = False
-            errors.append(f"No-leakage gate failed: {leaks} data leak events detected")
+            errors.append(
+                f"No-leakage gate failed: {leaks} data leak events detected")
 
     # Code-Mode Adoption gate
     adoption_gate = {"passed": True, "skipped": True}
     if code_mode_adoption_cfg.get("enabled", False):
         adoption_gate["skipped"] = False
         min_rate = code_mode_adoption_cfg.get("min_rate", 0.60)
-        
+
         if code_eligible > 0:
             adoption_rate = code_adopted / code_eligible
             adoption_gate["passed"] = adoption_rate >= min_rate
@@ -726,7 +751,7 @@ def evaluate_code_mode_gates(
             adoption_gate["code_adopted"] = code_adopted
             adoption_gate["code_eligible"] = code_eligible
             adoption_gate["min_rate"] = min_rate
-            
+
             if not adoption_gate["passed"]:
                 gates_passed = False
                 errors.append(
@@ -750,191 +775,231 @@ def evaluate_code_mode_gates(
     }
 
 
-def evaluate_latent_efficiency_gates(
-    results: List[Dict[str, Any]],
-    config: Optional[Dict[str, Any]] = None,
-    baseline_summary: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+# Duplicate function definition removed
+def _evaluate_claim_quality(results: List[Dict[str, Any]], claim_extractor: Any) -> Dict[str, Any]:
     """
-    Evaluate latent reasoning efficiency gates.
-
-    Reference: code-mode-latent-reasoning.md Milestone 2
-
-    Gates:
-    - ≥ baseline accuracy with ≥25-40% fewer generated tokens on long chains
-    - Average refinement loops ≤ current self-refine
-    - Tail latency not worse than baseline
-    - No CAWS regressions (equal or fewer verification iterations)
-
-    Args:
-        results: List of per-item result dicts with scores
-        config: Optional gate configuration dict
-        baseline_summary: Optional baseline summary for comparison
+    Evaluate claim extraction quality across results.
 
     Returns:
-        Dictionary with gate evaluation results:
-        - gates_passed: bool
-        - token_reduction_gate: dict with pass/fail info
-        - accuracy_gate: dict with pass/fail info
-        - loop_gate: dict with pass/fail info
-        - latency_gate: dict with pass/fail info
-        - errors: list of error messages
+        Dict with claim quality metrics:
+        - avg_claim_count: Average claims per item
+        - avg_success_rate: Average claim extraction success rate
+        - supported_claim_ratio: Ratio of supported claims
+        - claim_confidence_avg: Average claim confidence
     """
-from eval.scoring.efficiency import (
-    EfficiencyMetrics,
-    evaluate_efficiency_gates,
-    aggregate_efficiency_metrics,
-)
-from eval.scoring.baseline import (
-    save_baseline,
-    load_baseline,
-    find_baseline,
-    save_efficiency_curves,
-)
+    if not results:
+        return {"avg_claim_count": 0, "avg_success_rate": 0, "supported_claim_ratio": 0, "claim_confidence_avg": 0}
 
+    total_claims = 0
+    total_success_rate = 0
+    supported_claims = 0
+    total_confidence = 0
+    total_items = 0
 
-def evaluate_latent_efficiency_gates(
-    results: List[Dict[str, Any]],
-    config: Optional[Dict[str, Any]] = None,
-    baseline_summary: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """
-    Evaluate latent reasoning efficiency gates.
-
-    Reference: code-mode-latent-reasoning.md Milestone 2
-
-    Gates:
-    - ≥ baseline accuracy with ≥25-40% fewer generated tokens on long chains
-    - Average refinement loops ≤ current self-refine
-    - Tail latency not worse than baseline
-    - No CAWS regressions (equal or fewer verification iterations)
-
-    Args:
-        results: List of per-item result dicts with scores
-        config: Optional gate configuration dict
-        baseline_summary: Optional baseline summary for comparison
-
-    Returns:
-        Dictionary with gate evaluation results:
-        - gates_passed: bool
-        - token_reduction_gate: dict with pass/fail info
-        - accuracy_gate: dict with pass/fail info
-        - loop_gate: dict with pass/fail info
-        - latency_gate: dict with pass/fail info
-        - errors: list of error messages
-    """
-    errors = []
-    gates_passed = True
-
-    # Load gate config (defaults if not provided)
-    if config is None:
-        config = {}
-    
-    gates_cfg = config.get("gates", {})
-    efficiency_cfg = gates_cfg.get("efficiency", {})
-    
-    # Extract efficiency metrics from results
-    metrics_list = []
     for result in results:
-        scores = result.get("scores", {})
-        metrics = EfficiencyMetrics(
-            accuracy=scores.get("f1_lax", 0.0),
-            generated_tokens=scores.get("generated_tokens", 0),
-            wall_clock_time_ms=scores.get("wall_clock_time_ms", 0.0),
-            latent_spans_used=scores.get("latent_spans_used", 0),
-            refinement_loops=scores.get("refinement_loops", 0),
-        )
-        metrics_list.append(metrics)
-    
-    if not metrics_list:
-        return {
-            "gates_passed": False,
-            "errors": ["No efficiency metrics available"],
-        }
-    
-    # Aggregate metrics
-    aggregated = aggregate_efficiency_metrics(metrics_list)
-    
-    # Create current metrics (using aggregated values)
-    current_metrics = EfficiencyMetrics(
-        accuracy=aggregated.get("mean_accuracy", 0.0),
-        generated_tokens=int(aggregated.get("mean_tokens", 0)),
-        wall_clock_time_ms=aggregated.get("mean_time_ms", 0.0),
-        latent_spans_used=int(aggregated.get("mean_latent_spans", 0)),
-        refinement_loops=int(aggregated.get("mean_loops", 0)),
-    )
-    
-    # Get baseline metrics
-    if baseline_summary:
-        baseline_metrics = EfficiencyMetrics(
-            accuracy=baseline_summary.get("f1_lax", 0.0),
-            generated_tokens=baseline_summary.get("generated_tokens", 0),
-            wall_clock_time_ms=baseline_summary.get("wall_clock_time_ms", 0.0),
-            latent_spans_used=0,  # Baseline has no latent spans
-            refinement_loops=baseline_summary.get("refinement_loops", 1),
-        )
-    else:
-        # No baseline: gates cannot be evaluated
-        return {
-            "gates_passed": False,
-            "errors": ["No baseline summary provided for efficiency gate evaluation"],
-        }
-    
-    # Evaluate gates
-    gate_config = {
-        "min_token_reduction": efficiency_cfg.get("min_token_reduction", 0.25),
-        "max_token_reduction": efficiency_cfg.get("max_token_reduction", 0.40),
-        "max_accuracy_regression": efficiency_cfg.get("max_accuracy_regression", 0.01),
-        "max_loop_increase": efficiency_cfg.get("max_loop_increase"),
-    }
-    
-    gate_results = evaluate_efficiency_gates(
-        current_metrics,
-        baseline_metrics,
-        **gate_config,
-    )
-    
-    if not gate_results["all_gates_passed"]:
-        gates_passed = False
-        if not gate_results["token_reduction_gate"]:
-            errors.append(
-                f"Token reduction gate failed: {gate_results['details']['token_reduction']:.1%} "
-                f"(required: {gate_config['min_token_reduction']:.1%}-{gate_config['max_token_reduction']:.1%})"
-            )
-        if not gate_results["accuracy_gate"]:
-            errors.append(
-                f"Accuracy gate failed: delta={gate_results['details']['accuracy_delta']:.3f} "
-                f"(max regression: {gate_config['max_accuracy_regression']:.3f})"
-            )
-        if not gate_results["loop_gate"]:
-            errors.append(
-                f"Loop gate failed: loop delta={gate_results['details']['loop_delta']}"
-            )
-        if not gate_results["latency_gate"]:
-            errors.append(
-                f"Latency gate failed: time delta={gate_results['details']['time_delta_percent']:.1f}%"
-            )
-    
+        item_meta = result.get("metadata", {})
+        student_output = result.get("model_output", "")
+        teacher_output = item_meta.get("teacher_text", "")
+
+        if student_output and teacher_output:
+            total_items += 1
+
+            # Extract claims
+            student_claims = claim_extractor.extract_claims(student_output)
+            teacher_claims = claim_extractor.extract_claims(teacher_output)
+
+            total_claims += len(student_claims)
+            total_success_rate += claim_extractor.extract_claim_success_rate(
+                student_output)
+
+            # Check claim support
+            for claim in student_claims:
+                total_confidence += claim.confidence
+                # Simplified support check (would need more sophisticated logic)
+                supported = any(
+                    claim.statement.lower() in teacher_claim.lower() or
+                    teacher_claim.lower() in claim.statement.lower()
+                    for teacher_claim in teacher_claims
+                )
+                if supported:
+                    supported_claims += 1
+
+    avg_claim_count = total_claims / max(1, total_items)
+    avg_success_rate = total_success_rate / max(1, total_items)
+    supported_claim_ratio = supported_claims / max(1, total_claims)
+    claim_confidence_avg = total_confidence / max(1, total_claims)
+
     return {
-        "gates_passed": gates_passed,
-        "token_reduction_gate": gate_results["token_reduction_gate"],
-        "accuracy_gate": gate_results["accuracy_gate"],
-        "loop_gate": gate_results["loop_gate"],
-        "latency_gate": gate_results["latency_gate"],
-        "details": gate_results["details"],
-        "current_metrics": {
-            "accuracy": current_metrics.accuracy,
-            "generated_tokens": current_metrics.generated_tokens,
-            "wall_clock_time_ms": current_metrics.wall_clock_time_ms,
-            "refinement_loops": current_metrics.refinement_loops,
-        },
-        "baseline_metrics": {
-            "accuracy": baseline_metrics.accuracy,
-            "generated_tokens": baseline_metrics.generated_tokens,
-            "wall_clock_time_ms": baseline_metrics.wall_clock_time_ms,
-            "refinement_loops": baseline_metrics.refinement_loops,
-        },
-        "errors": errors,
+        "avg_claim_count": avg_claim_count,
+        "avg_success_rate": avg_success_rate,
+        "supported_claim_ratio": supported_claim_ratio,
+        "claim_confidence_avg": claim_confidence_avg,
+        "total_items_evaluated": total_items,
+    }
+
+
+def _evaluate_caws_compliance(results: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Evaluate CAWS compliance across results.
+
+    Returns:
+        Dict with CAWS compliance metrics:
+        - compliance_gate_passed: bool
+        - avg_budget_penalty: Average budget violation penalty
+        - avg_quality_penalty: Average quality violation penalty
+        - tier_compliance_rate: % of results within tier limits
+    """
+    from training.losses import caws_compliance_loss
+    from training.claim_extraction import SimpleClaimExtractor
+
+    if not results:
+        return {"compliance_gate_passed": False, "avg_budget_penalty": 0, "avg_quality_penalty": 0, "tier_compliance_rate": 0}
+
+    claim_extractor = SimpleClaimExtractor()
+    total_budget_penalty = 0
+    total_quality_penalty = 0
+    compliant_items = 0
+    total_items = 0
+
+    for result in results:
+        item_meta = result.get("metadata", {})
+        student_output = result.get("model_output", "")
+
+        if student_output:
+            total_items += 1
+
+            # Evaluate compliance loss components
+            compliance_loss = caws_compliance_loss(
+                student_output=student_output,
+                teacher_output=item_meta.get("teacher_text", ""),
+                claim_extractor=claim_extractor
+            )
+
+            # Extract penalty components (simplified - would need to expose individual penalties)
+            loss_value = compliance_loss.item()
+
+            # Rough approximation: budget penalties tend to be higher for severe violations
+            if loss_value > 1.5:  # High loss likely indicates budget violation
+                total_budget_penalty += loss_value * 0.7
+                total_quality_penalty += loss_value * 0.3
+            else:
+                total_budget_penalty += loss_value * 0.3
+                total_quality_penalty += loss_value * 0.7
+
+            # Check tier compliance (simplified)
+            latent_spans = student_output.count("<bot>")
+            if latent_spans <= 3:  # Tier 3 max
+                compliant_items += 1
+
+    avg_budget_penalty = total_budget_penalty / max(1, total_items)
+    avg_quality_penalty = total_quality_penalty / max(1, total_items)
+    tier_compliance_rate = compliant_items / max(1, total_items)
+
+    # Compliance gate: low penalties and high tier compliance
+    compliance_gate_passed = (
+        avg_budget_penalty < 0.5 and
+        avg_quality_penalty < 0.8 and
+        tier_compliance_rate > 0.8
+    )
+
+    return {
+        "compliance_gate_passed": compliance_gate_passed,
+        "avg_budget_penalty": avg_budget_penalty,
+        "avg_quality_penalty": avg_quality_penalty,
+        "tier_compliance_rate": tier_compliance_rate,
+        "total_items_evaluated": total_items,
+    }
+
+
+def _compute_overall_efficiency(
+    all_metrics: Dict[str, Any],
+    baseline_summary: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    Compute overall system efficiency combining all metrics.
+
+    Returns:
+        Dict with overall efficiency assessment:
+        - efficiency_score: Composite efficiency score (0-1)
+        - recommendations: List of improvement recommendations
+        - bottlenecks: Identified bottlenecks
+    """
+    score_components = []
+    recommendations = []
+    bottlenecks = []
+
+    # Code-mode efficiency
+    code_mode = all_metrics.get("code_mode", {})
+    if code_mode.get("gates_passed", False):
+        score_components.append(0.9)  # High score for passing gates
+    else:
+        score_components.append(0.3)  # Lower score for failing gates
+        recommendations.append(
+            "Improve code-mode CES efficiency and adoption rates")
+        bottlenecks.append("code_mode_efficiency")
+
+    # Latent efficiency
+    latent_eff = all_metrics.get("latent_efficiency", {})
+    if latent_eff.get("gates_passed", False):
+        score_components.append(0.9)
+    else:
+        score_components.append(0.4)
+        recommendations.append(
+            "Optimize latent reasoning token reduction and accuracy")
+        bottlenecks.append("latent_efficiency")
+
+    # CAWS compliance
+    caws_comp = all_metrics.get("caws_compliance", {})
+    if caws_comp.get("compliance_gate_passed", False):
+        score_components.append(0.95)
+    else:
+        score_components.append(0.5)
+        recommendations.append("Address CAWS budget and quality violations")
+        bottlenecks.append("caws_compliance")
+
+    # Claim quality
+    claim_qual = all_metrics.get("claim_quality", {})
+    claim_score = min(1.0, claim_qual.get("supported_claim_ratio", 0) * 0.8 +
+                      claim_qual.get("claim_confidence_avg", 0) * 0.2)
+    score_components.append(claim_score)
+
+    if claim_score < 0.7:
+        recommendations.append(
+            "Improve claim extraction and support validation")
+        bottlenecks.append("claim_quality")
+
+    # Overall score (weighted average)
+    if score_components:
+        weights = [0.3, 0.3, 0.2, 0.2]  # Equal weights
+        efficiency_score = sum(
+            s * w for s, w in zip(score_components, weights))
+    else:
+        efficiency_score = 0.0
+
+    # Baseline comparison
+    baseline_comparison = {}
+    if baseline_summary:
+        baseline_efficiency = baseline_summary.get(
+            "overall", {}).get("efficiency_score", 0.5)
+        improvement = efficiency_score - baseline_efficiency
+        baseline_comparison = {
+            "baseline_efficiency": baseline_efficiency,
+            "current_efficiency": efficiency_score,
+            "improvement": improvement,
+            "improvement_pct": (improvement / max(0.01, baseline_efficiency)) * 100,
+        }
+
+        if improvement < 0:
+            recommendations.append(
+                f"Efficiency regressed by {abs(improvement):.1f} points vs baseline")
+            bottlenecks.append("regression_vs_baseline")
+
+    return {
+        "efficiency_score": efficiency_score,
+        "score_components": score_components,
+        "recommendations": recommendations,
+        "bottlenecks": bottlenecks,
+        "baseline_comparison": baseline_comparison,
     }
 
 

@@ -3,7 +3,6 @@ Unit tests for sentinel token encoding/decoding.
 """
 # @author: @darianrosebrook
 
-import pytest
 import json
 from pathlib import Path
 

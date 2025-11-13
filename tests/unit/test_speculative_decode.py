@@ -5,7 +5,7 @@ Tests drafter + worker verification for M-series Apple Silicon optimization.
 """
 import pytest
 import numpy as np
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 try:
     from coreml.runtime.speculative_decode import SpeculativeDecoder

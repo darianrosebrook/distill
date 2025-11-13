@@ -1,7 +1,6 @@
 """
 Unit tests for training loss functions.
 """
-import pytest
 import torch
 import torch.nn.functional as F
 
@@ -9,7 +8,6 @@ from training.losses import (
     kl_divergence,
     combined_kd_loss,
 )
-import torch.nn.functional as F
 
 
 class TestKLDivergence:

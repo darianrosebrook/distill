@@ -26,7 +26,7 @@ def op_histogram(model_path: str):
                 ops.append(b.type)
     else:
         # Fallback for neuralNetwork or other types
-        layer_names = [l.WhichOneof("layer") for l in spec.neuralNetwork.layers]
+        layer_names = [layer.WhichOneof("layer") for layer in spec.neuralNetwork.layers]
         ops.extend(filter(None, layer_names))
     hist = Counter(ops)
     for k, v in hist.most_common():

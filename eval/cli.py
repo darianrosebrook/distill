@@ -7,11 +7,17 @@ import json
 import os
 import sys
 import time
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List
 
 # Runners & scoring
 from eval.runners.openai_http import OpenAIHTTPRunner
 from eval.runners.hf_local import HFLocalRunner
+try:
+    from eval.runners.orchestrator import OrchestratorRunner
+    ORCHESTRATOR_RUNNER_AVAILABLE = True
+except ImportError:
+    ORCHESTRATOR_RUNNER_AVAILABLE = False
+
 from eval.tool_broker.broker import ToolBroker
 from eval.scoring.scorer import score_item  # wraps your verify_* logic
 from eval.reports.summarize import summarize_results  # macro/micro, deltas, gates
@@ -21,6 +27,8 @@ RUNNERS = {
     "openai_http": OpenAIHTTPRunner,
     "hf_local": HFLocalRunner,
 }
+if ORCHESTRATOR_RUNNER_AVAILABLE:
+    RUNNERS["orchestrator"] = OrchestratorRunner
 
 
 def read_jsonl(path: str) -> Iterable[Dict[str, Any]]:
@@ -185,6 +193,46 @@ def main() -> None:
     except Exception as e:
         print(f"[eval/cli] WARN: Failed to initialize batch policy: {e}")
 
+    # Load runtime configs if advanced features enabled
+    runtime_config = None
+    eval_latent = os.getenv("EVAL_LATENT", "0") == "1"
+    eval_code_mode = os.getenv("EVAL_CODE_MODE", "0") == "1"
+    
+    if eval_latent or eval_code_mode or args.runner == "orchestrator":
+        try:
+            from runtime.config import RuntimeConfig
+            from pathlib import Path
+            import yaml
+            
+            # Load config from files if they exist
+            latent_config_path = Path("eval/configs/latent.yaml")
+            code_mode_config_path = Path("eval/configs/code_mode.yaml")
+            
+            # Start with defaults
+            runtime_config = RuntimeConfig.from_env()
+            
+            # Override with config files if they exist
+            if eval_latent and latent_config_path.exists():
+                with open(latent_config_path, 'r') as f:
+                    latent_config = yaml.safe_load(f)
+                    gates = latent_config.get("gates", {})
+                    efficiency = gates.get("efficiency", {})
+                    runtime_config.latent_mode_enabled = True
+                    runtime_config.max_refinement_loops = efficiency.get("max_loop_increase", 5) or 5
+                    runtime_config.curriculum_probability = 1.0  # Full curriculum for evaluation
+            
+            if eval_code_mode and code_mode_config_path.exists():
+                with open(code_mode_config_path, 'r') as f:
+                    code_mode_config = yaml.safe_load(f)
+                    gates = code_mode_config.get("gates", {})
+                    runtime_config.latent_mode_enabled = False  # Code mode doesn't use latent
+                    # Code mode settings would go here if needed
+            
+            print(f"[eval/cli] Runtime config loaded: latent={runtime_config.latent_mode_enabled}, halt={runtime_config.halt_head_enabled}")
+        except Exception as e:
+            print(f"[eval/cli] WARN: Failed to load runtime config: {e}")
+            runtime_config = None
+
     # Init runner & broker
     RunnerCls = RUNNERS[args.runner]
 
@@ -208,6 +256,12 @@ def main() -> None:
 
     if args.prompt_wrapper:
         runner_kwargs["prompt_wrapper"] = args.prompt_wrapper
+    
+    # Add runtime config for orchestrator runner
+    if args.runner == "orchestrator" and runtime_config:
+        runner_kwargs["runtime_config"] = runtime_config
+        runner_kwargs["use_refinement"] = eval_latent  # Use refinement for latent evaluation
+    
     runner = RunnerCls(**runner_kwargs)
     broker = ToolBroker(args.fixtures)
 
@@ -268,6 +322,9 @@ def main() -> None:
             model_output=gen.get("model_output", ""),
             tool_trace=tool_trace,
             integration_span_cap=integration_span_cap,
+            latent_spans_used=gen.get("latent_spans_used", 0),
+            refinement_loops=gen.get("refinement_loops", 1),
+            halt_logits=gen.get("halt_logits"),
         )
 
         results.append({

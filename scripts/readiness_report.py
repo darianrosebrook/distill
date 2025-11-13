@@ -9,7 +9,6 @@ import hashlib
 import platform
 import subprocess
 import glob
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 
@@ -68,7 +67,7 @@ def main() -> None:
             with open(hist, "r", encoding="utf-8") as f:
                 lines = f.readlines()[-200:]
             report["eval"]["history_tail"] = [
-                json.loads(l) for l in lines if l.strip()]
+                json.loads(line) for line in lines if line.strip()]
         except Exception as e:
             report["eval"]["history_error"] = str(e)
 

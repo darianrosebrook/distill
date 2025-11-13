@@ -65,7 +65,7 @@ def convert_pytorch_to_coreml(
             version_num = int(target.replace("macOS", ""))
             if version_num >= 14:
                 target_version = ct.target.macOS14
-        except:
+        except Exception:
             pass
     else:
         target_version = ct.target.macOS13
@@ -102,7 +102,6 @@ def convert_pytorch_to_coreml(
                             f"Input specification must be a dictionary, got {type(input_spec)}")
 
                     input_name = input_spec.get("name", "input_ids")
-                    input_shape = input_spec.get("shape", ["B", "T"])
                     input_dtype = input_spec.get("dtype", "int32")
 
                     # Convert shape: ["B", "T"] -> (1, T) for example
@@ -111,7 +110,7 @@ def convert_pytorch_to_coreml(
                     if not isinstance(enumerated_T, list) or len(enumerated_T) == 0:
                         enumerated_T = [128]
                         print(
-                            f"[convert_coreml] WARN: Invalid enumerated_T in contract, using default [128]")
+                            "[convert_coreml] WARN: Invalid enumerated_T in contract, using default [128]")
 
                     seq_len = enumerated_T[0] if enumerated_T else 128
                     if not isinstance(seq_len, int) or seq_len <= 0:
@@ -142,7 +141,7 @@ def convert_pytorch_to_coreml(
                     # Contract loading/validation failed - fall back to inference
                     print(
                         f"[convert_coreml] WARN: Failed to load/validate contract.json: {contract_error}")
-                    print(f"[convert_coreml] Falling back to input shape inference")
+                    print("[convert_coreml] Falling back to input shape inference")
                     inputs = None  # Will trigger inference path
 
             # Fallback to inference if contract not available or failed
@@ -159,7 +158,7 @@ def convert_pytorch_to_coreml(
                     inputs = [ct.TensorType(
                         name="input_ids", shape=(1, 128), dtype=np.int32)]
                     print(
-                        f"[convert_coreml] Inferred input shape from model: input_ids shape=(1, 128) dtype=int32")
+                        "[convert_coreml] Inferred input shape from model: input_ids shape=(1, 128) dtype=int32")
                 except Exception as e:
                     inference_errors.append(f"int32[1,128]: {str(e)}")
 
@@ -171,7 +170,7 @@ def convert_pytorch_to_coreml(
                         inputs = [ct.TensorType(name="input", shape=(
                             1, 128, 64), dtype=np.float32)]
                         print(
-                            f"[convert_coreml] Inferred input shape from model: input shape=(1, 128, 64) dtype=float32")
+                            "[convert_coreml] Inferred input shape from model: input shape=(1, 128, 64) dtype=float32")
                     except Exception as e:
                         inference_errors.append(f"float32[1,128,64]: {str(e)}")
 
@@ -214,14 +213,52 @@ def convert_pytorch_to_coreml(
                 convert_to="mlprogram",
             )
 
-            # Rename output to "logits" if it's unnamed or generic
-            # This ensures verifiers can reliably find the output
+            # Rename outputs to match contract expectations
+            # This ensures verifiers can reliably find the outputs
             spec = mlmodel.get_spec()
-            if len(spec.description.output) == 1:
+            num_outputs = len(spec.description.output)
+
+            # Check contract for halt head support
+            use_halt_head = False
+            if contract_path and Path(contract_path).exists():
+                try:
+                    contract = load_contract(contract_path)
+                    use_halt_head = contract.get("use_halt_head", False)
+                except Exception:
+                    pass  # Fall back to defaults
+
+            # Rename outputs based on count and contract
+            if num_outputs == 1:
+                # Single output: should be logits
                 output = spec.description.output[0]
                 if output.name.startswith("var_") or output.name == "":
                     output.name = "logits"
-                    print(f"[convert_coreml] Renamed output to 'logits'")
+                    print("[convert_coreml] Renamed output to 'logits'")
+            elif num_outputs == 2 and use_halt_head:
+                # Two outputs: logits and halt_logits
+                # CoreML outputs are typically in order: logits, halt_logits
+                outputs = spec.description.output
+                if len(outputs) >= 1:
+                    if outputs[0].name.startswith("var_") or outputs[0].name == "":
+                        outputs[0].name = "logits"
+                        print("[convert_coreml] Renamed first output to 'logits'")
+                if len(outputs) >= 2:
+                    if outputs[1].name.startswith("var_") or outputs[1].name == "":
+                        outputs[1].name = "halt_logits"
+                        print(
+                            "[convert_coreml] Renamed second output to 'halt_logits'")
+            else:
+                # Multiple outputs but not expected - warn
+                if num_outputs > 1:
+                    print(
+                        f"[convert_coreml] WARN: Model has {num_outputs} outputs, expected 1 or 2 (with halt head)")
+                    # Still try to rename first output to logits
+                    if len(spec.description.output) > 0:
+                        output = spec.description.output[0]
+                        if output.name.startswith("var_") or output.name == "":
+                            output.name = "logits"
+                            print(
+                                "[convert_coreml] Renamed first output to 'logits'")
         else:
             # For ExportedProgram, inputs are already embedded
             mlmodel = ct.convert(
@@ -231,6 +268,38 @@ def convert_pytorch_to_coreml(
                 minimum_deployment_target=target_version,
                 convert_to="mlprogram",
             )
+
+            # Rename outputs for ExportedProgram path too
+            spec = mlmodel.get_spec()
+            num_outputs = len(spec.description.output)
+
+            # Check contract for halt head support
+            use_halt_head = False
+            if contract_path and Path(contract_path).exists():
+                try:
+                    contract = load_contract(contract_path)
+                    use_halt_head = contract.get("use_halt_head", False)
+                except Exception:
+                    pass
+
+            # Rename outputs based on count and contract
+            if num_outputs == 1:
+                output = spec.description.output[0]
+                if output.name.startswith("var_") or output.name == "":
+                    output.name = "logits"
+                    print("[convert_coreml] Renamed output to 'logits'")
+            elif num_outputs == 2 and use_halt_head:
+                outputs = spec.description.output
+                if len(outputs) >= 1:
+                    if outputs[0].name.startswith("var_") or outputs[0].name == "":
+                        outputs[0].name = "logits"
+                        print("[convert_coreml] Renamed first output to 'logits'")
+                if len(outputs) >= 2:
+                    if outputs[1].name.startswith("var_") or outputs[1].name == "":
+                        outputs[1].name = "halt_logits"
+                        print(
+                            "[convert_coreml] Renamed second output to 'halt_logits'")
+
         print("[convert_coreml] Conversion successful")
 
         # Save model
@@ -247,9 +316,9 @@ def convert_pytorch_to_coreml(
         # Provide detailed error context
         error_context = []
         if isinstance(pytorch_model, torch.jit.ScriptModule):
-            error_context.append(f"Model type: TorchScript")
+            error_context.append("Model type: TorchScript")
         else:
-            error_context.append(f"Model type: ExportedProgram")
+            error_context.append("Model type: ExportedProgram")
         error_context.append(f"Target: {target}")
         error_context.append(f"Compute units: {compute_units}")
         if contract_path:
@@ -265,7 +334,7 @@ def convert_pytorch_to_coreml(
             print("[convert_coreml] Creating placeholder (SKIP parity)")
             return create_placeholder(output_path, "PyTorch model", full_error_msg)
         else:
-            print(f"[convert_coreml] ERROR: PyTorch→CoreML conversion failed")
+            print("[convert_coreml] ERROR: PyTorch→CoreML conversion failed")
             print(f"[convert_coreml] Error: {full_error_msg}")
             print("\n[convert_coreml] REMEDIATION:")
             print("  1. Verify model is valid TorchScript or ExportedProgram")
@@ -314,7 +383,7 @@ def convert_onnx_to_coreml(
             version_num = int(target.replace("macOS", ""))
             if version_num >= 14:
                 target_version = ct.target.macOS14
-        except:
+        except Exception:
             pass
     else:
         target_version = ct.target.macOS13
@@ -349,20 +418,20 @@ def convert_onnx_to_coreml(
                 print(
                     f"[convert_coreml] Renamed output '{old_name}' to 'logits'")
 
-    except Exception as e:
+    except Exception:
         # ONNX is not a supported production path - always create placeholder
         if allow_placeholder:
             print(
-                f"[convert_coreml] WARN: ONNX conversion not supported by CoreMLTools")
+                "[convert_coreml] WARN: ONNX conversion not supported by CoreMLTools")
             print("[convert_coreml] Creating placeholder (SKIP parity)")
             error_msg = (
-                f"ONNX→CoreML conversion is not a supported production path. "
-                f"CoreMLTools 9.0 only supports TensorFlow and PyTorch. "
-                f"For production, use --backend pytorch with a TorchScript or ExportedProgram model."
+                "ONNX→CoreML conversion is not a supported production path. "
+                "CoreMLTools 9.0 only supports TensorFlow and PyTorch. "
+                "For production, use --backend pytorch with a TorchScript or ExportedProgram model."
             )
             return create_placeholder(output_path, onnx_path, error_msg)
         else:
-            print(f"[convert_coreml] ERROR: ONNX→CoreML conversion not supported")
+            print("[convert_coreml] ERROR: ONNX→CoreML conversion not supported")
             print("\n[convert_coreml] REMEDIATION:")
             print("  ONNX is not a supported production input to CoreML.")
             print("  For production conversion:")

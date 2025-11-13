@@ -15,8 +15,7 @@ import yaml
 
 from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
 from training.dataset_post_tool import PostToolDataset, collate_post_tool_batch
-from training.tracing import TrainingTracer, create_tracer_from_config
-from training.losses import combined_kd_loss
+from training.tracing import create_tracer_from_config
 
 
 def load_config(config_path: str) -> Dict[str, Any]:
@@ -53,7 +52,7 @@ def create_model(cfg: Dict[str, Any], device: torch.device) -> nn.Module:
             model.load_state_dict(checkpoint['model_state_dict'], strict=False)
         else:
             model.load_state_dict(checkpoint, strict=False)
-        print(f"[distill_post_tool] Checkpoint loaded")
+        print("[distill_post_tool] Checkpoint loaded")
     
     model = model.to(device)
     return model

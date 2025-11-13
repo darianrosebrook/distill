@@ -3,9 +3,6 @@ Unit tests for speed gates evaluation.
 
 Tests speed gate evaluation logic and baseline comparison.
 """
-import pytest
-from pathlib import Path
-from unittest.mock import Mock, patch, mock_open
 import json
 
 from eval.scoring.scorer import (

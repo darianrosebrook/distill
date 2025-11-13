@@ -1,7 +1,6 @@
 """
 Unit tests for tool schema registry.
 """
-import pytest
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory

@@ -3,12 +3,10 @@ Integration tests for resume/checkpoint functionality.
 
 Tests that checkpoint/resume works correctly for dataset generation.
 """
-import pytest
 import json
 import time
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch
 
 from scripts.make_kd_mix_hardened import (
     CheckpointManager,

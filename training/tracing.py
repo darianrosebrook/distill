@@ -27,7 +27,6 @@ Usage:
     tracer.log_model_graph(model, example_input)
 """
 import json
-import os
 from pathlib import Path
 from typing import Dict, Any, Optional, Union
 from datetime import datetime
@@ -112,7 +111,7 @@ class TrainingTracer:
                     dir=str(self.log_dir),
                     config={},
                 )
-                print(f"[TrainingTracer] WandB logging enabled")
+                print("[TrainingTracer] WandB logging enabled")
             except Exception as e:
                 print(f"[TrainingTracer] WARN: WandB initialization failed: {e}")
                 self.use_wandb = False
@@ -221,7 +220,7 @@ class TrainingTracer:
         if self.tb_writer:
             try:
                 self.tb_writer.add_graph(model, example_input, verbose=verbose)
-                print(f"[TrainingTracer] Model graph logged to TensorBoard")
+                print("[TrainingTracer] Model graph logged to TensorBoard")
             except Exception as e:
                 print(f"[TrainingTracer] WARN: Failed to log model graph: {e}")
         

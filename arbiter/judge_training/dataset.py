@@ -3,7 +3,7 @@
 # @author: @darianrosebrook
 
 from dataclasses import dataclass
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict
 import json
 import torch
 from torch.utils.data import Dataset
@@ -27,8 +27,10 @@ class PairwiseJudgeDataset(Dataset):
       "winner": "a"   # or "b" or "tie"
     }
     """
+
     def __init__(self, path: str, cfg: JudgeConfig):
-        self.rows = [json.loads(l) for l in open(path, "r", encoding="utf-8").read().splitlines() if l.strip()]
+        self.rows = [json.loads(line) for line in open(
+            path, "r", encoding="utf-8").read().splitlines() if line.strip()]
         self.cfg = cfg
         self.tok = AutoTokenizer.from_pretrained(cfg.hf_name, use_fast=True)
         self.clause2id = {c: i for i, c in enumerate(cfg.clauses)}
@@ -68,4 +70,3 @@ class PairwiseJudgeDataset(Dataset):
         else:
             target = 0   # tie
         return {"a": pa, "b": pb, "ya": ya, "yb": yb, "target": torch.tensor(target, dtype=torch.int8)}
-

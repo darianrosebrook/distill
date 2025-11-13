@@ -12,7 +12,7 @@ Usage:
 import argparse
 import json
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 from models.teacher.teacher_client import TeacherClient
 
@@ -75,7 +75,7 @@ def test_json_validity(client: TeacherClient, n: int = 30) -> Dict[str, Any]:
             try:
                 json.loads(text)
                 json_str = text
-            except:
+            except json.JSONDecodeError:
                 pass
         
         # Try to extract JSON from code blocks
@@ -172,7 +172,7 @@ def main():
     
     # Health check
     if not client.health_check():
-        print(f"[teacher_audit] WARN: Teacher health check failed")
+        print("[teacher_audit] WARN: Teacher health check failed")
     
     print(f"[teacher_audit] Running audit (reasoning={args.n_reasoning}, json={args.n_json}, longctx={args.n_longctx})...")
     

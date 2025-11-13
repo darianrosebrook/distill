@@ -160,7 +160,7 @@ def compute_span_targets_from_tokenized(
                 return_offsets_mapping=True,
                 return_tensors=None,
             )
-            token_ids = encoding['input_ids']
+            encoding['input_ids']
             offset_mapping = encoding.get('offset_mapping', None)
             
             if offset_mapping:

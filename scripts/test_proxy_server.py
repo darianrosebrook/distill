@@ -14,7 +14,6 @@ Usage:
 """
 import os
 import sys
-import time
 import json
 from pathlib import Path
 from typing import Optional
@@ -68,7 +67,7 @@ def test_proxy_capture(proxy_url: str, api_key: str) -> bool:
     
     # Make a test API call through proxy
     test_prompt = "What is 2+2? Answer briefly."
-    print(f"[test_proxy_server] Making API call through proxy...")
+    print("[test_proxy_server] Making API call through proxy...")
     print(f"  Prompt: {test_prompt}")
     
     try:
@@ -81,26 +80,26 @@ def test_proxy_capture(proxy_url: str, api_key: str) -> bool:
         )
         
         if results and not results[0].get("error"):
-            print(f"  ✅ API call successful")
+            print("  ✅ API call successful")
             print(f"  Response: {results[0]['text'][:100]}...")
             
             # Check if capture files were created
             capture_dir = Path("capture/raw")
             if capture_dir.exists():
                 trace_files = list(capture_dir.glob("*.jsonl"))
-                meta_files = list(capture_dir.glob("*.meta.json"))
+                list(capture_dir.glob("*.meta.json"))
                 
                 if trace_files:
                     latest_trace = max(trace_files, key=lambda p: p.stat().st_mtime)
                     latest_meta = latest_trace.with_suffix(".meta.json")
                     
-                    print(f"\n[test_proxy_server] ✅ Capture files created:")
+                    print("\n[test_proxy_server] ✅ Capture files created:")
                     print(f"  Trace file: {latest_trace}")
                     print(f"  Meta file: {latest_meta}")
                     
                     # Verify trace file has content
                     with open(latest_trace, 'r') as f:
-                        lines = [l.strip() for l in f if l.strip()]
+                        lines = [line.strip() for line in f if line.strip()]
                         print(f"  Trace lines: {len(lines)}")
                         if lines:
                             try:
@@ -113,7 +112,7 @@ def test_proxy_capture(proxy_url: str, api_key: str) -> bool:
                     if latest_meta.exists():
                         with open(latest_meta, 'r') as f:
                             meta = json.load(f)
-                            print(f"\n[test_proxy_server] Meta file contents:")
+                            print("\n[test_proxy_server] Meta file contents:")
                             print(f"  Trace ID: {meta.get('trace_id')}")
                             print(f"  Method: {meta.get('request', {}).get('method')}")
                             print(f"  Body length: {meta.get('request', {}).get('body_len')}")
@@ -149,15 +148,15 @@ def main():
     print("\n[test_proxy_server] Checking if proxy server is running...")
     if not check_proxy_running(proxy_url):
         print(f"  ❌ Proxy server not running at {proxy_url}")
-        print(f"\n[test_proxy_server] Please start the proxy server first:")
-        print(f"  python -m capture.proxy_server \\")
-        print(f"    --upstream https://api.moonshot.ai/v1 \\")
-        print(f"    --bind 127.0.0.1 \\")
-        print(f"    --port 8081 \\")
-        print(f"    --out capture/raw")
+        print("\n[test_proxy_server] Please start the proxy server first:")
+        print("  python -m capture.proxy_server \\")
+        print("    --upstream https://api.moonshot.ai/v1 \\")
+        print("    --bind 127.0.0.1 \\")
+        print("    --port 8081 \\")
+        print("    --out capture/raw")
         return 1
     
-    print(f"  ✅ Proxy server is running")
+    print("  ✅ Proxy server is running")
     
     # Load API key
     api_key = load_api_key()
@@ -166,7 +165,7 @@ def main():
         print("[test_proxy_server] Please set MOONSHOT_API_KEY in .env.local")
         return 1
     
-    print(f"  ✅ API key loaded")
+    print("  ✅ API key loaded")
     
     # Test proxy capture
     success = test_proxy_capture(proxy_url, api_key)

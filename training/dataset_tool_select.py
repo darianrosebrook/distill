@@ -14,7 +14,7 @@ Loads tool_select.jsonl format:
     }
 }
 """
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from pathlib import Path
 import json
 import torch

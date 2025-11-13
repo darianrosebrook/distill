@@ -7,9 +7,7 @@ Author: @darianrosebrook
 """
 from __future__ import annotations
 
-import pytest
 import torch
-import torch.nn as nn
 from training.losses import CodeModePreferenceLoss
 
 
@@ -147,7 +145,7 @@ def test_code_mode_loss_vectorized_eligibility():
     seq_len = 10
     vocab_size = 1000
     
-    student_logits = torch.randn(batch_size, seq_len, vocab_size)
+    torch.randn(batch_size, seq_len, vocab_size)
     
     loss_module = CodeModePreferenceLoss(
         eligibility_rules={"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []},
@@ -166,8 +164,8 @@ def test_code_mode_loss_vectorized_eligibility():
     eligibility_mask = loss_module._compute_eligibility_mask(batch_meta, batch_size)
     
     assert eligibility_mask.shape == (batch_size,), "Mask should have batch dimension"
-    assert eligibility_mask[0].item() == True, "First sample should be eligible"
-    assert eligibility_mask[1].item() == False, "Second sample should be ineligible"
-    assert eligibility_mask[2].item() == True, "Third sample should be eligible"
-    assert eligibility_mask[3].item() == True, "Fourth sample should be eligible (large payload)"
+    assert eligibility_mask[0].item(), "First sample should be eligible"
+    assert not eligibility_mask[1].item(), "Second sample should be ineligible"
+    assert eligibility_mask[2].item(), "Third sample should be eligible"
+    assert eligibility_mask[3].item(), "Fourth sample should be eligible (large payload)"
 

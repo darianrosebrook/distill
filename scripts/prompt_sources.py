@@ -6,9 +6,8 @@ Provides prompts from different categories:
 - Domain-specific (coding, math, etc.)
 - Tool traces (JSON tool calls)
 """
-from typing import List, Dict, Any
+from typing import List
 import json
-from pathlib import Path
 
 
 def get_general_prompts(n: int = 100) -> List[str]:

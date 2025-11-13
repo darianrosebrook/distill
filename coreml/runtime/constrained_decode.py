@@ -23,8 +23,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Any, List, Optional, Set, Tuple, Iterable
 import json
-import math
 import re
+import numpy as np
 
 # -------------------------
 # Utilities
@@ -149,7 +149,7 @@ class JSONFSM:
         # This FSM is deliberately simplified: we enforce key/value separators, brackets balance,
         # and string delimiters. For practical tool-JSON it is sufficient.
 
-        buf = st.buffer.rstrip()
+        st.buffer.rstrip()
         # Are we currently inside an open string?
         inside_string = self._inside_string(st.buffer)
 
@@ -194,7 +194,7 @@ class JSONFSM:
         err = None
         # Heuristic completeness: valid JSON parses without exception and we are not in the middle of a string
         try:
-            obj = json.loads(s)
+            json.loads(s)
             complete = not self._inside_string(s)
         except Exception:
             complete = False

@@ -5,7 +5,7 @@ Tests QAT enablement logic, model quantization, and stability checks.
 """
 import torch
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 from training.distill_kd import (
     should_enable_qat,
@@ -78,7 +78,7 @@ class TestApplyQATToModel:
                     "clamp_pre_softmax": True,
                 }
                 
-                result = apply_qat_to_model(mock_model, qat_cfg, device)
+                apply_qat_to_model(mock_model, qat_cfg, device)
                 
                 mock_quantize.assert_called_once()
                 call_kwargs = mock_quantize.call_args[1]

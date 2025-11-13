@@ -57,16 +57,12 @@ def main():
 
     # Check for placeholder marker
     from pathlib import Path
-    skipped = 0
-    passed = 0
-    failed = 0
     
     if args.ml:
         ml_path = Path(args.ml)
         is_placeholder = (ml_path.parent / ".placeholder").exists() or (ml_path / ".placeholder").exists()
         if is_placeholder:
             print("[probes] SKIP parity – placeholder model detected")
-            skipped = 1
             # Write results JSON
             results_path = Path(args.ml).parent / "results.json"
             write_results_json(str(results_path), passed=0, skipped=1, failed=0)
@@ -128,12 +124,10 @@ def main():
             tol_rel = args.rel_err_tol * 10 if mse < 1e-6 else args.rel_err_tol
             
             if rel > tol_rel and mse > args.mse_tol:
-                failed = 1
                 print(f"FAIL {k_display}: rel={rel:.3e} mse={mse:.3e} > tol (rel_tol={tol_rel:.3e}, mse_tol={args.mse_tol:.3e})")
                 results_path = Path(args.ml).parent / "results.json"
                 write_results_json(str(results_path), passed=0, skipped=0, failed=1)
                 return 1
-        passed = 1
         print(f"OK. worst={worst}")
         results_path = Path(args.ml).parent / "results.json"
         write_results_json(str(results_path), passed=1, skipped=0, failed=0)
@@ -166,13 +160,11 @@ def main():
 
         # Very loose thresholds for smoke
         if np.isnan(mse) or np.isnan(rel) or rel > 0.2:
-            failed = 1
             print('[probes] FAIL thresholds')
             results_path = Path(args.ml).parent / "results.json"
             write_results_json(str(results_path), passed=0, skipped=0, failed=1)
             return 2
 
-        passed = 1
         print('[probes] PASS')
         results_path = Path(args.ml).parent / "results.json"
         write_results_json(str(results_path), passed=1, skipped=0, failed=0)

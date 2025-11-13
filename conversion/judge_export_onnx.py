@@ -6,7 +6,6 @@ import json
 import os
 import typer
 import torch
-import torch.nn as nn
 from pathlib import Path
 from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
 

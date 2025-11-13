@@ -64,7 +64,7 @@ def test_extraction_performance(mock_tokenizer):
     times = []
     for i in range(10):
         start = time.time()
-        targets = extract_process_step_targets(teacher_text, mock_tokenizer)
+        extract_process_step_targets(teacher_text, mock_tokenizer)
         elapsed = time.time() - start
         times.append(elapsed)
     
@@ -93,7 +93,7 @@ def test_verification_performance(mock_tokenizer):
     times = []
     for i in range(10):
         start = time.time()
-        result = verify_item(item, reg, tokenizer=mock_tokenizer)
+        verify_item(item, reg, tokenizer=mock_tokenizer)
         elapsed = time.time() - start
         times.append(elapsed)
     

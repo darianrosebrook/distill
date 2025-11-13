@@ -12,9 +12,8 @@ Implements:
 
 import os
 from enum import Enum
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, Tuple
 import torch
-import numpy as np
 
 
 class CAWSBudgetTier(Enum):

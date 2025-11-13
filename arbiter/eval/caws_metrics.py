@@ -2,9 +2,8 @@
 # CAWS evaluation metrics: pairwise accuracy, clause F1, claim P/R/F1
 # @author: @darianrosebrook
 
-from typing import List, Dict, Tuple
+from typing import List, Dict
 from dataclasses import dataclass
-import json
 
 
 @dataclass
@@ -229,12 +228,7 @@ def compute_claim_metrics(extracted_claims: List[Dict],
     # For extraction metrics: treat as set matching problem
     # For verification metrics: use verification_results status
     
-    # Build mapping from claim ID to claim for gold claims
-    gold_by_id = {claim.get('id', ''): claim for claim in gold_claims}
     gold_statements = {claim.get('statement', '') for claim in gold_claims}
-    
-    # Build mapping from claim ID to extracted claim
-    extracted_by_id = {claim.get('id', ''): claim for claim in extracted_claims}
     extracted_statements = {claim.get('statement', '') for claim in extracted_claims}
     
     # Extraction metrics: match by statement (exact match)

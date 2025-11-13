@@ -44,7 +44,7 @@ class TestCoTFreeValidation:
         try:
             # Should raise ValueError
             with pytest.raises(ValueError, match="CoT-free training.*teacher_reasoning_content"):
-                dataset = KDDataset(
+                KDDataset(
                     jsonl_path=temp_path,
                     tokenizer_path="gpt2",  # Use small tokenizer for testing
                 )

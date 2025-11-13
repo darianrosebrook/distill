@@ -6,7 +6,7 @@ import argparse
 import json
 import yaml
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -391,7 +391,7 @@ def main():
     clamp_pre_softmax = qat_cfg.get("clamp_pre_softmax", True)
     quantize_embeddings = qat_cfg.get("quantize_embeddings", False)
 
-    print(f"[quant_qat_int8] QAT config:")
+    print("[quant_qat_int8] QAT config:")
     print(f"  weight_bits={weight_bits}, act_bits={act_bits}")
     print(f"  fake_quant_in_attention={fake_quant_in_attention}")
     print(f"  clamp_pre_softmax={clamp_pre_softmax}")
@@ -454,7 +454,7 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"[quant_qat_int8] Starting QAT training:")
+    print("[quant_qat_int8] Starting QAT training:")
     print(f"  Device: {device}")
     print(f"  Steps: {args.steps}")
 

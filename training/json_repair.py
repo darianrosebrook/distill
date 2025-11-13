@@ -38,14 +38,14 @@ def validate_json(text: str) -> bool:
             try:
                 json.loads(match)
                 return True
-            except:
+            except json.JSONDecodeError:
                 continue
     
     # Try parsing entire text
     try:
         json.loads(text.strip())
         return True
-    except:
+    except json.JSONDecodeError:
         pass
     
     return False
@@ -70,14 +70,14 @@ def extract_json_from_text(text: str) -> Optional[str]:
             # Validate it's valid JSON
             json.loads(match)
             return match
-        except:
+        except json.JSONDecodeError:
             continue
     
     # Try parsing entire text
     try:
         json.loads(text.strip())
         return text.strip()
-    except:
+    except json.JSONDecodeError:
         pass
     
     return None

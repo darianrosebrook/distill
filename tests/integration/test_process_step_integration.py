@@ -8,14 +8,11 @@ Tests the complete flow from dataset generation to training:
 4. Training step uses targets in loss computation
 """
 import json
-import tempfile
-from pathlib import Path
 
 import pytest
 import torch
-import torch.nn as nn
 
-from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
+from models.student.architectures.gqa_transformer import StudentLM
 from training.dataset import KDDataset
 from training.distill_process import train_step_process
 from training.process_losses import process_supervision_loss
@@ -98,7 +95,7 @@ def test_dataset_loads_process_step_targets(temp_process_step_dataset, mock_toke
     """Test that dataset loads process-step supervision targets correctly."""
     # Mock the tokenizer loading
     import sys
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock
     
     mock_transformers = MagicMock()
     mock_auto_tokenizer_class = MagicMock()
@@ -111,7 +108,6 @@ def test_dataset_loads_process_step_targets(temp_process_step_dataset, mock_toke
         import importlib
         importlib.reload(sys.modules['training.dataset'])
     
-    from training.dataset import KDDataset
     import training.dataset as dataset_module
     dataset_module.HF_TOKENIZER_AVAILABLE = True
     dataset_module.AutoTokenizer = mock_auto_tokenizer_class
@@ -148,7 +144,7 @@ def test_dataset_loads_process_step_targets(temp_process_step_dataset, mock_toke
 def test_batch_contains_process_step_targets(temp_process_step_dataset, mock_tokenizer, device):
     """Test that batches contain process-step supervision targets."""
     import sys
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock
     from torch.utils.data import DataLoader
     
     mock_transformers = MagicMock()
@@ -161,7 +157,7 @@ def test_batch_contains_process_step_targets(temp_process_step_dataset, mock_tok
         import importlib
         importlib.reload(sys.modules['training.dataset'])
     
-    from training.dataset import KDDataset, collate_kd_batch
+    from training.dataset import collate_kd_batch
     import training.dataset as dataset_module
     dataset_module.HF_TOKENIZER_AVAILABLE = True
     dataset_module.AutoTokenizer = mock_auto_tokenizer_class
@@ -241,7 +237,7 @@ def test_process_supervision_loss_with_token_ids(mock_tokenizer, device):
 def test_training_step_with_process_step_targets(temp_process_step_dataset, mock_tokenizer, device, small_model_cfg):
     """Test that training step works with process-step supervision targets."""
     import sys
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock
     from torch.utils.data import DataLoader
     
     mock_transformers = MagicMock()
@@ -254,7 +250,7 @@ def test_training_step_with_process_step_targets(temp_process_step_dataset, mock
         import importlib
         importlib.reload(sys.modules['training.dataset'])
     
-    from training.dataset import KDDataset, collate_kd_batch
+    from training.dataset import collate_kd_batch
     import training.dataset as dataset_module
     dataset_module.HF_TOKENIZER_AVAILABLE = True
     dataset_module.AutoTokenizer = mock_auto_tokenizer_class

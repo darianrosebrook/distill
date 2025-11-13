@@ -5,7 +5,7 @@ Unit tests for latent mode detection and processing.
 
 import pytest
 import torch
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 from models.student.tokenizer.constants import BOT_TOKEN_ID, EOT_TOKEN_ID
 from runtime.engine.loop import LatentModeEngine

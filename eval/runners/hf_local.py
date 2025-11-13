@@ -160,7 +160,7 @@ class HFLocalRunner(Runner):
         for tool in tools:
             name = tool.get("name", "")
             desc = tool.get("description", "")
-            params = tool.get("parameters", {})
+            tool.get("parameters", {})
             tools_desc.append(f"- {name}: {desc}")
         
         tools_text = "\n".join(tools_desc)

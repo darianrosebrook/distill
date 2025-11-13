@@ -633,7 +633,6 @@ def synthesize_prompt(
         )
         tool_json = None
         start_tool = None
-        end_tool = None
         tool_jsons = []
         tool_results = []
     elif expected_behaviour == "decline":
@@ -644,7 +643,6 @@ def synthesize_prompt(
         )
         tool_json = None
         start_tool = None
-        end_tool = None
         tool_jsons = []
         tool_results = []
     elif adversarial and adversarial["type"] == "range_violation":
@@ -677,7 +675,7 @@ def synthesize_prompt(
             else:
                 teacher += "Integration: Based on the corrected search, here are the results..."
         start_tool = teacher.index(tool_json)
-        end_tool = start_tool + len(tool_json)
+        start_tool + len(tool_json)
         tool_jsons = [tool_json]
         tool_results = [tool_result]
     elif adversarial and adversarial["type"] == "malformed_json":
@@ -712,7 +710,7 @@ def synthesize_prompt(
                 teacher += "Integration: After reading the file, I found..."
         # Find the corrected JSON
         start_tool = teacher.rfind(tool_json)
-        end_tool = start_tool + len(tool_json) if start_tool >= 0 else None
+        start_tool + len(tool_json) if start_tool >= 0 else None
         tool_jsons = [tool_json] if start_tool >= 0 else []
         tool_results = [tool_result] if start_tool >= 0 else []
     elif adversarial and adversarial["type"] == "ambiguity":
@@ -724,7 +722,6 @@ def synthesize_prompt(
         )
         tool_json = None
         start_tool = None
-        end_tool = None
         tool_jsons = []
         tool_results = []
     else:
@@ -823,13 +820,12 @@ def synthesize_prompt(
             # For single call, use first tool_json for backward compatibility
             tool_json = tool_jsons[0] if tool_jsons else None
             start_tool = teacher.index(tool_jsons[0]) if tool_jsons else None
-            end_tool = start_tool + \
+            start_tool + \
                 len(tool_jsons[0]) if start_tool is not None else None
         else:
             teacher = "I'll proceed with the task."
             tool_json = None
             start_tool = None
-            end_tool = None
             tool_jsons = []
             tool_results = []
 

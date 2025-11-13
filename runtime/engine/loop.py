@@ -12,7 +12,6 @@ Handles token generation with latent span processing:
 import os
 from typing import Dict, Any, Optional, Tuple, List
 import torch
-import numpy as np
 
 from models.student.tokenizer.constants import BOT_TOKEN_ID, EOT_TOKEN_ID
 
@@ -210,7 +209,7 @@ class LatentModeEngine:
         self,
         input_ids: torch.Tensor,
         max_new_tokens: int = 256,
-        temperature: float = 0.0,
+        temperature: float = 1.0,
         return_halt_logits: bool = False,
     ) -> Dict[str, Any]:
         """
@@ -235,7 +234,7 @@ class LatentModeEngine:
             return self._generate_normal(input_ids, max_new_tokens, temperature, return_halt_logits)
         
         device = input_ids.device if isinstance(input_ids, torch.Tensor) else "cpu"
-        batch_size = input_ids.shape[0] if len(input_ids.shape) > 1 else 1
+        input_ids.shape[0] if len(input_ids.shape) > 1 else 1
         
         # Initialize state
         generated_tokens = []

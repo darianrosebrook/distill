@@ -4,7 +4,6 @@ Unit tests for latency-aware loss functions.
 Tests length-aware KD loss and early tool call loss.
 """
 import torch
-import pytest
 from unittest.mock import Mock
 
 from training.losses import length_aware_kd_loss, early_tool_call_loss

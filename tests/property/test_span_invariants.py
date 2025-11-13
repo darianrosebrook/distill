@@ -4,13 +4,11 @@ Property-based tests for span invariants using Hypothesis.
 Tests round-trip properties and normalization stability.
 """
 import pytest
-import hypothesis
 from hypothesis import given, strategies as st, settings, HealthCheck
 from unittest.mock import Mock
 
 from scripts.util_token_spans import (
     bytes_to_token_span,
-    byte_spans_to_token_spans,
     normalize_text_for_alignment,
 )
 
@@ -89,7 +87,7 @@ def test_span_round_trip_ascii(text, start, end, mock_fast_tokenizer):
     decoded_text = mock_fast_tokenizer.decode(token_ids, skip_special_tokens=True)
     
     # Re-encode and verify alignment
-    re_encoded = mock_fast_tokenizer.encode(decoded_text, add_special_tokens=False, return_offsets_mapping=True)
+    mock_fast_tokenizer.encode(decoded_text, add_special_tokens=False, return_offsets_mapping=True)
     re_token_span = bytes_to_token_span(decoded_text, 0, len(decoded_text.encode('utf-8')), mock_fast_tokenizer)
     
     # Verify token span is consistent (at least same length)

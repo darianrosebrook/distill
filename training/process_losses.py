@@ -11,7 +11,6 @@ import re
 from typing import Dict, Optional, List
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
 
@@ -29,14 +28,14 @@ def validate_json(text: str) -> bool:
             try:
                 json.loads(match)
                 return True
-            except:
+            except json.JSONDecodeError:
                 continue
 
     # Try parsing entire text
     try:
         json.loads(text.strip())
         return True
-    except:
+    except json.JSONDecodeError:
         pass
 
     return False
@@ -58,7 +57,7 @@ def extract_tool_call(text: str, tool_names: List[str]) -> Optional[Dict]:
             obj = json.loads(match)
             if isinstance(obj, dict) and 'name' in obj:
                 return obj
-        except:
+        except json.JSONDecodeError:
             continue
 
     # Try parsing entire text
@@ -66,7 +65,7 @@ def extract_tool_call(text: str, tool_names: List[str]) -> Optional[Dict]:
         obj = json.loads(text.strip())
         if isinstance(obj, dict) and 'name' in obj:
             return obj
-    except:
+    except json.JSONDecodeError:
         pass
 
     return None

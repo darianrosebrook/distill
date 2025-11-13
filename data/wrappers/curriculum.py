@@ -10,7 +10,7 @@ Progressive curriculum:
 # @author: @darianrosebrook
 
 import random
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 import torch
 
 from models.student.tokenizer.constants import BOT_TOKEN, EOT_TOKEN

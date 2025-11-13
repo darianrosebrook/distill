@@ -4,19 +4,15 @@ Integration tests for training pipeline.
 Tests the full training pipeline with small models to ensure components work together.
 """
 import json
-import tempfile
-from pathlib import Path
 
 import pytest
 import torch
-import torch.nn as nn
 
-from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
+from models.student.architectures.gqa_transformer import StudentLM
 from training.dataset import KDDataset, collate_kd_batch
 from training.losses import combined_kd_loss
-from training.distill_kd import main as distill_kd_main
 import sys
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 
 # Mock transformers before importing
@@ -30,7 +26,6 @@ if 'training.dataset' in sys.modules:
     import importlib
     importlib.reload(sys.modules['training.dataset'])
 
-from training.dataset import KDDataset, collate_kd_batch
 
 # Ensure HF_TOKENIZER_AVAILABLE is True in the module
 import training.dataset as dataset_module
@@ -117,7 +112,7 @@ class TestDatasetModelIntegration:
         # Get a sample
         sample = dataset[0]
         input_ids = sample["input_ids"].unsqueeze(0).to(device)  # Add batch dimension
-        attention_mask = sample["attention_mask"].unsqueeze(0).to(device)
+        sample["attention_mask"].unsqueeze(0).to(device)
         
         # Forward pass
         with torch.no_grad():
@@ -333,8 +328,6 @@ class TestProcessSupervisionIntegration:
             '{"name": "read_file", "arguments": {"path": "test.txt"}}',
         ]
         
-        target_tool_names = ["web_search", "read_file"]
-        tool_names = ["web_search", "read_file", "write_file"]
         
         # Compute process supervision loss
         # Note: tool_selection_loss may fail if logits don't match expected positions

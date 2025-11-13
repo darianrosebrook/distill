@@ -16,7 +16,7 @@ Author: @darianrosebrook
 import torch
 import torch.nn as nn
 from typing import Dict, Any, List, Optional
-from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
+from models.student.architectures.gqa_transformer import StudentLM
 from training.losses import (
     intermediate_layer_loss,
     self_evaluation_loss,
@@ -341,7 +341,7 @@ def example_combined_training_step(
         )
         student_hidden_states = None
     else:
-        student_logits = student_model(
+        student_model(
             input_ids, attention_mask=attention_mask)
         student_hidden_states = None
         eval_score = None

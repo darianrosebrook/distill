@@ -10,8 +10,7 @@ Tests:
 
 import pytest
 import torch
-import os
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from data.wrappers.curriculum import LatentCurriculum
 from runtime.engine.loop import LatentModeEngine
@@ -115,7 +114,7 @@ class TestLatentReasoningE2E:
         
         # Create mock halt head (linear layer: hidden_dim -> 2)
         hidden_dim = 128
-        halt_head = nn.Linear(hidden_dim, 2)
+        nn.Linear(hidden_dim, 2)
         
         # Create refinement controller with halt head enabled
         controller = RefinementController(
@@ -248,11 +247,40 @@ class TestLatentReasoningE2E:
         assert 4 <= training_loops <= 6, \
             f"Training loops should be in range [4, 6], got {training_loops}"
 
-    def test_toy_progressive_curriculum(self, mock_tokenizer):
+    def test_toy_progressive_curriculum(self):
         """Test curriculum progression: c=1 → c=2."""
+        # Create a proper mock tokenizer
+        class MockCurriculumTokenizer:
+            def __init__(self):
+                self.vocab = {
+                    '<bot>': 3,
+                    '<eot>': 4,
+                    'Step': 5, '1:': 6, 'First': 7,
+                    '2:': 8, 'Second': 9,
+                    '3:': 10, 'Third': 11,
+                    'Answer:': 12, '42': 13,
+                }
+
+            def encode(self, text, add_special_tokens=False):
+                """Simple tokenization by splitting."""
+                tokens = text.replace('\n', ' ').split()
+                # Map tokens to IDs, use hash for unknown tokens
+                token_ids = []
+                for token in tokens:
+                    if token in self.vocab:
+                        token_ids.append(self.vocab[token])
+                    else:
+                        token_ids.append(abs(hash(token)) % 1000 + 100)  # Avoid conflicts
+                return token_ids
+
+            def convert_tokens_to_ids(self, token):
+                return self.vocab.get(token, None)
+
+        mock_tokenizer = MockCurriculumTokenizer()
+
         # Test c=1: 1 latent slot per replaced step
         curriculum_c1 = LatentCurriculum(m=2, c=1, p=1.0)
-        
+
         example = {
             "prompt": "Solve:",
             "teacher_text": "Step 1: First\nStep 2: Second\nStep 3: Third\nAnswer: 42",
@@ -260,23 +288,23 @@ class TestLatentReasoningE2E:
             "answer": "42",
             "metadata": {},
         }
-        
+
         result_c1 = curriculum_c1.apply(example, mock_tokenizer)
-        
+
         # Verify c=1 curriculum applied
         assert "training_text" in result_c1
         assert result_c1["metadata"]["latent_curriculum_applied"] is True
-        
+
         # Count latent slots in training text
         training_text_c1 = result_c1["training_text"]
         bot_count_c1 = training_text_c1.count("<bot>")
-        
+
         # With m=2, c=1: should have 2 latent slots (1 per replaced step)
         assert bot_count_c1 == 2, f"With c=1, should have 2 latent slots (got {bot_count_c1})"
-        
+
         # Test c=2: 2 latent slots per replaced step
         curriculum_c2 = LatentCurriculum(m=2, c=2, p=1.0)
-        
+
         result_c2 = curriculum_c2.apply(example, mock_tokenizer)
         
         # Verify c=2 curriculum applied

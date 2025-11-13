@@ -5,10 +5,9 @@ Tests the complete flow from generation → extraction → verification.
 """
 import pytest
 import json
-import tempfile
 import hashlib
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from tools.schema_registry import ToolSchemaRegistry
 
@@ -161,9 +160,7 @@ def test_pipeline_determinism(mock_tokenizer):
 def test_determinism_full_pipeline(mock_tokenizer, tmp_path):
     """Test end-to-end determinism: generate→extract→verify twice with same seed, assert identical SHA256."""
     import subprocess
-    import hashlib
     import sys
-    from pathlib import Path
     
     # Create two temporary directories for two runs
     run1_dir = tmp_path / "run1"
@@ -364,7 +361,7 @@ def test_pipeline_performance(mock_tokenizer):
     
     # Time verification
     start = time.time()
-    result = verify_item(processed, reg, tokenizer=mock_tokenizer)
+    verify_item(processed, reg, tokenizer=mock_tokenizer)
     verify_time = time.time() - start
     
     # Should complete in reasonable time (< 1 second per sample)

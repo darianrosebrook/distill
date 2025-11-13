@@ -9,7 +9,6 @@ Usage:
     logits = teacher_logits(token_ids, vocab_size=512)
 """
 import torch
-import torch.nn.functional as F
 
 
 def teacher_logits(token_ids: torch.Tensor, vocab_size: int = 512) -> torch.Tensor:

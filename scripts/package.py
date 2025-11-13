@@ -1,4 +1,5 @@
-import typer, os
+import typer
+import os
 def main(model: str = typer.Option(...), out: str = typer.Option("dist/")):
     os.makedirs(out, exist_ok=True)
     print(f"Packaging {model} into {out} (stub).")

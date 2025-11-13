@@ -6,7 +6,6 @@ Tests:
 2. Structure elements are detected
 3. Structure loss penalizes lower student scores
 """
-import torch
 from training.caws_structure import caws_structure_score, extract_caws_structure_elements, batch_caws_structure_score
 from training.losses import caws_structure_loss
 

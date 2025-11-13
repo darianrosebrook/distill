@@ -9,7 +9,7 @@ Reference: docs/M_SERIES_ADVANCED_OPTIMIZATIONS.md Phase 8
 from __future__ import annotations
 import time
 import random
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Tuple
 import numpy as np
 
 try:
@@ -96,8 +96,6 @@ class SpeculativeDecoder:
             - tps: Tokens per second
         """
         tokens = []
-        drafter_kv_cache = None
-        worker_kv_cache = None
 
         # Measure TTFT
         ttft_start = time.perf_counter()

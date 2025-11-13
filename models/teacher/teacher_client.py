@@ -15,8 +15,7 @@ Usage:
     # Sample with logits
     results = client.sample(["What is 2+2?"], return_logits=True)
 """
-from typing import List, Dict, Any, Optional, Union
-import json
+from typing import List, Dict, Any, Optional
 import time
 import os
 from pathlib import Path
@@ -26,7 +25,6 @@ from dataclasses import dataclass
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-import numpy as np
 
 try:
     import torch
@@ -256,7 +254,7 @@ class TeacherClient:
         # Check response headers for rate limit info
         rpm_header = response.headers.get("x-ratelimit-limit-rpm") or response.headers.get("ratelimit-limit-rpm")
         tpd_header = response.headers.get("x-ratelimit-limit-tpd") or response.headers.get("ratelimit-limit-tpd")
-        tpm_header = response.headers.get("x-ratelimit-limit-tpm") or response.headers.get("ratelimit-limit-tpm")
+        response.headers.get("x-ratelimit-limit-tpm") or response.headers.get("ratelimit-limit-tpm")
         
         # Infer tier from rate limits if available
         if rpm_header:
@@ -526,7 +524,7 @@ class TeacherClient:
                 elif any(rate_limit_headers.values()):
                     print(f"[TeacherClient] Rate limit headers: {', '.join(f'{k}={v}' for k, v in rate_limit_headers.items() if v)}")
                 else:
-                    print(f"[TeacherClient] No rate limit headers found in response")
+                    print("[TeacherClient] No rate limit headers found in response")
                 
                 # Try to detect tier from ANY response (success or error) - tier info may be in headers
                 # This is important because tier detection should happen even on error responses
@@ -649,7 +647,7 @@ class TeacherClient:
                     # Note: Tier detection already happened above, so we should have detected tier from headers if available
                     
                     if "token" in error_msg.lower() or "limit" in error_msg.lower():
-                        print(f"[TeacherClient] Token limit exceeded - not retrying")
+                        print("[TeacherClient] Token limit exceeded - not retrying")
                         return {
                             "prompt": prompt,
                             "text": "",
@@ -657,7 +655,7 @@ class TeacherClient:
                             "error": f"Token limit exceeded: {error_msg}",
                         }
                     else:
-                        print(f"[TeacherClient] Other 400 error - not retrying")
+                        print("[TeacherClient] Other 400 error - not retrying")
                         return {
                             "prompt": prompt,
                             "text": "",
@@ -725,7 +723,7 @@ class TeacherClient:
             except requests.exceptions.RequestException as e:
                 # Other request errors
                 print(f"[TeacherClient] Request error (attempt {retry_count + 1}/{max_attempts}): {e}")
-                print(f"[TeacherClient] Not retrying - fatal request error")
+                print("[TeacherClient] Not retrying - fatal request error")
                 last_exception = e
                 break
             

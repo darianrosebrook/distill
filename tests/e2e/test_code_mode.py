@@ -12,7 +12,6 @@ Author: @darianrosebrook
 """
 from __future__ import annotations
 
-import pytest
 import re
 from typing import Dict, Any, List
 
@@ -283,32 +282,30 @@ class TestCodeModeExecutionCorrectness:
         For large-blob scenarios, require observable side-effect (file write with hash).
         """
         import hashlib
-        import os
-        import tempfile
         
         # Simulate large blob (20k chars)
         large_blob = "x" * 20000
-        blob_hash = hashlib.sha256(large_blob.encode()).hexdigest()
+        hashlib.sha256(large_blob.encode()).hexdigest()
         
         # Model output that prints TS but doesn't execute
-        model_output_pretty_only = f"""
+        model_output_pretty_only = """
 import * as gdrive from './servers/google-drive';
-const doc = await gdrive.getDocument({{ documentId: 'abc' }});
+const doc = await gdrive.getDocument({ documentId: 'abc' });
 // Pretty TS code but never executed
 console.log('Processing document...');
 """
         
         # Model output that executes and writes side-effect
-        model_output_with_execution = f"""
+        model_output_with_execution = """
 import * as gdrive from './servers/google-drive';
 import * as fs from 'fs';
-const doc = await gdrive.getDocument({{ documentId: 'abc' }});
+const doc = await gdrive.getDocument({ documentId: 'abc' });
 const filtered = doc.content.split('\\n').filter(line => line.length > 10);
 const hash = require('crypto').createHash('sha256').update(doc.content).digest('hex');
-fs.writeFileSync('./workspace/report.json', JSON.stringify({{
+fs.writeFileSync('./workspace/report.json', JSON.stringify({
   hash: hash,
   count: filtered.length
-}}));
+}));
 console.log('Report written');
 """
         
@@ -400,7 +397,7 @@ def test_single_small_tool_exempt():
     eligibility_mask = loss_module._compute_eligibility_mask(batch_meta, batch_size)
     
     # Should be ineligible
-    assert eligibility_mask[0].item() == False, "Single small tool should not be eligible"
+    assert not eligibility_mask[0].item(), "Single small tool should not be eligible"
     
     # Loss should be zero for ineligible cases
     loss = loss_module(

@@ -4,13 +4,10 @@
 
 from arbiter.claims.pipeline import (
     CAWSClaimVerification,
-    ClaimsPolicy,
-    ClaimCategory,
     AtomicClaim,
     ClaimElements,
 )
 import json
-import pytest
 from pathlib import Path
 
 # Import from arbiter.claims.pipeline

@@ -7,7 +7,7 @@ These are proxies for the actual CoreML/ANE measurements.
 Reference: inference-speed-optimization-during-distillation-c3d3cffc.plan.md Phase 4
 """
 import time
-from typing import Dict, Any, Optional, List
+from typing import Dict, List
 import torch
 import torch.nn as nn
 

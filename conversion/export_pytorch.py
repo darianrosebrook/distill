@@ -23,8 +23,13 @@ class PrefillWrapper(nn.Module):
         super().__init__()
         self.model = model
 
-    def forward(self, input_ids: torch.Tensor, attn_mask: torch.Tensor = None) -> torch.Tensor:
-        return self.model(input_ids, attn_mask)
+    def forward(self, input_ids: torch.Tensor, attn_mask: torch.Tensor = None) -> tuple:
+        outputs = self.model(input_ids, attn_mask, return_halt_logits=getattr(
+            self.model, 'use_halt_head', False))
+        if isinstance(outputs, tuple):
+            return outputs  # (logits, halt_logits) or (logits,)
+        else:
+            return (outputs,)  # Wrap single tensor in tuple
 
 
 class DecodeWrapper(nn.Module):
@@ -57,14 +62,25 @@ class DecodeWrapper(nn.Module):
             else:
                 kv_list.append(None)
 
-        logits, updated_caches = self.model.forward_decode(
-            input_ids, kv_list, pos=0)
+        outputs = self.model.forward_decode(
+            input_ids, kv_list, pos=0, return_halt_logits=getattr(self.model, 'use_halt_head', False))
 
-        # Flatten updated caches for export
-        outputs = [logits]
-        for k_cache, v_cache in updated_caches:
-            outputs.extend([k_cache, v_cache])
-        return tuple(outputs)
+        if isinstance(outputs, tuple) and len(outputs) == 3:
+            # (logits, updated_caches, halt_logits)
+            logits, updated_caches, halt_logits = outputs
+            # Flatten updated caches for export
+            export_outputs = [logits, halt_logits]
+            for k_cache, v_cache in updated_caches:
+                export_outputs.extend([k_cache, v_cache])
+            return tuple(export_outputs)
+        else:
+            # (logits, updated_caches)
+            logits, updated_caches = outputs
+            # Flatten updated caches for export
+            export_outputs = [logits]
+            for k_cache, v_cache in updated_caches:
+                export_outputs.extend([k_cache, v_cache])
+            return tuple(export_outputs)
 
 
 def export_prefill(model: StudentLM, example_input: torch.Tensor, output_path: Path, enumerated_T: list):
@@ -87,17 +103,25 @@ def export_prefill(model: StudentLM, example_input: torch.Tensor, output_path: P
     print(f"[export_pytorch] Saved prefill model: {output_path}")
 
     # Create contract for prefill
+    outputs = [
+        {"name": "logits", "dtype": "float16", "shape": ["B", "T", "V"]}
+    ]
+
+    # Add halt logits if model supports it
+    if getattr(model, 'use_halt_head', False):
+        outputs.append(
+            {"name": "halt_logits", "dtype": "float16", "shape": ["B", "2"]})
+
     contract = {
         "inputs": [
             {"name": "input_ids", "dtype": "int32", "shape": ["B", "T"]},
             {"name": "attn_mask", "dtype": "int32",
                 "shape": ["B", "T"], "optional": True}
         ],
-        "outputs": [
-            {"name": "logits", "dtype": "float16", "shape": ["B", "T", "V"]}
-        ],
+        "outputs": outputs,
         "mode": "prefill",
         "enumerated_T": enumerated_T,
+        "use_halt_head": getattr(model, 'use_halt_head', False)
     }
     contract_path = output_path.parent / f"{output_path.stem}_contract.json"
     with open(contract_path, 'w') as f:
@@ -131,18 +155,29 @@ def export_decode(model: StudentLM, output_path: Path, n_layers: int, n_kv_heads
     print(f"[export_pytorch] Saved decode model: {output_path}")
 
     # Create contract for decode
+    outputs = [
+        {"name": "logits", "dtype": "float16", "shape": ["B", 1, "V"]},
+    ]
+
+    kv_cache_start_idx = 1  # After logits
+    # Add halt logits if model supports it
+    if getattr(model, 'use_halt_head', False):
+        outputs.append(
+            {"name": "halt_logits", "dtype": "float16", "shape": ["B", "2"]})
+        kv_cache_start_idx = 2  # After logits and halt_logits
+
     contract = {
         "inputs": [
             {"name": "input_ids", "dtype": "int32", "shape": ["B", 1]},
         ],
-        "outputs": [
-            {"name": "logits", "dtype": "float16", "shape": ["B", 1, "V"]},
-        ],
+        "outputs": outputs,
         "mode": "decode",
         "kv_cache_outputs": n_layers * 2,  # k_cache and v_cache per layer
+        "kv_cache_start_idx": kv_cache_start_idx,
         "n_layers": n_layers,
         "n_kv_heads": n_kv_heads,
         "d_head": d_head,
+        "use_halt_head": getattr(model, 'use_halt_head', False)
     }
     # Add KV cache inputs to contract
     for i in range(n_layers):

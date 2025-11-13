@@ -268,7 +268,7 @@ def summarize_results(
     speed_gates_ok = True
     speed_gates_result = None
     if speed_metrics is not None:
-        from eval.scoring.scorer import evaluate_speed_gates, load_baseline_speed_metrics
+        from eval.scoring.scorer import evaluate_speed_gates
         from pathlib import Path
 
         baseline_metrics = None

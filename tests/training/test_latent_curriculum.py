@@ -5,7 +5,7 @@ Unit tests for latent curriculum wrapper.
 
 import pytest
 import torch
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 from data.wrappers.curriculum import LatentCurriculum
 from models.student.tokenizer.constants import BOT_TOKEN, EOT_TOKEN

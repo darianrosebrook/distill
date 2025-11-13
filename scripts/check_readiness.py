@@ -33,7 +33,6 @@ def check_dependencies():
         results['requests'] = False
     
     try:
-        from urllib3.util.retry import Retry
         import urllib3
         print(f"✅ urllib3 {urllib3.__version__}")
         results['urllib3'] = True
@@ -100,7 +99,6 @@ def check_code_imports():
     results = {}
     
     try:
-        from models.teacher.teacher_client import TeacherClient
         print("✅ TeacherClient imports successfully")
         results['teacher_client'] = True
     except Exception as e:
@@ -108,7 +106,6 @@ def check_code_imports():
         results['teacher_client'] = False
     
     try:
-        from scripts.prompt_sources import get_prompt_mix
         print("✅ prompt_sources imports successfully")
         results['prompt_sources'] = True
     except Exception as e:

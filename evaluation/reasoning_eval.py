@@ -234,7 +234,7 @@ def main():
                     test_prompts.append(json.loads(line))
     else:
         test_prompts = get_reasoning_prompts()
-        print(f"[reasoning_eval] Using default reasoning prompts")
+        print("[reasoning_eval] Using default reasoning prompts")
     
     # Run evaluation
     print(f"[reasoning_eval] Evaluating on {len(test_prompts)} test cases...")
@@ -258,9 +258,9 @@ def main():
     with open(output_path, 'w') as f:
         json.dump(report, f, indent=2)
     
-    print(f"[reasoning_eval] ✅ Evaluation complete:")
+    print("[reasoning_eval] ✅ Evaluation complete:")
     print(f"  Validity rate: {results['validity_rate']:.2%}")
-    print(f"  Category breakdown:")
+    print("  Category breakdown:")
     for cat, stats in results['category_stats'].items():
         print(f"    {cat}: {stats['validity_rate']:.2%} ({stats['valid']}/{stats['total']})")
     print(f"  Report saved to: {output_path}")

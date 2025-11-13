@@ -13,9 +13,7 @@ from arbiter.claims.pipeline import (
     EntailmentJudge,
     ClaimsPolicy,
 )
-import json
 import hashlib
-import pytest
 
 import sys
 from pathlib import Path
@@ -84,7 +82,7 @@ def default_verifier(ent_table=None,
                      contradict_min=0.55,
                      insufficient_min=0.55) -> CAWSClaimVerification:
     # Create permissive policy for tests to avoid policy gate blocking
-    from arbiter.claims.pipeline import ClaimsPolicy, ClaimCategory
+    from arbiter.claims.pipeline import ClaimsPolicy
     test_policy = ClaimsPolicy(
         require_artifacts={},  # No artifact requirements for tests
         banned_terms=[],  # No banned terms for tests
@@ -127,8 +125,7 @@ def test_outcome_1_identical_claim_and_cmax_verified_when_covered():
     # entailment table: support for (Ec -> c), (Emax -> cmax), (Ec -> cmax) all strong
     ent_table = {
         (evid["evidence"][0]["text"], c_text): {"support": 0.95, "contradict": 0.0, "insufficient": 0.05},
-        # cmax == c
-        (evid["evidence"][0]["text"], c_text): {"support": 0.95, "contradict": 0.0, "insufficient": 0.05},
+        # cmax == c (same as above for testing)
     }
 
     verifier = default_verifier(ent_table=ent_table)

@@ -11,7 +11,6 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
 import time
-import torch
 
 
 class ModelRole(Enum):

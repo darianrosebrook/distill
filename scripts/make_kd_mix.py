@@ -16,7 +16,7 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 
 from models.teacher.teacher_client import TeacherClient
 from scripts.prompt_sources import get_prompt_mix, load_prompts_from_file
@@ -119,12 +119,12 @@ def main():
                 print(f"[make_kd_mix] WARN: Delay ({args.delay}s) doesn't match tier recommendation ({tier_limits.delay}s)")
     
     # Health check with retry
-    print(f"[make_kd_mix] Checking API health...")
+    print("[make_kd_mix] Checking API health...")
     if not client.health_check():
-        print(f"[make_kd_mix] WARN: Teacher health check failed, continuing anyway...")
-        print(f"[make_kd_mix] WARN: This may indicate network issues or API unavailability")
+        print("[make_kd_mix] WARN: Teacher health check failed, continuing anyway...")
+        print("[make_kd_mix] WARN: This may indicate network issues or API unavailability")
     else:
-        print(f"[make_kd_mix] API health check passed")
+        print("[make_kd_mix] API health check passed")
     
     # Load or generate prompts
     if args.prompts_file:
@@ -201,11 +201,11 @@ def main():
             
             # Check for specific error types
             if "rate limit" in error_msg.lower() or "429" in error_msg:
-                print(f"[make_kd_mix] Rate limit hit, consider increasing --delay or upgrading tier")
+                print("[make_kd_mix] Rate limit hit, consider increasing --delay or upgrading tier")
             elif "token" in error_msg.lower() and "limit" in error_msg.lower():
-                print(f"[make_kd_mix] Token limit exceeded, consider reducing --max-tokens")
+                print("[make_kd_mix] Token limit exceeded, consider reducing --max-tokens")
             elif "connection" in error_msg.lower() or "network" in error_msg.lower():
-                print(f"[make_kd_mix] Network error, will retry on next attempt")
+                print("[make_kd_mix] Network error, will retry on next attempt")
         
         # Progress update
         if (i + 1) % 100 == 0:

@@ -8,7 +8,6 @@ Trains model to:
 Uses constrained decoding during training to ensure valid JSON.
 """
 import argparse
-import json
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -21,7 +20,7 @@ import yaml
 from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
 from training.dataset_tool_select import ToolSelectDataset, collate_tool_select_batch
 from training.process_losses import json_validity_loss, tool_selection_loss
-from training.tracing import TrainingTracer, create_tracer_from_config
+from training.tracing import create_tracer_from_config
 from coreml.runtime.constrained_decode import JSONConstrainedDecoder
 
 
@@ -59,7 +58,7 @@ def create_model(cfg: Dict[str, Any], device: torch.device) -> nn.Module:
             model.load_state_dict(checkpoint['model_state_dict'], strict=False)
         else:
             model.load_state_dict(checkpoint, strict=False)
-        print(f"[distill_tool_select] Checkpoint loaded")
+        print("[distill_tool_select] Checkpoint loaded")
     
     model = model.to(device)
     return model

@@ -10,9 +10,7 @@ Author: @darianrosebrook
 """
 import pytest
 import torch
-import os
-from unittest.mock import Mock, patch
-from typing import Dict, Any, List
+from unittest.mock import Mock
 
 from training.losses import CodeModePreferenceLoss, combined_kd_loss
 from data.wrappers.curriculum import LatentCurriculum
@@ -209,7 +207,7 @@ class TestCombinedMilestones:
         - TS API calls can be generated within latent spans
         - Code-mode loss applies to eligible scenarios even with latent curriculum
         """
-        device = torch.device("cpu")
+        torch.device("cpu")
 
         # Create example that's eligible for both features
         example = {
@@ -292,11 +290,6 @@ class TestCombinedMilestones:
 
         # Verify code-mode eligible task respects CAWS tier
         # Code-mode doesn't change CAWS budget limits
-        code_mode_eligible_meta = {
-            "tool_count": 2,
-            "intermediate_sizes": [15000],
-            "pii_tags_present": False,
-        }
 
         # Code-mode eligibility doesn't affect CAWS tier limits
         # Both features work independently

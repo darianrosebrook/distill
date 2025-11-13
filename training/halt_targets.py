@@ -11,9 +11,7 @@ Derives supervision targets from:
 
 from typing import Dict, Any, Optional, List
 import torch
-import torch.nn.functional as F
 
-from runtime.orchestration.refine import RefinementController
 
 
 class HaltHeadTargets:

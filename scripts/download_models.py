@@ -123,7 +123,7 @@ def main():
             print("=" * 60)
             print(f"\nTokenizer location: {tokenizer_dir}")
             print("\nTo use this tokenizer, update your config:")
-            print(f"  io:")
+            print("  io:")
             print(f"    tokenizer_path: \"{tokenizer_dir.absolute()}\"")
             print("\nOr create a symlink:")
             print(f"  ln -s {tokenizer_dir.absolute()} models/student/tokenizer")

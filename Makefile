@@ -66,12 +66,30 @@ pytorch: pytorch-worker pytorch-judge
 
 # CoreML conversion (PyTorch backend - production)
 coreml-worker:
-	python -m conversion.convert_coreml --backend pytorch --in models/student/exported/student_fp16.pt --out coreml/artifacts/worker/model.mlpackage --contract models/student/exported/contract.json
+	python -m conversion.convert_coreml --backend pytorch --in models/student/exported/student_fp16.pt --out coreml/artifacts/worker/model.mlpackage --contract models/student/exported/student_fp16_contract.json
 
 coreml-judge:
 	python -m conversion.convert_coreml --backend pytorch --in arbiter/judge_training/artifacts/exported/judge_prefill_T512.pt --out coreml/artifacts/judge/model.mlpackage
 
 coreml: coreml-worker coreml-judge
+
+# Deployment helpers
+deploy-runtime-config:
+	python -m scripts.deploy_model \
+		--checkpoint models/student/checkpoints/latest.pt \
+		--out-dir models/student/deployed/ \
+		--export-pytorch \
+		--latent-mode \
+		--caws-tier tier_2
+
+deploy-full:
+	python -m scripts.deploy_model \
+		--checkpoint models/student/checkpoints/latest.pt \
+		--out-dir models/student/deployed/ \
+		--export-pytorch \
+		--export-coreml \
+		--latent-mode \
+		--caws-tier tier_2
 
 # Knowledge Distillation Dataset Generation
 teacher-audit:

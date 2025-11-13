@@ -8,8 +8,6 @@ Tests:
 4. PII redaction
 5. URL allowlist
 """
-import pytest
-from unittest.mock import Mock, patch
 
 
 class TestInputValidation:

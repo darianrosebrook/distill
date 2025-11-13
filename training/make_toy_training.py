@@ -14,11 +14,9 @@ Usage:
 """
 import argparse
 import json
-import random
 from pathlib import Path
 
 import torch
-import torch.nn as nn
 
 from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
 
@@ -216,14 +214,14 @@ def main():
     print(f"Dataset: {dataset_path} ({args.samples} samples)")
     print(f"Config: {config_path}")
     print(f"Model: {checkpoint_path}")
-    print(f"\nModel specs:")
+    print("\nModel specs:")
     print(f"  d_model: {args.dmodel}")
     print(f"  n_layers: {args.nlayers}")
     print(f"  vocab_size: {args.vocab}")
-    print(f"\nTraining specs:")
+    print("\nTraining specs:")
     print(f"  Steps: {args.steps}")
-    print(f"  Batch size: 1 * 2 = 2")
-    print(f"  Sequence length: 128")
+    print("  Batch size: 1 * 2 = 2")
+    print("  Sequence length: 128")
     print("\nTo test training:")
     print(f"  python -m training.distill_kd --config {config_path}")
     print("="*60)

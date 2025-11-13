@@ -6,7 +6,7 @@ Tests TTFT/TPS/TTFA measurement and aggregation.
 import time
 import torch
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from training.speed_metrics import (
     measure_proxy,

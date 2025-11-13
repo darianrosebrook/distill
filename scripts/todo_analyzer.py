@@ -44,12 +44,11 @@ criteria, dependencies, and governance information.
 @version: 2.0.0
 """
 
-import os
 import re
 import json
 from pathlib import Path
 from collections import defaultdict, Counter
-from typing import Any, Dict, List, Set, Tuple, Optional
+from typing import Any, Dict, List, Tuple, Optional
 
 
 class HiddenTodoAnalyzer:
@@ -939,7 +938,7 @@ class HiddenTodoAnalyzer:
 
     def _detect_js_code_stubs(self, lines: List[str], patterns: Dict[str, re.Pattern]) -> List[Dict[str, Any]]:
         stubs: List[Dict[str, Any]] = []
-        total_lines = len(lines)
+        len(lines)
 
         for idx, raw_line in enumerate(lines, 1):
             stripped = raw_line.strip()
@@ -2005,12 +2004,12 @@ def main():
     print(f"Low confidence (<0.6): {summary['low_confidence_todos']}")
     print(f"Confidence threshold: {summary['min_confidence_threshold']}")
 
-    print(f"\nFiles by language:")
+    print("\nFiles by language:")
     for lang, count in sorted(summary['language_counts'].items()):
         print(f"  {lang}: {count} files")
 
     if summary['pattern_counts']:
-        print(f"\nTop patterns found:")
+        print("\nTop patterns found:")
         for pattern, count in sorted(summary['pattern_counts'].items(), key=lambda x: x[1], reverse=True)[:15]:
             if count > 0:
                 print(f"  {pattern}: {count}")
@@ -2049,7 +2048,7 @@ def main():
             print(
                 f"\n⚠️  Found {total_hidden_todos} hidden TODOs - consider addressing them")
     else:
-        print(f"\n✅ No hidden TODOs found - good job!")
+        print("\n✅ No hidden TODOs found - good job!")
 
 
 if __name__ == '__main__':

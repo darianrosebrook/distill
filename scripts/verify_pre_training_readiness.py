@@ -28,7 +28,6 @@ def check_dataset_format(dataset_path: Path) -> tuple[bool, str]:
     if not dataset_path.exists():
         return False, f"Dataset file not found: {dataset_path}"
     
-    reasoning_content_found = False
     process_targets_found = False
     sample_count = 0
     
@@ -43,7 +42,6 @@ def check_dataset_format(dataset_path: Path) -> tuple[bool, str]:
                 
                 # Check for reasoning_content (should NOT exist)
                 if "teacher_reasoning_content" in sample and sample["teacher_reasoning_content"]:
-                    reasoning_content_found = True
                     return False, f"Line {line_num}: teacher_reasoning_content found (violates ToS)"
                 
                 # Check for process-step targets (should exist)

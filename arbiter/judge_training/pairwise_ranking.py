@@ -8,7 +8,7 @@ import typer
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Dict
 from dataclasses import dataclass
 from pathlib import Path
 from torch.utils.data import DataLoader
@@ -216,7 +216,7 @@ def main(config: str = typer.Argument(...)):
     val_every = train_cfg.get("val_every", 1000)
     save_every = train_cfg.get("save_every", 2000)
 
-    print(f"[pairwise_ranking] Starting training:")
+    print("[pairwise_ranking] Starting training:")
     print(f"  Total steps: {total_steps}")
     print(f"  Batch size: {batch_size}")
     print(f"  Learning rate: {lr}")
