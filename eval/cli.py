@@ -98,7 +98,8 @@ def sha256_file_excluding_header(path: str) -> str:
         first = f.readline()
         try:
             obj = json.loads(first)
-            has_header = isinstance(obj, dict) and obj.get("__header__") is True
+            has_header = isinstance(obj, dict) and obj.get(
+                "__header__") is True
         except Exception:
             has_header = False
         if not has_header:
@@ -159,7 +160,8 @@ def select_shard(
             # If no sample_id, synthesize stable ID from row
             if not sample_id:
                 row_json = json.dumps(item, sort_keys=True, ensure_ascii=False)
-                sample_id = hashlib.sha256(row_json.encode("utf-8")).hexdigest()
+                sample_id = hashlib.sha256(
+                    row_json.encode("utf-8")).hexdigest()
 
         if sample_id:
             assigned_shard = stable_shard(sample_id, num_shards)
@@ -172,13 +174,16 @@ def select_shard(
 def main() -> None:
     ap = argparse.ArgumentParser("Tool-Integration Evaluation Harness")
     ap.add_argument("--runner", required=True, choices=RUNNERS.keys())
-    ap.add_argument("--model", required=True, help="Model name or local checkpoint path")
-    ap.add_argument("--in", dest="inp", required=True, help="Input dataset JSONL (verified)")
+    ap.add_argument("--model", required=True,
+                    help="Model name or local checkpoint path")
+    ap.add_argument("--in", dest="inp", required=True,
+                    help="Input dataset JSONL (verified)")
     ap.add_argument("--out", required=True, help="Output results JSONL")
     ap.add_argument("--report", required=True, help="Summary report JSON")
-    ap.add_argument("--fixtures", required=True, help="Fixtures directory for ToolBroker")
+    ap.add_argument("--fixtures", required=True,
+                    help="Fixtures directory for ToolBroker")
     ap.add_argument("--comprehensive", action="store_true",
-                   help="Run comprehensive evaluation with performance benchmarks (toy models only)")
+                    help="Run comprehensive evaluation with performance benchmarks (toy models only)")
     ap.add_argument(
         "--prompt-wrapper",
         default=None,
@@ -198,7 +203,8 @@ def main() -> None:
     )
     ap.set_defaults(fail_on_fingerprint_mismatch=True)
     ap.add_argument("--fail-on-gate-failure", action="store_true")
-    ap.add_argument("--no-fail-on-gate-failure", dest="fail_on_gate_failure", action="store_false")
+    ap.add_argument("--no-fail-on-gate-failure",
+                    dest="fail_on_gate_failure", action="store_false")
     ap.set_defaults(fail_on_gate_failure=True)
     ap.add_argument(
         "--determinism-mode",
@@ -273,7 +279,8 @@ def main() -> None:
         hardware_profile = {"key": profile.key, "config": profile.config}
 
         batch_policy = BatchPolicy(hardware_profile=hardware_profile)
-        selected_batch = batch_policy.select_batch_size(workload_type=args.workload_type)
+        selected_batch = batch_policy.select_batch_size(
+            workload_type=args.workload_type)
         print(
             f"[eval/cli] Batch policy: workload_type={args.workload_type}, batch_size={selected_batch}"
         )
@@ -319,7 +326,8 @@ def main() -> None:
                     )
                     runtime_config.curriculum_probability = 1.0  # Full curriculum for evaluation
             elif eval_latent and latent_config_path.exists() and not YAML_AVAILABLE:
-                print("[eval/cli] WARN: YAML not available, skipping latent config loading")
+                print(
+                    "[eval/cli] WARN: YAML not available, skipping latent config loading")
 
             if eval_code_mode and code_mode_config_path.exists() and YAML_AVAILABLE:
                 with open(code_mode_config_path, "r") as f:
@@ -327,7 +335,8 @@ def main() -> None:
                     gates = code_mode_config.get("gates", {})
                     runtime_config.latent_mode_enabled = False  # Code mode doesn't use latent
             elif eval_code_mode and code_mode_config_path.exists() and not YAML_AVAILABLE:
-                print("[eval/cli] WARN: YAML not available, skipping code mode config loading")
+                print(
+                    "[eval/cli] WARN: YAML not available, skipping code mode config loading")
                 # Code mode settings would go here if needed
 
             print(
@@ -420,7 +429,8 @@ def main() -> None:
             name = call.get("name")
             args_obj = call.get("arguments", {})
             result = broker.call(name, args_obj)
-            tool_trace.append({"name": name, "arguments": args_obj, "result": result})
+            tool_trace.append(
+                {"name": name, "arguments": args_obj, "result": result})
 
         # 3) Score using verifier-parity scorer
         scores = score_item(
@@ -456,7 +466,8 @@ def main() -> None:
     # Load speed metrics if available (from CoreML speed report)
     speed_metrics = None
     hardware = None
-    speed_report_path = os.path.join(os.path.dirname(args.report), "speed_coreml.json")
+    speed_report_path = os.path.join(
+        os.path.dirname(args.report), "speed_coreml.json")
     if os.path.exists(speed_report_path):
         try:
             with open(speed_report_path, "r") as f:
@@ -493,7 +504,8 @@ def main() -> None:
             "determinism_mode": args.determinism_mode,
         },
         wall_time_sec=time.time() - t0,
-        gates_overrides={"min_eligible_for_gates": args.min_eligible_for_gates},
+        gates_overrides={
+            "min_eligible_for_gates": args.min_eligible_for_gates},
         speed_metrics=speed_metrics,
         hardware=hardware,
         baseline_report_path=args.baseline_report,

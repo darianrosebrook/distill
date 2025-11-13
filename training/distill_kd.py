@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+import math
 import os
 import random
 import sys
@@ -1934,8 +1935,8 @@ def train_step(
 
         # Update weights (if gradient accumulation complete)
         if (grad_accum_counter + 1) % grad_accum_steps == 0:
-            # Apply gradient clipping for training stability
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            # Apply adaptive gradient clipping for training stability
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_norm)
 
             # Compute and log gradient norm (every 100 steps)
             if current_step % 100 == 0:
@@ -2154,16 +2155,36 @@ def main():
     # Create learning rate scheduler with warmup and cosine annealing
     # Based on our toy model optimizations for better convergence
     total_steps = train_cfg.get("steps", 10000)
-    warmup_steps = min(1000, total_steps // 10)  # Warmup for first 1000 steps or 10% of training
+
+    # Adaptive warmup: longer for larger models, shorter for smaller/fast training
+    model_size_factor = math.log(max(1, sum(p.numel() for p in model.parameters()))) / 10
+    base_warmup_pct = 0.1  # 10% of training
+    adaptive_warmup_pct = min(0.2, max(0.05, base_warmup_pct * model_size_factor))
+    warmup_steps = int(total_steps * adaptive_warmup_pct)
+
+    # Adaptive gradient clipping based on model size
+    model_params = sum(p.numel() for p in model.parameters())
+    if model_params > 100_000_000:  # Large models (>100M params)
+        grad_clip_norm = 0.5
+    elif model_params > 10_000_000:  # Medium models (>10M params)
+        grad_clip_norm = 1.0
+    else:  # Small models
+        grad_clip_norm = 2.0
+
+    if is_main_process:
+        print(f"[distill_kd] LR Schedule: {warmup_steps} warmup steps, {total_steps} total steps")
+        print(f"[distill_kd] Gradient Clipping: {grad_clip_norm} (adaptive for {model_params:,} params)")
 
     def lr_lambda(step):
         if step < warmup_steps:
             # Linear warmup
             return step / max(1, warmup_steps)
         else:
-            # Cosine annealing
+            # Cosine annealing with final LR floor
             progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
-            return 0.5 * (1 + torch.cos(torch.tensor(progress * 3.14159)))
+            cosine_decay = 0.5 * (1 + torch.cos(torch.tensor(progress * 3.14159)))
+            min_lr_factor = 0.01  # Don't decay below 1% of peak LR
+            return max(min_lr_factor, cosine_decay)
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
@@ -2269,6 +2290,22 @@ def main():
     # Use max sequence length for dataset (will truncate per batch if using enumerated shapes)
     max_seq_len = max(seq_lengths) if seq_lengths else 4096
 
+    # Optimize data loading: prefetch and pin memory for better GPU utilization
+    num_workers = train_cfg.get("dataloader_workers", 4)
+    prefetch_factor = train_cfg.get("prefetch_factor", 2)
+
+    # Adaptive batch size based on sequence length and model size
+    base_batch_size = train_cfg.get("batch_size", 8)
+    seq_len_factor = min(1.0, 2048 / max_seq_len)  # Shorter sequences allow larger batches
+    model_size_factor = min(1.0, 100_000_000 / model_params)  # Smaller models allow larger batches
+
+    effective_batch_size = int(base_batch_size * seq_len_factor * model_size_factor)
+    effective_batch_size = max(1, min(effective_batch_size, base_batch_size * 2))  # Reasonable bounds
+
+    if is_main_process:
+        print(f"[distill_kd] Data Loading: {num_workers} workers, prefetch={prefetch_factor}")
+        print(f"[distill_kd] Batch Size: {effective_batch_size} (adapted from {base_batch_size})")
+
     # Setup latent curriculum if enabled
     latent_curriculum = None
     latent_cfg = cfg.get("latent", {})
@@ -2313,11 +2350,13 @@ def main():
 
     dataloader = DataLoader(
         dataset,
-        batch_size=micro_batch_size,
+        batch_size=effective_batch_size,
         shuffle=True,
         collate_fn=collate_kd_batch,
-        num_workers=2,
+        num_workers=num_workers,
         pin_memory=device.type == "cuda",
+        prefetch_factor=prefetch_factor if num_workers > 0 else None,
+        persistent_workers=num_workers > 0,
     )
 
     # Initialize code-mode loss module if enabled (once, before training loop)
@@ -2519,10 +2558,19 @@ def main():
                 grad_accum_counter = (grad_accum_counter + 1) % grad_accum
                 step += 1
 
-                # Log learning rate periodically
+                # Log learning rate and memory usage periodically
                 if step % 100 == 0 and is_main_process:
                     current_lr = optimizer.param_groups[0]['lr']
-                    print(f"[distill_kd] Step {step}/{total_steps}: loss={loss_dict.get('total', 0):.4f}, lr={current_lr:.2e}")
+
+                    # Memory usage tracking
+                    if device.type == "cuda":
+                        memory_allocated = torch.cuda.memory_allocated(device) / 1024**3  # GB
+                        memory_reserved = torch.cuda.memory_reserved(device) / 1024**3   # GB
+                        memory_info = f", gpu_mem={memory_allocated:.2f}GB"
+                    else:
+                        memory_info = ""
+
+                    print(f"[distill_kd] Step {step}/{total_steps}: loss={loss_dict.get('total', 0):.4f}, lr={current_lr:.2e}{memory_info}")
             except Exception as e:
                 print(f"[distill_kd] ERROR: Training step {step} failed: {e}")
                 import traceback
