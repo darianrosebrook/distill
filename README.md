@@ -1,219 +1,390 @@
-# kimi-student: Multi-Model Portfolio for CAWS Arbiter Stack
+# kimi-student
 
-Distilled student models for specialized roles in CAWS-compliant multi-model orchestration, optimized for Apple Silicon (M-series) with ANE acceleration via CoreML.
+**Multi-Model Distillation and Governance Stack for CAWS-Compliant AI on Apple Silicon**
+
+---
+
+## Overview
+
+**kimi-student** is a multi-model distillation and governance framework that trains small, ANE-optimized models ("students") under the **CAWS** (Coding-Agent Working Spec) standard.
+
+It unifies _teacher–student distillation_, _tool-use dataset generation_, and _deterministic evaluation_ into a single reproducible pipeline—complete with gating, fingerprinting, and CI governance for CoreML deployment on Apple Silicon.
+
+> **Goal:** Reproduce the reasoning quality of large teachers (e.g., Kimi K2 Thinking 32B) in small, local models that can run on-device while remaining verifiably compliant with CAWS constitutional rules.
+
+---
+
+## Architecture at a Glance
+
+```
+┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+│  K2 Teacher  │ → │ KD Dataset   │ → │ Student Train│
+└──────────────┘   └──────────────┘   └──────┬───────┘
+                                              │
+┌────────────────────────────┘
+▼
+┌────────────────────────────┐
+│ Eval Harness (CAWS Gates) │
+│ • Tool broker fixtures     │
+│ • Verifier-parity scoring  │
+└────────────┬───────────────┘
+             │
+             ▼
+┌────────────────────┐
+│  Reports / CI Dash │
+└────────────────────┘
+```
+
+---
 
 ## Model Portfolio
 
-### Worker (~9B GQA)
+| Model                  | Params        | Context   | Role                                                | Precision                       | Deployment   |
+| ---------------------- | ------------- | --------- | --------------------------------------------------- | ------------------------------- | ------------ |
+| **Worker**             | ~9 B (GQA)    | 8 – 16 k  | Code edits · tool-use JSON · long-context retrieval | INT8 weights + FP16 activations | CoreML (ANE) |
+| **Judge**              | 3 – 4 B / 7 B | 512 – 2 k | CAWS arbiter · constitutional adjudication          | INT8 + FP16                     | CoreML       |
+| **Drafter** (optional) | ~4 B          | ≤ 2 k     | Speculative decoding · sub-second TTFA              | INT8 + FP16                     | CoreML       |
 
-- **Role**: Primary generator for code edits, tool-use JSON, long-context retrieval
-- **Target**: Best quality/latency envelope on 64GB for 8-16k context
-- **Precision**: INT8 weights + FP16 activations
-- **Config**: `configs/worker_9b.yaml`
+**Why CoreML / Apple Silicon**
 
-### Judge (3-4B or 7B)
+CoreML provides near-zero-latency inference on the Apple Neural Engine, enabling real-time arbitration and speculative decoding without network calls.
 
-- **Role**: Constitutional arbiter for CAWS compliance
-- **Target**: Fast, local decision-making for adjudication cycles
-- **Precision**: INT8 weights + FP16 activations
-- **Config**: `configs/judge_4b.yaml`
-- **Export**: Short enumerated shapes (512/1024/2048) for summaries/claims
+All exports use enumerated shapes (512/1024/2048) and quantized FP16/INT8 formats for ANE efficiency.
 
-### Drafter (~4B, optional)
+### CoreML Production Environment (Apple Silicon)
 
-- **Role**: Speculative decoding for sub-second TTFA
-- **Target**: Fast token generation, verified by Worker/Judge
-- **Config**: `configs/drafter_4b.yaml`
+For Worker/Judge CoreML exports:
 
-## Getting Started
+- **Hardware**: Apple Silicon (M1/M2/M3; 32–64 GB recommended)
+- **Python**: 3.10 or 3.11 (not 3.13+)
+- **CoreMLTools**: ≥ 9.0
+- **Export path**: PyTorch ExportedProgram → CoreML (not ONNX)
+- **Shapes** (recommended): 512/1024/2048 (optionally 4096)
+- **Precision**: INT8 weights, FP16 activations
 
-### Stage 1: Distillation MVP (Current Focus)
+Commands:
 
-**Goal**: Distill K2-Thinking into ANE-friendly student that runs on M1 Max.
+```bash
+make pytorch-worker    # export PyTorch model first
+make coreml-worker     # production path via PyTorch exporter
+```
 
-1. Create a Python 3.10+ env and install deps:
+---
+
+## Quick Start
+
+### 1 · Environment Setup
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
 ```
 
-2. Build KD dataset:
+### 2 · Build Knowledge-Distillation Dataset
 
 ```bash
-# Option A: Use Kimi K2 Thinking API (recommended for M1 Max)
+# Option A: Kimi K2 API (recommended for M1 Max)
 python -m scripts.make_kd_mix --out data/kd_mix.jsonl --teacher https://api.kimi.com/v1
 
-# Option B: Use local HTTP endpoint
+# Option B: Local HTTP teacher
 python -m scripts.make_kd_mix --out data/kd_mix.jsonl --teacher http://localhost:8000
 
-# Option C: Use HuggingFace model (requires GPU with 80GB+ VRAM)
+# Option C: Hugging Face model (80 GB GPU)
 python -m scripts.make_kd_mix --out data/kd_mix.jsonl --teacher hf:moonshotai/Kimi-K2-Thinking
 ```
 
-**Note**: Kimi K2 Thinking (32B active params) cannot run locally on M1 Max. See `docs/external/KIMI_K2_SETUP.md` for API setup.
+> _K2 Thinking (32 B) cannot run locally on M1 Max — see_ `docs/external/KIMI_K2_SETUP.md`.
 
-3. Train Worker model (8-9B GQA):
+### 3 · Train the Worker
 
 ```bash
 make worker
-make onnx-worker
-make coreml-worker
+make pytorch-worker    # export PyTorch model (production path)
+make coreml-worker     # convert to CoreML (requires PyTorch export)
 ```
 
-4. Validate with probes and perf gates:
+> **Note**: `make onnx-worker` is optional for debug only. The production path is PyTorch ExportedProgram → CoreML (not ONNX).
+
+### 4 · Evaluate a Real Model (not verification-only)
+
+Pick ONE runner:
+
+**Local HF checkpoint (recommended during training)**
+
+```bash
+make eval-runner-local \
+  MODEL="/path/to/ckpt" \
+  IN="data/contextual_final.jsonl" \
+  OUT="eval/results/local.jsonl" \
+  REPORT="eval/reports/latest.json"
+```
+
+**OpenAI-compatible endpoint (for baselines)**
+
+```bash
+make eval-runner-openai \
+  MODEL="gpt-4o" \
+  IN="data/contextual_final.jsonl" \
+  OUT="eval/results/4o.jsonl" \
+  REPORT="eval/reports/latest.json"
+```
+
+> **Note on verification-only mode**
+>
+> `runner: verification_only` is for dataset QA. It reuses dataset ground truth to compute a proxy F1 and will **always** be insufficient for CAWS gates. Use `hf_local` or `openai_http` for real evaluation.
+
+### 5 · Process Supervision & Quantization
 
 ```bash
 make probes
-make eval
+make proc     # process supervision
+make qat      # quantization-aware training
 ```
 
-5. Add process supervision and QAT:
-
-```bash
-make proc  # Process supervision
-make qat   # Quantization-aware training
-```
-
-### Stage 2: Governance (After MVP)
-
-**Goal**: Add CAWS governance and runtime enforcement.
-
-6. Train Judge model (after student passes gates):
+### 6 · Add Governance (Judge Model)
 
 ```bash
 make judge_train
 make judge_onnx
 make judge_coreml
-```
-
-7. Evaluate CAWS compliance:
-
-```bash
 make caws-eval
 ```
 
-See `docs/DISTILLATION_GUIDE.md` for detailed distillation guide and rationale.
+---
 
-## Contextual Dataset Generation & Evaluation
+## Evaluation Harness and CAWS Gates
 
-The project includes a comprehensive pipeline for generating and evaluating contextual datasets with process-step supervision targets for tool-use training.
+Every model is verified by a deterministic evaluation loop that enforces **constitutional gates**:
 
-### Quick Start
+| Gate                 | Metric | Threshold   | Action |
+| -------------------- | ------ | ----------- | ------ |
+| Integration F1 (lax) | ≥ 0.90 | Pass        |        |
+| Privacy OK Rate      | = 1.0  | Pass        |        |
+| Control Integration  | = 0    | Hard fail   |        |
+| Fixture Hit-Rate     | ≥ 95 % | Warn / Fail |        |
 
-**Generate and verify a contextual dataset:**
+**Reproducibility guarantees**
+
+- SHA-256 fingerprints for dataset · tool registry · tokenizer · model
+
+- Deterministic fixture replay via `ToolBroker`
+
+- Verifier-parity scoring for strict / lax F1
+
+- Gating enforced in CI; regressions halt merge
+
+For details see [`eval/HARNESS.md`](eval/HARNESS.md).
+
+#### Fixture Coverage (Grounding)
+
+This repo enforces fixture replay for tool calls. To pass gates:
+
+- **Fixture hit-rate ≥ 95%** (target ≥ 98%)
+- Add missing fixture files under `eval/tool_broker/fixtures/`:
+  - `read_file.jsonl`, `web.search.jsonl`, `code.execute.jsonl`, etc.
+- Run:
+
+```bash
+make eval-fixture-stats
+# or
+jq '.summary | {fixture_hit_rate, fixture_miss_count}' eval/reports/latest.json
+```
+
+#### Token Alignment & Strict F1
+
+Strict scoring requires byte/token span alignment. Enable during generation:
+
+```bash
+make contextual-gen
+make contextual-extract    # emits integration_spans_bytes and token ids
+make contextual-verify
+```
+
+The report should show `token_align_ok_rate > 0`. If it is 0.0, strict gates will be inconclusive.
+
+#### Reproducibility & Fingerprints (Gates)
+
+Every report header must include:
+
+- `dataset_sha256`
+- `tool_registry_sha256`
+- `tokenizer_fingerprint`
+
+CI fails if any are null/unknown:
+
+```bash
+jq '.header | {dataset_sha256, tool_registry_sha256, tokenizer_fingerprint}' eval/reports/latest.json
+```
+
+---
+
+## Contextual Dataset Generation & Verification
+
+End-to-end pipeline for process-step supervision:
 
 ```bash
 # Full pipeline: generate → extract → verify
 make contextual-pipeline
 
-# Or step-by-step:
-make contextual-gen          # Generate prompts
-make contextual-extract      # Extract process targets
-make contextual-verify       # Verify quality
-```
-
-**Scale tests (N=1k, N=10k):**
-
-```bash
-make gen-scale-1k           # Generate 1k samples
-make verify-scale-1k         # Verify 1k dataset
-
-make gen-scale-10k           # Generate 10k samples (sharded)
-make verify-scale-10k        # Verify 10k dataset
-```
-
-**Evaluate model performance:**
-
-```bash
-# OpenAI-compatible endpoint
-make eval-runner-openai \
-  MODEL="gpt-4" \
-  IN="data/contextual_extracted.jsonl" \
-  OUT="eval/results.jsonl" \
-  REPORT="eval/report.json"
-
-# Local HuggingFace model
-make eval-runner-local \
-  MODEL="/path/to/model" \
-  IN="data/contextual_extracted.jsonl" \
-  OUT="eval/results.jsonl" \
-  REPORT="eval/report.json"
+# Scale tests
+make gen-scale-1k verify-scale-1k
+make gen-scale-10k verify-scale-10k
 ```
 
 ### Features
 
-- **Stratified generation**: Coverage across scenarios × complexity × structure
-- **Process-step targets**: Tool names, JSON arguments, and integration spans with byte/token offsets
-- **Comprehensive verification**: Integration F1 (lax/strict), token alignment, control contamination checks
-- **Deterministic evaluation**: Tool broker replays fixtures (no live network calls)
-- **Multi-runner support**: OpenAI HTTP and HuggingFace local runners
-- **Scale testing**: N=1k and N=10k with deterministic sharding
+- Stratified scenario × complexity × structure coverage
 
-### Documentation
+- Process-step targets (tool names + JSON arguments + byte/token offsets)
 
-- **Dataset Card**: `docs/DATASET_CARD_CONTEXTUAL.md` - Dataset schema and policies
-- **Generation Guide**: `docs/CONTEXTUAL_DATASET_GENERATION.md` - Full workflow
-- **Evaluation Harness**: `eval/HARNESS.md` - Evaluation harness documentation
-- **Scale Tests**: `docs/SCALE_TESTS.md` - Scale testing guide
-- **CAWS Guide**: `docs/CAWS_AGENT_GUIDE.md` - CAWS agent workflow guide
-- **Arbiter Theory**: `docs/ARBITER_THEORY.md` - Arbiter stack architecture
-- **Full Docs Index**: `docs/README.md` - Complete documentation index
+- Multi-locale validation ("1 234,56" vs "1,234.56")
 
-## Directory Structure
+- Deterministic evaluation and fixture replay
 
-```
-arbiter/
-├── judge_training/     # Pairwise ranking, clause labeling
-├── claimify/           # 4-stage claim extraction pipeline
-├── schemas/            # CAWS verdict, waiver, evidence schemas
-├── eval/               # CAWS-specific evaluation metrics
-└── swift/              # Swift bridge for CoreML judge runtime
+- Scale tests (1 k / 10 k samples)
 
-configs/
-├── worker_9b.yaml      # Worker model config
-├── judge_4b.yaml       # Judge model config
-└── drafter_4b.yaml     # Drafter model config (optional)
+Docs:
 
-conversion/
-├── export_onnx.py         # Worker ONNX export
-├── export_pytorch.py      # PyTorch export (production path)
-├── convert_coreml.py      # CoreML conversion (PyTorch/ONNX backends)
-├── judge_export_onnx.py  # Judge ONNX export
-└── judge_export_coreml.py # Judge CoreML export
+[`docs/DATASET_CARD_CONTEXTUAL.md`](docs/DATASET_CARD_CONTEXTUAL.md) ·
 
-scripts/
-├── generate_contextual_prompts.py  # Contextual prompt generation
-├── extract_process_targets.py      # Process-step target extraction
-└── verify_contextual_set.py        # Dataset quality verification
+[`docs/CONTEXTUAL_DATASET_GENERATION.md`](docs/CONTEXTUAL_DATASET_GENERATION.md)
 
-eval/
-├── cli.py                  # Evaluation harness CLI
-├── runners/                # Model runners (OpenAI HTTP, HF local)
-├── tool_broker/           # Deterministic tool result replay
-├── scoring/                # Verifier-parity scoring
-└── reports/                # Report summarization
+---
 
-tests/
-├── unit/                   # Unit tests
-├── integration/            # Integration tests
-├── property/               # Property-based tests (Hypothesis)
-└── ci/                     # CI smoke tests
+## CI and Governance Workflows
+
+### Nightly Evaluation
+
+Runs full gated evaluation on latest checkpoint (configure in `.github/workflows/`).
+
+### PR Smoke Tests
+
+Small deterministic slice enforcing fixture coverage and CAWS gates before merge (see `.github/workflows/broker-smoke.yml`).
+
+### Toy End-to-End Pipeline
+
+Lightweight E2E verification that tests the full flow: dataset generation → training → export → CoreML conversion → verification gates. Runs in ≤4 minutes on CPU.
+
+```bash
+# Single shape (fast, default)
+make toy-e2e
+
+# Multiple enumerated shapes (slower, more thorough)
+make toy-e2e-multi
 ```
 
-## CAWS Integration
+**CoreML Enumerated Shapes (Toy Path):**
 
-The arbiter stack enforces CAWS governance through:
+In practice, CoreML compiles one shape per mlpackage quickly; multi-shape enumerations are possible but increase compile time and often degrade determinism in CI. The toy E2E test therefore compiles **one representative shape** by default (T128), with an optional "multi" target that compiles `T64/T128/T256` as **separate** packages and verifies that **at least one** shape runs end-to-end. Production models should still export enumerated shapes per your main conversion path; the toy path is intentionally minimal.
 
-- **Claimify Pipeline**: 4-stage claim extraction and verification
-- **CAWS Schemas**: Verdict, waiver, and evidence manifest schemas
-- **Judge Training**: Pairwise ranking + clause labeling for constitutional arbitration
-- **CAWS Evaluation**: End-to-end compliance checking
+**Gates:**
 
-See `arbiter/README.md` for detailed arbiter stack documentation.
+- ≥1 enumerated shape compiles and runs end-to-end
+- No NaN/zero outputs detected
+- Tool span micro-F1 ≥ 0.20 (via deterministic greedy decode)
+- Per-shape diagnostics included in report
 
-## Artifacts
+### Makefile Shortcuts
 
-- Model checkpoints: `models/student/checkpoints/`
-- ONNX exports: `artifacts/onnx/` (worker) and `arbiter/judge_training/artifacts/onnx/` (judge)
-- CoreML models: `coreml/artifacts/` (worker and judge)
+```bash
+make eval-runner-openai    # evaluate with OpenAI-compatible endpoint
+make eval-runner-local     # evaluate with local HuggingFace model
+make eval-smoke            # smoke test with GPT-4
+make toy-e2e               # toy E2E pipeline (single shape)
+make toy-e2e-multi         # toy E2E pipeline (multiple shapes)
+```
+
+---
+
+## Reproducibility Artifacts
+
+| Directory                     | Contents                 | Fingerprinted By        |
+| ----------------------------- | ------------------------ | ----------------------- |
+| `models/student/checkpoints/` | Distillation checkpoints | SHA-256                 |
+| `artifacts/onnx/`             | ONNX graphs              | Model + tokenizer       |
+| `coreml/artifacts/`           | CoreML mlpackages        | Enumerated shapes       |
+| `eval/reports/`               | JSON reports             | Dataset · Tool registry |
+
+Each report embeds `dataset_sha256`, `tool_registry_sha256`, and `prompt_wrapper_sha256`.
+
+---
+
+## Extending the System
+
+| Extension                  | How to Add                                       | Docs                      |
+| -------------------------- | ------------------------------------------------ | ------------------------- |
+| **New Tools**              | Add fixture + schema → update `tool_broker`      | `eval/tool_broker/`       |
+| **New Models**             | Add config YAML → implement ONNX/CoreML exporter | `conversion/`             |
+| **New Governance Clauses** | Extend `arbiter/schemas` + train Judge           | `arbiter/judge_training/` |
+
+---
+
+## Directory Structure (Top Level)
+
+```
+arbiter/         – CAWS governance stack (judge training · schemas)
+configs/         – Model configs (worker / judge / drafter)
+conversion/      – PyTorch → ONNX → CoreML exporters
+scripts/         – Dataset generation & verification
+eval/            – Evaluation harness · runners · reports
+tests/           – Unit · integration · property · CI smoke
+```
+
+---
+
+## Roadmap / Next Focus
+
+1. **Integration Testing & Validation**
+
+   - Verify normalization robustness
+
+   - Validate fingerprint tracking
+
+2. **Fixture Coverage Expansion**
+
+   - Add common tool fixtures (`math.eval`, `web.crawl`, `file.write`)
+
+   - Target ≥ 98 % broker coverage
+
+3. **Runner Parity Validation**
+
+   - Ensure OpenAI and HF runners match (ΔF1 ≤ 0.03)
+
+4. **Performance & Scalability**
+
+   - Parallel evaluation for 10 k+ datasets
+
+5. **Dashboard Publishing**
+
+   - Time-series history tracking
+
+   - Automated report aggregation
+
+---
+
+## Summary
+
+kimi-student now forms a **self-auditing infrastructure for grounded tool-integration learning**.
+
+It delivers **distilled CoreML models** verified through **CAWS-compliant evaluation**, with constitutional gates enforced in CI and reproducible governance for on-device deployment.
+
+> **Next milestones:**
+
+> • Expand fixture library (≤ 2 % miss rate)
+
+> • Automate dashboard publishing
+
+> • Publicly release Worker and Judge CoreML artifacts for benchmarking
+
+---
+
+## Documentation
+
+- **Dataset Card**: [`docs/DATASET_CARD_CONTEXTUAL.md`](docs/DATASET_CARD_CONTEXTUAL.md) - Dataset schema and policies
+- **Generation Guide**: [`docs/CONTEXTUAL_DATASET_GENERATION.md`](docs/CONTEXTUAL_DATASET_GENERATION.md) - Full workflow
+- **Evaluation Harness**: [`eval/HARNESS.md`](eval/HARNESS.md) - Evaluation harness documentation
+- **Scale Tests**: [`docs/SCALE_TESTS.md`](docs/SCALE_TESTS.md) - Scale testing guide
+- **CAWS Guide**: [`docs/CAWS_AGENT_GUIDE.md`](docs/CAWS_AGENT_GUIDE.md) - CAWS agent workflow guide
+- **Arbiter Theory**: [`arbiter_theory.md`](arbiter_theory.md) - Arbiter stack architecture
+- **Distillation Guide**: [`docs/DISTILLATION_GUIDE.md`](docs/DISTILLATION_GUIDE.md) - Distillation guide and rationale
+- **Full Docs Index**: [`docs/README.md`](docs/README.md) - Complete documentation index
