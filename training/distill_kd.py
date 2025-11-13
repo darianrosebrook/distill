@@ -2194,12 +2194,33 @@ def main():
     use_fp16 = train_cfg.get("fp16", False)
     scaler = torch.cuda.amp.GradScaler() if use_fp16 and device.type == "cuda" else None
 
-    # Setup gradient checkpointing
-    if train_cfg.get("grad_checkpointing", False):
+    # Automatic memory optimization for large models
+    model_params = sum(p.numel() for p in model.parameters())
+    is_large_model = model_params > 1_000_000_000  # >1B parameters
+
+    # Enable memory optimizations automatically for large models
+    if is_large_model or train_cfg.get("grad_checkpointing", False):
+        print(f"[distill_kd] Enabling memory optimizations for {model_params:,} parameters")
+
+        # Gradient checkpointing
         if hasattr(model, "gradient_checkpointing_enable"):
             model.gradient_checkpointing_enable()
         elif hasattr(model, "module") and hasattr(model.module, "gradient_checkpointing_enable"):
             model.module.gradient_checkpointing_enable()
+
+        # Aggressive garbage collection for large models
+        if is_large_model:
+            import gc
+            gc.collect()
+            if device.type == "cuda":
+                torch.cuda.empty_cache()
+                print("[distill_kd] Cleared GPU cache for large model")
+
+    # Enable TF32 for faster training on Ampere+ GPUs
+    if device.type == "cuda" and torch.cuda.is_available():
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        print("[distill_kd] Enabled TF32 acceleration")
 
     # Resume from checkpoint if specified
     start_step = 0
@@ -2571,20 +2592,64 @@ def main():
                     else:
                         memory_info = ""
 
-                    print(f"[distill_kd] Step {step}/{total_steps}: loss={loss_dict.get('total', 0):.4f}, lr={current_lr:.2e}{memory_info}")
+                    # Enhanced progress reporting for large models
+                    progress_pct = step / total_steps * 100
+                    eta_hours = (total_steps - step) / 100 * 0.1  # Rough ETA based on steps/second
+
+                    if is_large_model:
+                        print(f"[distill_kd] Step {step}/{total_steps} ({progress_pct:.1f}%): loss={loss_dict.get('total', 0):.4f}, lr={current_lr:.2e}{memory_info}, ETA~{eta_hours:.1f}h")
+                    else:
+                        print(f"[distill_kd] Step {step}/{total_steps}: loss={loss_dict.get('total', 0):.4f}, lr={current_lr:.2e}{memory_info}")
             except Exception as e:
                 print(f"[distill_kd] ERROR: Training step {step} failed: {e}")
                 import traceback
 
                 traceback.print_exc()
 
-                # Clear GPU cache on failure to prevent memory leaks
+                # Enhanced error recovery for large models
                 if device.type == "cuda":
                     try:
+                        # Aggressive memory cleanup for large models
                         torch.cuda.empty_cache()
+                        torch.cuda.synchronize()  # Ensure cleanup completes
                         print("[distill_kd] Cleared GPU cache after error")
+
+                        # For very large models, also clear CPU cache
+                        if is_large_model:
+                            import gc
+                            gc.collect()
+                            print("[distill_kd] Performed full garbage collection for large model")
+
                     except Exception as cache_e:
                         print(f"[distill_kd] WARN: Failed to clear GPU cache: {cache_e}")
+
+                # Track consecutive failures to prevent infinite loops
+                if not hasattr(train_step, '_consecutive_failures'):
+                    train_step._consecutive_failures = 0
+
+                train_step._consecutive_failures += 1
+
+                # If too many consecutive failures, save emergency checkpoint and exit
+                max_consecutive_failures = 10 if not is_large_model else 5  # More strict for large models
+                if train_step._consecutive_failures >= max_consecutive_failures:
+                    print(f"[distill_kd] CRITICAL: {train_step._consecutive_failures} consecutive failures. Saving emergency checkpoint and exiting.")
+                    try:
+                        save_checkpoint(
+                            model=model,
+                            optimizer=optimizer,
+                            step=step,
+                            loss=loss_dict.get("total", float('inf')),
+                            output_dir=output_dir,
+                            config=cfg,
+                            rng_states=None,  # Skip RNG states in emergency
+                            data_shard_index=current_shard_index,
+                            dataset_fingerprint=None,
+                        )
+                        print("[distill_kd] Emergency checkpoint saved successfully")
+                    except Exception as ckpt_e:
+                        print(f"[distill_kd] CRITICAL: Failed to save emergency checkpoint: {ckpt_e}")
+
+                    sys.exit(1)
 
                 # Continue to next step instead of crashing
                 step += 1
@@ -2667,8 +2732,22 @@ def main():
                     loss_str = ", ".join([f"{k}={v:.4f}" for k, v in loss_dict.items()])
                     print(f"[distill_kd] Step {step}/{total_steps}: {loss_str}")
 
-            # Checkpointing
-            if step % save_every == 0 and is_main_process:
+            # Intelligent checkpointing for large models
+            # Save more frequently for large models to prevent loss of progress
+            checkpoint_frequency = save_every
+            if is_large_model:
+                checkpoint_frequency = min(save_every, max(100, save_every // 4))  # Save 4x more frequently for large models
+
+            should_save_checkpoint = step % checkpoint_frequency == 0 and is_main_process
+
+            # Always save checkpoint at milestones (10%, 25%, 50%, 75%, 90%, 100%)
+            total_steps = train_cfg.get("steps", 10000)
+            milestone_steps = [int(total_steps * pct) for pct in [0.1, 0.25, 0.5, 0.75, 0.9, 1.0]]
+            if step in milestone_steps:
+                should_save_checkpoint = True
+                print(f"[distill_kd] Milestone checkpoint at {step}/{total_steps} steps ({step/total_steps:.1%})")
+
+            if should_save_checkpoint:
                 # Capture RNG states for reproducibility
                 import random
                 import numpy as np
