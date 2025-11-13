@@ -111,34 +111,34 @@ def tool_name_loss(
     device = student_logits.device
     batch_size = student_logits.size(0)
     seq_len = student_logits.size(1)
-    
+
     # Handle different tensor shapes
     if tool_name_ids.dim() == 1:
         tool_name_ids = tool_name_ids.unsqueeze(0)
     if tool_name_mask.dim() == 1:
         tool_name_mask = tool_name_mask.unsqueeze(0)
-    
+
     losses = []
-    
+
     for i in range(min(batch_size, tool_name_ids.size(0))):
         sample_tool_ids = tool_name_ids[i]
         sample_mask = tool_name_mask[i]
-        
+
         # Extract valid tool name tokens
         if sample_mask.dtype == torch.bool:
             valid_tool_tokens = sample_tool_ids[sample_mask]
         else:
             valid_tool_tokens = sample_tool_ids[sample_mask.bool()]
-        
+
         if valid_tool_tokens.numel() == 0:
             continue
-        
+
         # Convert to list for sequence matching
         target_tokens = valid_tool_tokens.cpu().tolist()
-        
+
         # Get predicted token IDs from logits to locate tool name position
         pred_token_ids = student_logits[i].argmax(dim=-1).cpu().tolist()
-        
+
         # Find position where tool name tokens appear in predicted sequence
         tool_name_pos = None
         for j in range(seq_len - len(target_tokens) + 1):
@@ -146,19 +146,21 @@ def tool_name_loss(
             if pred_token_ids[j:j+len(target_tokens)] == target_tokens:
                 tool_name_pos = j
                 break
-        
+
         # If tool name found, compute loss at those positions
         if tool_name_pos is not None:
             # Compute loss for each token in tool name
             for k, target_token_id in enumerate(target_tokens):
                 pos = tool_name_pos + k
                 if pos < seq_len:
-                    logits_slice = student_logits[i, pos, :].unsqueeze(0)  # [1, V]
-                    targets = torch.tensor([target_token_id], device=device, dtype=torch.long)
-                    
+                    logits_slice = student_logits[i,
+                                                  pos, :].unsqueeze(0)  # [1, V]
+                    targets = torch.tensor(
+                        [target_token_id], device=device, dtype=torch.long)
+
                     if not logits_slice.is_contiguous():
                         logits_slice = logits_slice.contiguous()
-                    
+
                     ce_loss = F.cross_entropy(
                         logits_slice,
                         targets,
@@ -166,32 +168,33 @@ def tool_name_loss(
                     )
                     losses.append(ce_loss)
             continue
-        
+
         # Fallback: if tool name not found, search in latter half of sequence
         # Tool calls typically appear after the prompt
         if seq_len > 10:
             start_pos = seq_len // 2
             best_loss = None
-            
+
             for pos in range(start_pos, min(start_pos + 20, seq_len)):
                 # Compute loss for first token of tool name
                 target_token_id = target_tokens[0]
                 logits_slice = student_logits[i, pos, :].unsqueeze(0)  # [1, V]
-                targets = torch.tensor([target_token_id], device=device, dtype=torch.long)
-                
+                targets = torch.tensor(
+                    [target_token_id], device=device, dtype=torch.long)
+
                 if not logits_slice.is_contiguous():
                     logits_slice = logits_slice.contiguous()
-                
+
                 ce_loss = F.cross_entropy(
                     logits_slice,
                     targets,
                     ignore_index=ignore_index,
                     reduction='none'
                 )
-                
+
                 if best_loss is None or ce_loss.item() < best_loss.item():
                     best_loss = ce_loss
-            
+
             if best_loss is not None:
                 losses.append(best_loss)
         else:
@@ -199,18 +202,19 @@ def tool_name_loss(
             pos = seq_len // 2
             target_token_id = target_tokens[0]
             logits_slice = student_logits[i, pos, :].unsqueeze(0)  # [1, V]
-            targets = torch.tensor([target_token_id], device=device, dtype=torch.long)
-            
+            targets = torch.tensor(
+                [target_token_id], device=device, dtype=torch.long)
+
             if not logits_slice.is_contiguous():
                 logits_slice = logits_slice.contiguous()
-            
+
             ce_loss = F.cross_entropy(
                 logits_slice,
                 targets,
                 ignore_index=ignore_index
             )
             losses.append(ce_loss)
-    
+
     if losses:
         return torch.stack(losses).mean()
     else:

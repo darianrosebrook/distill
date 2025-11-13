@@ -157,7 +157,8 @@ class KDDataset(Dataset):
         input_ids = torch.tensor(full_tokens[:-1], dtype=torch.long)
         labels = torch.tensor(full_tokens[1:], dtype=torch.long)
 
-        # Attention mask (all ones for now, can be extended for padding)
+        # Attention mask: 1 for real tokens, 0 for padding
+        # Padding is handled in collate_kd_batch, so all tokens are valid here
         attention_mask = torch.ones_like(input_ids)
 
         result = {
@@ -235,13 +236,42 @@ class KDDataset(Dataset):
                     pass  # Skip invalid quality scores
 
         # Add teacher hidden states if available (for intermediate layer matching)
-        # NOTE: Hidden states are stored as lists of tensors in JSONL
-        # They need to be loaded separately or extracted during training
-        # For now, we just pass through the metadata indicating they exist
+        # Hidden states can be provided in two ways:
+        # 1. Pre-computed and stored in JSONL (as lists of lists/floats)
+        # 2. Extracted on-the-fly from teacher model during training
         if "teacher_hidden_states" in sample:
-            # Store metadata flag (actual hidden states should be loaded separately
-            # or extracted from teacher model during training)
-            result["has_teacher_hidden_states"] = True
+            teacher_hidden_states = sample["teacher_hidden_states"]
+
+            # Try to load pre-computed hidden states if available
+            if isinstance(teacher_hidden_states, list) and len(teacher_hidden_states) > 0:
+                try:
+                    # Convert list of lists to tensor format
+                    # Expected format: List[List[List[float]]] -> List[torch.Tensor]
+                    # Each inner list is [B, T, D] hidden state for one layer
+                    hidden_states_tensors = []
+                    for layer_states in teacher_hidden_states:
+                        if isinstance(layer_states, list):
+                            # Convert to tensor: [T, D] or [B, T, D]
+                            layer_tensor = torch.tensor(
+                                layer_states, dtype=torch.float32)
+                            hidden_states_tensors.append(layer_tensor)
+                        else:
+                            # Already a tensor or unsupported format
+                            break
+
+                    if hidden_states_tensors:
+                        result["teacher_hidden_states"] = hidden_states_tensors
+                    else:
+                        # Fallback: store metadata flag
+                        result["has_teacher_hidden_states"] = True
+                except Exception:
+                    # If loading fails, store metadata flag
+                    # Hidden states will need to be extracted from teacher model during training
+                    result["has_teacher_hidden_states"] = True
+            else:
+                # Store metadata flag indicating hidden states should be extracted
+                # from teacher model during training
+                result["has_teacher_hidden_states"] = True
 
         return result
 

@@ -209,11 +209,41 @@ def compute_teacher_quality_score(
         return max(0.0, min(1.0, score))
 
     elif method == "bleu":
-        # Placeholder for BLEU score computation
-        # from nltk.translate.bleu_score import sentence_bleu
-        # if ground_truth:
-        #     return sentence_bleu([ground_truth.split()], teacher_output.split())
-        return 0.7
+        # BLEU score computation
+        if not ground_truth:
+            return 0.0  # Cannot compute BLEU without ground truth
+
+        try:
+            # Try to use nltk if available
+            from nltk.translate.bleu_score import sentence_bleu
+            reference = [ground_truth.split()]
+            candidate = teacher_output.split()
+            bleu_score = sentence_bleu(reference, candidate)
+            return float(bleu_score)
+        except ImportError:
+            # Fallback: Simple n-gram overlap approximation
+            # This is a simplified BLEU approximation without nltk
+            reference_tokens = ground_truth.lower().split()
+            candidate_tokens = teacher_output.lower().split()
+
+            if not reference_tokens or not candidate_tokens:
+                return 0.0
+
+            # Unigram precision (simplified BLEU-1)
+            reference_unigrams = set(reference_tokens)
+            candidate_unigrams = set(candidate_tokens)
+
+            matches = len(reference_unigrams & candidate_unigrams)
+            precision = matches / \
+                len(candidate_unigrams) if candidate_unigrams else 0.0
+
+            # Brevity penalty (simplified)
+            brevity_penalty = min(1.0, len(
+                candidate_tokens) / len(reference_tokens)) if reference_tokens else 0.0
+
+            # Simplified BLEU score (unigram precision with brevity penalty)
+            bleu_approx = precision * brevity_penalty
+            return float(bleu_approx)
 
     else:
         return 0.5
@@ -400,4 +430,3 @@ EXAMPLE_CONFIG = {
         # ... other architecture settings
     },
 }
-
