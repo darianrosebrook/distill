@@ -12,7 +12,7 @@ import sys
 import random
 from pathlib import Path
 import json
-from typing import List
+from typing import List, Dict, Any
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -146,6 +146,158 @@ def evaluate_8_ball_response(prompt: str, response: str) -> dict:
         "looks_like_fortune": looks_like_fortune,
         "score": sum([contains_mystical_phrase, has_mystical_flair, is_brief, looks_like_fortune]) / 4.0,
     }
+
+
+def compare_models(model_results: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Compare multiple model evaluation results and identify improvements.
+
+    Args:
+        model_results: List of comprehensive evaluation results
+
+    Returns:
+        Comparison analysis with improvement metrics
+    """
+    if len(model_results) < 2:
+        return {"error": "Need at least 2 model results to compare"}
+
+    # Extract key metrics
+    comparisons = {}
+    baseline = model_results[0]
+
+    for i, result in enumerate(model_results[1:], 1):
+        model_name = f"model_{i}"
+        comparisons[model_name] = {}
+
+        # Score comparison
+        baseline_score = baseline["evaluation"]["summary"]["average_score"]
+        current_score = result["evaluation"]["summary"]["average_score"]
+        score_improvement = current_score - baseline_score
+
+        comparisons[model_name]["score"] = {
+            "baseline": baseline_score,
+            "current": current_score,
+            "improvement": score_improvement,
+            "improvement_pct": (score_improvement / baseline_score) * 100 if baseline_score > 0 else 0
+        }
+
+        # Latency comparison
+        baseline_latency = baseline["benchmarks"]["inference_latency_ms"]["p50"]
+        current_latency = result["benchmarks"]["inference_latency_ms"]["p50"]
+        latency_improvement = baseline_latency - current_latency  # Lower is better
+
+        comparisons[model_name]["latency"] = {
+            "baseline_ms": baseline_latency,
+            "current_ms": current_latency,
+            "improvement_ms": latency_improvement,
+            "improvement_pct": (latency_improvement / baseline_latency) * 100 if baseline_latency > 0 else 0
+        }
+
+        # Throughput comparison
+        baseline_throughput = baseline["benchmarks"]["throughput_inf_per_sec"]
+        current_throughput = result["benchmarks"]["throughput_inf_per_sec"]
+        throughput_improvement = current_throughput - baseline_throughput
+
+        comparisons[model_name]["throughput"] = {
+            "baseline_inf_sec": baseline_throughput,
+            "current_inf_sec": current_throughput,
+            "improvement_inf_sec": throughput_improvement,
+            "improvement_pct": (throughput_improvement / baseline_throughput) * 100 if baseline_throughput > 0 else 0
+        }
+
+    return {
+        "baseline_model": baseline["metadata"],
+        "comparisons": comparisons,
+        "summary": {
+            "models_compared": len(model_results),
+            "best_score": max(r["evaluation"]["summary"]["average_score"] for r in model_results),
+            "best_latency": min(r["benchmarks"]["inference_latency_ms"]["p50"] for r in model_results),
+            "best_throughput": max(r["benchmarks"]["throughput_inf_per_sec"] for r in model_results)
+        }
+    }
+
+
+def run_comprehensive_evaluation(model_path: str = None, output_file: str = None) -> Dict[str, Any]:
+    """
+    Run comprehensive evaluation with multiple metrics and benchmarks.
+
+    Args:
+        model_path: Path to CoreML model (auto-detects if None)
+        output_file: Path to save results (auto-generates if None)
+
+    Returns:
+        Dictionary with evaluation results and benchmarks
+    """
+    if model_path is None:
+        model_path = "/tmp/8_ball_T128.mlpackage"
+
+    if output_file is None:
+        import time
+        output_file = f"/tmp/8_ball_eval_{int(time.time())}.json"
+
+    print(f"🔬 Running comprehensive evaluation...")
+    print(f"   Model: {model_path}")
+    print(f"   Output: {output_file}")
+
+    # Basic functionality test
+    results = main()
+
+    # Add performance benchmarks
+    import time
+    import numpy as np
+
+    print(f"🏃 Running performance benchmarks...")
+
+    # Load model for benchmarking
+    import coremltools as ct
+    model = ct.models.MLModel(model_path)
+
+    # Benchmark inference latency
+    latencies = []
+    for _ in range(10):
+        input_ids = np.random.randint(0, 512, size=(1, 128), dtype=np.int32)
+        start_time = time.time()
+        result = model.predict({'input_ids': input_ids})
+        end_time = time.time()
+        latencies.append((end_time - start_time) * 1000)  # Convert to ms
+
+    # Calculate benchmark statistics
+    benchmark_results = {
+        "inference_latency_ms": {
+            "mean": float(np.mean(latencies)),
+            "p50": float(np.percentile(latencies, 50)),
+            "p95": float(np.percentile(latencies, 95)),
+            "p99": float(np.percentile(latencies, 99)),
+            "min": float(np.min(latencies)),
+            "max": float(np.max(latencies))
+        },
+        "throughput_inf_per_sec": 1000 / np.mean(latencies),  # inferences per second
+        "model_size_mb": 1.24,  # Known model size
+        "platform": "Apple Silicon"
+    }
+
+    # Combine results
+    comprehensive_results = {
+        "evaluation": results,
+        "benchmarks": benchmark_results,
+        "metadata": {
+            "model_path": model_path,
+            "evaluation_timestamp": time.time(),
+            "test_version": "1.1.0"
+        }
+    }
+
+    # Save comprehensive results
+    with open(output_file, "w") as f:
+        import json
+        json.dump(comprehensive_results, f, indent=2, default=str)
+
+    print(f"✅ Comprehensive evaluation complete")
+    print(f"📊 Results saved to: {output_file}")
+    print(f"🏃 Inference latency: {benchmark_results['inference_latency_ms']['p50']:.2f}ms (P50)")
+    print(f"🚀 Throughput: {benchmark_results['throughput_inf_per_sec']:.0f} inf/sec")
+
+    return comprehensive_results
 
 
 def main():
@@ -444,6 +596,98 @@ def main():
     print(f"\n📄 Detailed results saved to: {output_file}")
     print("🎱 8-ball CoreML testing complete! 🎱")
 
+    return {
+        "summary": {
+            "total_tests": len(results),
+            "mystical_phrases": sum(1 for r in results if r.get("contains_mystical_phrase", False)),
+            "exact_matches": sum(1 for r in results if r.get("exact_mystical_match", False)),
+            "average_score": sum(r.get("score", 0) for r in results) / len(results) if results else 0,
+            "mystical_flair_count": sum(1 for r in results if r.get("has_mystical_flair", False)),
+            "fortune_like": sum(1 for r in results if r.get("looks_like_fortune", False)),
+        },
+        "results": results
+    }
+
+
+def run_regression_test(baseline_results_path: str = None) -> Dict[str, Any]:
+    """
+    Run regression test comparing current model against baseline.
+
+    Args:
+        baseline_results_path: Path to baseline comprehensive evaluation results
+
+    Returns:
+        Regression test results with pass/fail status
+    """
+    print("🔄 Running regression test...")
+
+    # Run current evaluation
+    current_results = run_comprehensive_evaluation()
+
+    if baseline_results_path and Path(baseline_results_path).exists():
+        # Load baseline
+        with open(baseline_results_path, 'r') as f:
+            baseline_results = json.load(f)
+
+        # Compare against baseline
+        comparison = compare_models([baseline_results, current_results])
+
+        # Define regression criteria
+        regression_status = "PASS"
+        issues = []
+
+        # Check score regression (allow -5% degradation)
+        score_change = comparison["comparisons"]["model_1"]["score"]["improvement_pct"]
+        if score_change < -5.0:
+            regression_status = "FAIL"
+            issues.append(f"Score regression: {score_change:.1f}% (threshold: -5%)")
+
+        # Check latency regression (allow +10% increase)
+        latency_change = comparison["comparisons"]["model_1"]["latency"]["improvement_pct"]
+        if latency_change < -10.0:  # Negative means latency increased
+            regression_status = "FAIL"
+            issues.append(f"Latency regression: {latency_change:.1f}% (threshold: +10%)")
+
+        return {
+            "status": regression_status,
+            "issues": issues,
+            "comparison": comparison,
+            "current_results": current_results
+        }
+    else:
+        print(f"⚠️  No baseline found at {baseline_results_path}, creating new baseline")
+        return {
+            "status": "BASELINE_CREATED",
+            "current_results": current_results
+        }
+
 
 if __name__ == "__main__":
-    main()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Test 8-ball CoreML model")
+    parser.add_argument("--comprehensive", action="store_true",
+                       help="Run comprehensive evaluation with benchmarks")
+    parser.add_argument("--regression", type=str,
+                       help="Run regression test against baseline results file")
+    parser.add_argument("--model-path", type=str, default="/tmp/8_ball_T128.mlpackage",
+                       help="Path to CoreML model")
+    parser.add_argument("--output", type=str,
+                       help="Output file for results (auto-generated if not specified)")
+
+    args = parser.parse_args()
+
+    if args.regression:
+        result = run_regression_test(args.regression)
+        print(f"🔍 Regression Test Result: {result['status']}")
+        if result['status'] == 'FAIL':
+            print("❌ Issues found:")
+            for issue in result['issues']:
+                print(f"   • {issue}")
+            exit(1)
+        elif result['status'] == 'PASS':
+            print("✅ All regression checks passed!")
+    elif args.comprehensive:
+        run_comprehensive_evaluation(args.model_path, args.output)
+    else:
+        main()

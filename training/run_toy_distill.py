@@ -73,7 +73,7 @@ def main():
     ap.add_argument(
         "--magic-8-ball",
         action="store_true",
-        help="Train a Magic 8 Ball model that gives mystical fortune-telling responses",
+        help="Train an 8-Ball model that gives mystical fortune-telling responses",
     )
     args = ap.parse_args()
 
@@ -167,8 +167,16 @@ def main():
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
+    # Early stopping parameters
+    best_loss = float('inf')
+    patience = 5  # Stop if no improvement for 5 steps
+    patience_counter = 0
+    early_stop = False
+
     step = 0
     for epoch in range(args.epochs):
+        if early_stop:
+            break
         for batch_idx, batch in enumerate(dataloader):
             # Move batch to device
             input_ids = batch["input_ids"].to(device)
@@ -211,16 +219,17 @@ def main():
                     if batch_idx == 0 and epoch == 0:
                         print(f"[run_toy_distill] Generated toy teacher logits")
 
-            # Compute loss
+            # Compute loss with optimized distillation weights
+            # Higher KL weight for better teacher alignment, balanced CE weights
             loss_dict = combined_kd_loss(
                 student_logits=student_logits.float(),
                 teacher_logits=teacher_logits_tensor,
                 teacher_targets=teacher_logits_tensor.argmax(dim=-1),
                 ground_truth_targets=labels.to(device),
-                kl_weight=0.5,
-                ce_teacher_weight=0.3,
-                ce_ground_truth_weight=0.2,
-                kd_temperature=2.0,
+                kl_weight=0.6,        # Increased for better teacher alignment
+                ce_teacher_weight=0.2, # Reduced to balance with KL
+                ce_ground_truth_weight=0.2, # Keep ground truth supervision
+                kd_temperature=1.5,   # Lower temperature for sharper distillation
             )
 
             loss = loss_dict["total"]
@@ -228,6 +237,10 @@ def main():
             # Backward pass
             optimizer.zero_grad()
             loss.backward()
+
+            # Gradient clipping to prevent exploding gradients
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
             optimizer.step()
             scheduler.step()  # Update learning rate
 
@@ -237,6 +250,19 @@ def main():
                 current_lr = optimizer.param_groups[0]['lr']
                 print(
                     f"[run_toy_distill] Step {step}/{total_steps}: loss={loss.item():.4f}, lr={current_lr:.2e}")
+
+            # Early stopping check
+            current_loss = loss.item()
+            if current_loss < best_loss - 0.001:  # Minimum improvement threshold
+                best_loss = current_loss
+                patience_counter = 0
+            else:
+                patience_counter += 1
+
+            if patience_counter >= patience:
+                print(f"[run_toy_distill] Early stopping at step {step} (no improvement for {patience} steps)")
+                early_stop = True
+                break
 
     # Save checkpoint with unified schema
     model.eval()
