@@ -135,6 +135,8 @@ make eval-runner-openai \
 >
 > `runner: verification_only` is for dataset QA. It reuses dataset ground truth to compute a proxy F1 and will **always** be insufficient for CAWS gates. Use `hf_local` or `openai_http` for real evaluation.
 
+> **📖 Local Development Tiers**: For comprehensive local validation at different scales, see [`docs/LOCAL_DEVELOPMENT_WORKFLOW.md`](docs/LOCAL_DEVELOPMENT_WORKFLOW.md) - from 5-minute smoke tests to full production pipelines.
+
 ### 5 · Process Supervision & Quantization
 
 ```bash
@@ -510,6 +512,7 @@ It delivers **distilled CoreML models** verified through **CAWS-compliant evalua
 
 ## Documentation
 
+- **Local Development**: [`docs/LOCAL_DEVELOPMENT_WORKFLOW.md`](docs/LOCAL_DEVELOPMENT_WORKFLOW.md) - Progressive local validation tiers
 - **Toy Test Strategy**: [`docs/TOY_TEST_STRATEGY.md`](docs/TOY_TEST_STRATEGY.md) - Comprehensive toy testing approach
 - **Dataset Card**: [`docs/DATASET_CARD_CONTEXTUAL.md`](docs/DATASET_CARD_CONTEXTUAL.md) - Dataset schema and policies
 - **Generation Guide**: [`docs/CONTEXTUAL_DATASET_GENERATION.md`](docs/CONTEXTUAL_DATASET_GENERATION.md) - Full workflow

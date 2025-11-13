@@ -1,4 +1,4 @@
-.PHONY: kd inter proc qat onnx coreml probes eval release format judge worker drafter caws-eval contextual-gen contextual-extract contextual-verify contextual-pipeline gen-scale-1k gen-scale-10k verify-scale-1k verify-scale-10k verify-dual-tokenizers verify-next-registry gen-teacher-heavy verify-teacher-heavy eval-runner-openai eval-runner-local eval-smoke speed-coreml train-student-speed train-student-qat
+.PHONY: kd inter proc qat onnx coreml probes eval release format judge worker drafter caws-eval contextual-gen contextual-extract contextual-verify contextual-pipeline gen-scale-1k gen-scale-10k verify-scale-1k verify-scale-10k verify-dual-tokenizers verify-next-registry gen-teacher-heavy verify-teacher-heavy eval-runner-openai eval-runner-local eval-smoke speed-coreml train-student-speed train-student-qat 8-ball magic-8-ball
 
 # Worker model (primary generator, ~9B)
 worker:
@@ -542,6 +542,27 @@ toy-e2e: toy-clean
 		echo "⚠️  CoreML model not found, skipping verification"; \
 	fi
 	@echo "Toy E2E OK → eval/reports/toy_e2e.json"
+
+.PHONY: 8-ball magic-8-ball
+8-ball: magic-8-ball
+magic-8-ball: toy-clean
+	@echo "🎱 Starting Magic 8 Ball E2E Pipeline 🎱"
+	$(PYTHON) -m data.make_toy_kd --out /tmp/magic_8_ball_kd.jsonl --n 128 --magic-8-ball
+	$(PYTHON) -m training.run_toy_distill --in /tmp/magic_8_ball_kd.jsonl --out /tmp/magic_8_ball.ckpt --epochs 2 --mps 0 --magic-8-ball
+	$(PYTHON) -m conversion.export_pytorch --checkpoint /tmp/magic_8_ball.ckpt --out /tmp/magic_8_ball_exported --toy --mode prefill --seq 64 --enumerated-T 64 128 256
+	@if [ -f /tmp/magic_8_ball_exported/student_prefill_T128.pt ]; then \
+		$(PYTHON) -m conversion.convert_coreml --backend pytorch --in /tmp/magic_8_ball_exported/student_prefill_T128.pt --out /tmp/magic_8_ball_T128.mlpackage --seq 128 --compute-units all --toy || echo "⚠️  CoreML conversion may have failed (CoreML may not be available)"; \
+	else \
+		echo "⚠️  Prefill model not found, skipping conversion"; \
+	fi
+	@if [ -d /tmp/magic_8_ball_T128.mlpackage ]; then \
+		$(PYTHON) -m evaluation.toy_contracts --model /tmp/magic_8_ball_T128.mlpackage --seq 64 128 256 --report eval/reports/magic_8_ball_e2e.json || echo "⚠️  Verification may have failed (CoreML may not be available)"; \
+	else \
+		echo "⚠️  CoreML model not found, skipping verification"; \
+	fi
+	@echo "🎨 Generating model card charts..."
+	$(PYTHON) scripts/generate_magic8_charts.py
+	@echo "🎱 Magic 8 Ball E2E Complete! → eval/reports/magic_8_ball_e2e.json 🎱"
 
 .PHONY: toy-e2e-multi
 toy-e2e-multi: toy-clean

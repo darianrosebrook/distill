@@ -1,0 +1,33 @@
+{
+  "header": {
+    "toy": true,
+    "enumerated_shapes_requested": [
+      64,
+      128,
+      256
+    ]
+  },
+  "per_shape": {
+    "64": {
+      "ok": false,
+      "reason": "predict error: RuntimeError"
+    },
+    "128": {
+      "ok": true,
+      "reason": "ok"
+    },
+    "256": {
+      "ok": false,
+      "reason": "predict error: RuntimeError"
+    }
+  },
+  "summary": {
+    "nan_shapes": 0,
+    "zero_shapes": 0,
+    "shapes_ok": [
+      "128"
+    ],
+    "tool_span_micro_f1": 0.6666666653333333
+  },
+  "gates_ok": true
+}

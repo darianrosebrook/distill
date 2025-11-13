@@ -68,9 +68,9 @@ def temp_jsonl_file() -> Generator[Path, None, None]:
         for item in test_data:
             f.write(json.dumps(item) + '\n')
         temp_path = Path(f.name)
-    
+
     yield temp_path
-    
+
     # Cleanup
     if temp_path.exists():
         temp_path.unlink()
@@ -82,7 +82,7 @@ def sample_batch():
     batch_size = 2
     seq_len = 10
     vocab_size = 1000
-    
+
     return {
         "input_ids": torch.randint(0, vocab_size, (batch_size, seq_len)),
         "attention_mask": torch.ones(batch_size, seq_len),
@@ -108,7 +108,8 @@ def mock_tokenizer():
             token_ids = [abs(hash(t)) % self.vocab_size for t in tokens]
 
             if add_special_tokens:
-                token_ids = [self.eos_token_id] + token_ids + [self.eos_token_id]
+                token_ids = [self.eos_token_id] + \
+                    token_ids + [self.eos_token_id]
 
             return token_ids
 
@@ -130,7 +131,8 @@ def coreml_model_path():
     # In dev, we skip the test gracefully
     path = "coreml/artifacts/worker/model.mlpackage"
     if not Path(path).exists():
-        pytest.skip(f"CoreML model not found: {path}. Run 'make coreml-worker' first.")
+        pytest.skip(
+            f"CoreML model not found: {path}. Run 'make coreml-worker' first.")
     return path
 
 
@@ -141,7 +143,8 @@ def current_metrics_path():
     # In dev, we skip the test gracefully
     path = "eval/reports/current_performance.json"
     if not Path(path).exists():
-        pytest.skip(f"Current performance metrics not found: {path}. Run performance evaluation first.")
+        pytest.skip(
+            f"Current performance metrics not found: {path}. Run performance evaluation first.")
     return path
 
 
@@ -152,7 +155,8 @@ def fp16_model_path():
     # In dev, we skip the test gracefully
     path = "models/student/exported/student_fp16.pt"
     if not Path(path).exists():
-        pytest.skip(f"FP16 model not found: {path}. Run 'make pytorch-worker' first.")
+        pytest.skip(
+            f"FP16 model not found: {path}. Run 'make pytorch-worker' first.")
     return path
 
 
@@ -163,7 +167,8 @@ def golden_vectors_dir():
     # In dev, we skip the test gracefully
     path = "coreml/golden_vectors"
     if not Path(path).exists():
-        pytest.skip(f"Golden vectors directory not found: {path}. Generate golden vectors first.")
+        pytest.skip(
+            f"Golden vectors directory not found: {path}. Generate golden vectors first.")
     return path
 
 
@@ -174,6 +179,6 @@ def baseline_metrics_path():
     # In dev, we skip the test gracefully
     path = "eval/baselines/performance_baseline.json"
     if not Path(path).exists():
-        pytest.skip(f"Baseline performance metrics not found: {path}. Create baseline first.")
+        pytest.skip(
+            f"Baseline performance metrics not found: {path}. Create baseline first.")
     return path
-
