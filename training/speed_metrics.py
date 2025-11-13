@@ -21,19 +21,19 @@ def measure_proxy(
 ) -> Dict[str, float]:
     """
     Measure proxy speed metrics during validation.
-    
+
     Reference: inference-speed-optimization-during-distillation-c3d3cffc.plan.md Phase 4
-    
+
     These are proxies measured on PyTorch model, not CoreML/ANE.
     Tag with export=False in logs. Expected offset vs CoreML should be documented.
-    
+
     Args:
         model: Model to measure
         batch: Batch dictionary with input_ids, attention_mask
         tokenizer: Tokenizer for decoding (for TTFA detection)
         device: Device to use
         max_new_tokens: Maximum tokens to generate for TPS measurement
-        
+
     Returns:
         Dictionary with speed metrics:
         - ttft_ms: Time to first token (milliseconds)
@@ -42,31 +42,31 @@ def measure_proxy(
         - ttfa_ms: Time until first valid tool JSON (milliseconds)
     """
     model.eval()
-    
+
     with torch.no_grad():
         input_ids = batch["input_ids"].to(device)
         attention_mask = batch.get("attention_mask")
         if attention_mask is not None:
             attention_mask = attention_mask.to(device)
-        
+
         # Measure TTFT: time to first token
         t0 = time.perf_counter()
         logits = model(input_ids, attention_mask)
         t1 = time.perf_counter()
         ttft_ms = (t1 - t0) * 1000.0
-        
+
         # Get first token logits (last position)
         first_token_logits = logits[:, -1, :]  # [B, V]
         first_token_id = torch.argmax(first_token_logits, dim=-1)[0].item()
-        
+
         # Measure steady-state TPS: generate a few more tokens
         generated_tokens = [first_token_id]
         t_start = time.perf_counter()
-        
+
         # Use KV cache if available (forward_decode)
         kv_cache = None
         current_ids = input_ids
-        
+
         for i in range(min(max_new_tokens - 1, 32)):  # Limit to 32 for speed
             # Single token forward
             if hasattr(model, 'forward_decode'):
@@ -86,23 +86,24 @@ def measure_proxy(
                 next_logits = model(next_input, attention_mask=None)
                 next_token_id = torch.argmax(next_logits[0, -1, :]).item()
                 current_ids = next_input
-            
+
             generated_tokens.append(next_token_id)
-        
+
         t_end = time.perf_counter()
         tokens_generated = len(generated_tokens)
         elapsed_seconds = max(1e-6, t_end - t_start)
         tps = tokens_generated / elapsed_seconds
-        
+
         # Measure TTFA: tokens/time until first valid tool JSON
         ttfa_tokens = None
         ttfa_ms = None
-        
+
         if tokenizer is not None:
             try:
                 # Decode generated tokens to check for valid tool JSON
-                decoded_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
-                
+                decoded_text = tokenizer.decode(
+                    generated_tokens, skip_special_tokens=True)
+
                 # Check if decoded text contains valid tool JSON
                 # This is a simple heuristic - use your actual JSON validator for production
                 if is_valid_tool_json(decoded_text):
@@ -110,7 +111,7 @@ def measure_proxy(
                     ttfa_ms = (t_end - t0) * 1000.0
             except Exception:
                 pass
-        
+
         return {
             "ttft_ms": float(ttft_ms),
             "tps": float(tps),
@@ -123,17 +124,20 @@ def measure_proxy(
 def is_valid_tool_json(text: str) -> bool:
     """
     Simple heuristic to check if text contains valid tool JSON.
-    
+
+    Accepts partial JSON that has basic structure (for speed metrics detection).
+
     For production, use the same validator as eval/scoring/scorer.py.
-    
+
     Args:
         text: Text to check
-        
+
     Returns:
         True if text appears to contain valid tool JSON
     """
     # Minimal check: contains JSON-like structure
-    if "{" in text and "}" in text and ":" in text:
+    # Accept partial JSON (missing closing brace) for speed metrics
+    if "{" in text and ":" in text:
         # Try to find tool call pattern
         if '"name"' in text or '"tool"' in text:
             return True
@@ -143,12 +147,12 @@ def is_valid_tool_json(text: str) -> bool:
 def aggregate_speed_metrics(metrics_list: List[Dict[str, float]]) -> Dict[str, Dict[str, float]]:
     """
     Aggregate speed metrics across multiple validation batches.
-    
+
     Computes percentiles (p50, p90, p95) for each metric.
-    
+
     Args:
         metrics_list: List of metric dictionaries from measure_proxy()
-        
+
     Returns:
         Dictionary with aggregated metrics:
         - ttft_ms: {p50, p90, p95}
@@ -157,7 +161,7 @@ def aggregate_speed_metrics(metrics_list: List[Dict[str, float]]) -> Dict[str, D
         - ttfa_ms: {p50, p95}
     """
     import numpy as np
-    
+
     if not metrics_list:
         return {
             "ttft_ms": {"p50": 0.0, "p90": 0.0, "p95": 0.0},
@@ -165,7 +169,7 @@ def aggregate_speed_metrics(metrics_list: List[Dict[str, float]]) -> Dict[str, D
             "ttfa_tokens": {"p50": 0.0, "p95": 0.0},
             "ttfa_ms": {"p50": 0.0, "p95": 0.0},
         }
-    
+
     def pct(xs, q):
         arr = np.array(xs, dtype=np.float64)
         # Filter out inf values
@@ -173,12 +177,14 @@ def aggregate_speed_metrics(metrics_list: List[Dict[str, float]]) -> Dict[str, D
         if len(arr) == 0:
             return 0.0
         return float(np.nanpercentile(arr, q))
-    
+
     ttft_values = [m["ttft_ms"] for m in metrics_list]
     tps_values = [m["tps"] for m in metrics_list]
-    ttfa_tokens_values = [m["ttfa_tokens"] for m in metrics_list if m["ttfa_tokens"] != float('inf')]
-    ttfa_ms_values = [m["ttfa_ms"] for m in metrics_list if m["ttfa_ms"] != float('inf')]
-    
+    ttfa_tokens_values = [m["ttfa_tokens"]
+                          for m in metrics_list if m["ttfa_tokens"] != float('inf')]
+    ttfa_ms_values = [m["ttfa_ms"]
+                      for m in metrics_list if m["ttfa_ms"] != float('inf')]
+
     return {
         "ttft_ms": {
             "p50": pct(ttft_values, 50),
@@ -199,4 +205,3 @@ def aggregate_speed_metrics(metrics_list: List[Dict[str, float]]) -> Dict[str, D
             "p95": pct(ttfa_ms_values, 95) if ttfa_ms_values else float('inf'),
         },
     }
-

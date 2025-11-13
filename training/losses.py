@@ -579,7 +579,7 @@ def combined_kd_loss(
         total_loss = total_loss + halt_weight * halt_loss
 
     losses["total"] = total_loss
-    
+
     # Assert loss finiteness (catch NaNs/Infs early)
     if not torch.isfinite(total_loss).all():
         nan_count = torch.isnan(total_loss).sum().item()
@@ -589,7 +589,7 @@ def combined_kd_loss(
             f"NaN count={nan_count}, Inf count={inf_count}. "
             f"Individual losses: {[(k, v.item() if isinstance(v, torch.Tensor) else v) for k, v in losses.items()]}"
         )
-    
+
     return losses
 
 
@@ -635,11 +635,43 @@ class CodeModePreferenceLoss(nn.Module):
         self.vocab_ids = vocab_ids or {}
         self.weights = weights or {"pos": 1.0, "neg": 1.0}
 
+    def _compute_eligibility_mask(
+        self,
+        batch_meta: List[Dict[str, Any]],
+        batch_size: int
+    ) -> torch.Tensor:
+        """
+        Compute eligibility mask for code-mode preference.
+
+        Args:
+            batch_meta: List of batch metadata dicts
+            batch_size: Size of batch
+
+        Returns:
+            Boolean tensor [batch_size] indicating eligibility
+        """
+        eligibility_mask = torch.zeros(batch_size, dtype=torch.bool)
+
+        for i, meta in enumerate(batch_meta):
+            tool_count = meta.get("tool_count", 0)
+            intermediate_sizes = meta.get("intermediate_sizes", [])
+            pii_tags_present = meta.get("pii_tags_present", False)
+
+            eligible = (
+                tool_count >= self.min_tools or
+                (intermediate_sizes and max(intermediate_sizes) >= self.min_intermediate_chars) or
+                pii_tags_present
+            )
+
+            eligibility_mask[i] = eligible
+
+        return eligibility_mask
+
     def forward(
         self,
         student_logits: torch.Tensor,
         span_targets: Optional[Dict[str, torch.Tensor]] = None,
-        batch_meta: Optional[Dict[str, Any]] = None,
+        batch_meta: Optional[List[Dict[str, Any]]] = None,
     ) -> torch.Tensor:
         """
         Compute code-mode preference loss.
@@ -647,26 +679,21 @@ class CodeModePreferenceLoss(nn.Module):
         Args:
             student_logits: [B, T, V] student logits
             span_targets: Optional dict with TS API span targets
-            batch_meta: Optional batch metadata with eligibility info
+            batch_meta: Optional list of batch metadata dicts with eligibility info
 
         Returns:
             Loss tensor (scalar)
         """
-        if batch_meta is None:
+        if batch_meta is None or len(batch_meta) == 0:
             return torch.tensor(0.0, device=student_logits.device, requires_grad=True)
 
-        # Check eligibility
-        tool_count = batch_meta.get("tool_count", 0)
-        intermediate_sizes = batch_meta.get("intermediate_sizes", [])
-        pii_tags_present = batch_meta.get("pii_tags_present", False)
+        # Check eligibility for the batch
+        batch_size = len(batch_meta)
+        eligibility_mask = self._compute_eligibility_mask(
+            batch_meta, batch_size)
 
-        eligible = (
-            tool_count >= self.min_tools or
-            (intermediate_sizes and max(intermediate_sizes) >= self.min_intermediate_chars) or
-            pii_tags_present
-        )
-
-        if not eligible:
+        # If no items in batch are eligible, return zero loss
+        if not eligibility_mask.any():
             return torch.tensor(0.0, device=student_logits.device, requires_grad=True)
 
 
@@ -698,7 +725,8 @@ def caws_compliance_loss(
     loss_components.append(budget_penalty)
 
     # 2. Evaluate quality compliance (claim support, reasoning structure)
-    quality_penalty = _evaluate_quality_compliance(student_output, teacher_output, claim_extractor)
+    quality_penalty = _evaluate_quality_compliance(
+        student_output, teacher_output, claim_extractor)
     loss_components.append(quality_penalty)
 
     # 3. Evaluate feature usage compliance (appropriate use of code-mode, latent reasoning)
@@ -710,6 +738,87 @@ def caws_compliance_loss(
 
     # Ensure loss is non-negative and requires gradients for training
     return torch.clamp(torch.tensor(float(total_loss), requires_grad=True), min=0.0)
+
+
+def caws_structure_loss(teacher_score: float, student_score: float) -> torch.Tensor:
+    """
+    CAWS structure loss for distillation training.
+
+    Penalizes when student structure score is lower than teacher score.
+    No penalty when student score is equal or higher (student is better).
+
+    Args:
+        teacher_score: Teacher's CAWS structure score (0.0 to 1.0)
+        student_score: Student's CAWS structure score (0.0 to 1.0)
+
+    Returns:
+        Loss tensor where higher values indicate worse structure compliance
+    """
+    if student_score >= teacher_score:
+        # Student is as good or better - no penalty
+        return torch.tensor(0.0, requires_grad=True)
+
+    # Penalize the difference (teacher - student)
+    loss_value = teacher_score - student_score
+    return torch.clamp(torch.tensor(float(loss_value), requires_grad=True), min=0.0)
+
+
+def entropy_weighting(
+    teacher_logits: torch.Tensor,
+    min_entropy: float = 2.0,
+    max_entropy: float = 8.0,
+    min_temp: float = 1.5,
+    max_temp: float = 3.0,
+) -> tuple[float, Dict[str, float]]:
+    """
+    Compute entropy-based temperature and weighting for distillation.
+
+    Higher entropy in teacher predictions → higher temperature, higher KL weight
+    Lower entropy in teacher predictions → lower temperature, higher CE_GT weight
+
+    Args:
+        teacher_logits: Teacher model logits [batch_size, seq_len, vocab_size]
+        min_entropy: Minimum expected entropy
+        max_entropy: Maximum expected entropy
+        min_temp: Minimum temperature to apply
+        max_temp: Maximum temperature to apply
+
+    Returns:
+        Tuple of (temperature, weights_dict) where weights_dict contains:
+        - "entropy": Computed entropy value
+        - "kl_weight": Weight for KL divergence loss
+        - "ce_teacher_weight": Weight for cross-entropy on teacher predictions
+        - "ce_ground_truth_weight": Weight for cross-entropy on ground truth
+    """
+    # Compute entropy of teacher predictions
+    # entropy = -sum(p * log(p)) where p = softmax(logits)
+    teacher_probs = F.softmax(teacher_logits, dim=-1)
+    entropy = -torch.sum(teacher_probs *
+                         torch.log(teacher_probs + 1e-10), dim=-1)
+    avg_entropy = torch.mean(entropy).item()
+
+    # Map entropy to temperature
+    # entropy ∈ [min_entropy, max_entropy] → temp ∈ [min_temp, max_temp]
+    entropy_ratio = (avg_entropy - min_entropy) / (max_entropy - min_entropy)
+    entropy_ratio = torch.clamp(torch.tensor(entropy_ratio), 0.0, 1.0).item()
+
+    temperature = min_temp + entropy_ratio * (max_temp - min_temp)
+
+    # Map entropy to weights (normalized to sum to 1.0)
+    # High entropy → favor KL and CE_teacher (teacher alignment)
+    # Low entropy → favor CE_ground_truth (ground truth alignment)
+    kl_weight = entropy_ratio * 0.5  # 0 to 0.5
+    ce_teacher_weight = entropy_ratio * 0.5  # 0 to 0.5
+    ce_gt_weight = 1.0 - entropy_ratio  # 1.0 to 0
+
+    weights = {
+        "entropy": avg_entropy,
+        "kl_weight": kl_weight,
+        "ce_teacher_weight": ce_teacher_weight,
+        "ce_ground_truth_weight": ce_gt_weight,
+    }
+
+    return temperature, weights
 
 
 def _evaluate_budget_compliance(student_output: str) -> float:
@@ -740,7 +849,8 @@ def _evaluate_budget_compliance(student_output: str) -> float:
         penalty += (bot_count - max_allowed_latent) * 0.5
 
     # Penalize excessive refinement loops (rough heuristic: multiple "Step X:" patterns)
-    step_patterns = len(re.findall(r'Step \d+:', student_output, re.IGNORECASE))
+    step_patterns = len(re.findall(
+        r'Step \d+:', student_output, re.IGNORECASE))
     max_allowed_steps = 5  # Reasonable limit
     if step_patterns > max_allowed_steps:
         penalty += (step_patterns - max_allowed_steps) * 0.2
@@ -789,9 +899,10 @@ def _evaluate_quality_compliance(
         penalty += 1.0
 
     # Penalize outputs with contradiction markers
-    contradiction_indicators = ["however", "but", "contrary", "despite", "although"]
+    contradiction_indicators = ["however",
+                                "but", "contrary", "despite", "although"]
     contradiction_count = sum(1 for word in contradiction_indicators
-                            if word.lower() in student_output.lower())
+                              if word.lower() in student_output.lower())
     penalty += contradiction_count * 0.1
 
     # Penalize outputs that don't have clear conclusion/answer
@@ -816,13 +927,16 @@ def _evaluate_feature_usage_compliance(student_output: str) -> float:
     penalty = 0.0
 
     # Check for code-mode indicators when no API usage
-    code_indicators = ["import", "from", "callMCPTool", "await", "function", "const", "let"]
-    has_code_patterns = any(indicator in student_output for indicator in code_indicators)
+    code_indicators = ["import", "from", "callMCPTool",
+                       "await", "function", "const", "let"]
+    has_code_patterns = any(
+        indicator in student_output for indicator in code_indicators)
 
     # Check for actual tool usage (rough heuristic)
-    tool_usage_indicators = ["google_drive", "salesforce", "api", "tool", "call"]
+    tool_usage_indicators = ["google_drive",
+                             "salesforce", "api", "tool", "call"]
     has_tool_usage = any(indicator.lower() in student_output.lower()
-                        for indicator in tool_usage_indicators)
+                         for indicator in tool_usage_indicators)
 
     # Penalize code-mode syntax without tool usage (inappropriate code-mode)
     if has_code_patterns and not has_tool_usage:
