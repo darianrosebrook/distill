@@ -1,0 +1,25 @@
+version: "2025-11-12"
+require_artifacts:
+  STATUS:
+    types: [eval_report, coverage_report, ci_status]
+  BENCHMARK:
+    types: [bench_json]
+  QUANT:
+    types: [eval_report, bench_json]
+banned_terms:
+  - state-of-the-art
+  - revolutionary
+  - next-generation
+  - best
+  - leading
+  - breakthrough
+numeric_fields_allow:
+  - summary.avg_integration_f1_macro_lax
+  - summary.privacy_ok_rate
+  - summary.controls_with_integration
+  - perf.ttft_ms.p50
+  - perf.ttft_ms.p95
+  - perf.tps.p50
+  - perf.tps.p95
+thresholds:
+  coverage_min: 0.70

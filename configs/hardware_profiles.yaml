@@ -1,0 +1,319 @@
+schema_version: 1
+default_profile: m1-max-64g
+
+profiles:
+  # ===== Apple Silicon: Pro/Max tiers =====
+  m1-max-64g:
+    matches:
+      soc_regex: "^Apple[ ]?M1 Max"
+      min_ram_gb: 64
+    export_path: "pytorch_exportedprogram_coreml"
+    enumerated_shapes: [512, 1024, 2048, 4096]
+    shape_mix: [0.40, 0.40, 0.15, 0.05]
+
+    speed_targets:
+      # Realistic bands for ~9B Worker with INT8-W / FP16-A, batch=1, good export.
+      ttft_ms:
+        p50: [300, 500]   # accept band; CI gates are relative deltas vs. baseline
+        p95: [450, 800]
+      tps:
+        p50: [25, 35]     # tokens/sec steady-state
+        p95: [20, 30]
+      ttfa_tokens:
+        p95: [0, 25]      # tokens to first valid tool JSON
+
+    gating:
+      # Relative non-regression gates (vs. last blessed on SAME profile)
+      max_regression_pct:
+        ttft_ms_p50: 5
+        ttft_ms_p95: 5
+        tps_p50: 5
+        tps_p95: 5
+      absolute_bounds:   # optional hard stops (use sparingly)
+        ttfa_tokens_p95_max: 25
+      require_same_profile: true
+
+    batch_policy:
+      interactive_default: 1
+      offline_allowed: [2, 4]
+
+    kv_policy:
+      precision: "fp16"
+      notes: "Keep KV fp16 to preserve ANE kernels; revisit only with proven ANE-safe path."
+
+    quant_policy:
+      weights_bits: 8
+      activations_bits: 16
+      do_not_quantize: ["layernorm", "softmax"]
+
+    measure:
+      slice:
+        dataset: "data/contextual_final.jsonl"
+        take: 100
+      split_ttft:
+        tokenizer_ms: true
+        first_step_ms: true
+
+    profiling:
+      require_ane_residency_check: true
+      tools: ["Instruments/Core ML", "wall-clock sampling"]
+      notes: "Fail PR if ANE residency drops >10% vs baseline sample."
+
+  m2-pro-32g:
+    matches:
+      soc_regex: "^Apple[ ]?M2 Pro"
+      min_ram_gb: 32
+    export_path: "pytorch_exportedprogram_coreml"
+    enumerated_shapes: [512, 1024, 2048, 4096]
+    shape_mix: [0.45, 0.35, 0.15, 0.05]
+    speed_targets:
+      ttft_ms:
+        p50: [250, 450]
+        p95: [400, 700]
+      tps:
+        p50: [28, 40]
+        p95: [22, 33]
+      ttfa_tokens:
+        p95: [0, 25]
+    gating:
+      max_regression_pct:
+        ttft_ms_p50: 5
+        ttft_ms_p95: 5
+        tps_p50: 5
+        tps_p95: 5
+      require_same_profile: true
+    batch_policy:
+      interactive_default: 1
+      offline_allowed: [2]
+    kv_policy:
+      precision: "fp16"
+    quant_policy:
+      weights_bits: 8
+      activations_bits: 16
+      do_not_quantize: ["layernorm", "softmax"]
+    measure:
+      slice: { dataset: "data/contextual_final.jsonl", take: 100 }
+      split_ttft: { tokenizer_ms: true, first_step_ms: true }
+    profiling:
+      require_ane_residency_check: true
+      tools: ["Instruments/Core ML"]
+
+  m3-pro-36g:
+    matches:
+      soc_regex: "^Apple[ ]?M3 Pro"
+      min_ram_gb: 18
+    export_path: "pytorch_exportedprogram_coreml"
+    enumerated_shapes: [512, 1024, 2048, 4096]
+    shape_mix: [0.45, 0.35, 0.15, 0.05]
+    speed_targets:
+      ttft_ms:
+        p50: [220, 420]
+        p95: [360, 650]
+      tps:
+        p50: [32, 48]
+        p95: [25, 38]
+      ttfa_tokens:
+        p95: [0, 25]
+    gating:
+      max_regression_pct:
+        ttft_ms_p50: 5
+        ttft_ms_p95: 5
+        tps_p50: 5
+        tps_p95: 5
+      require_same_profile: true
+    batch_policy:
+      interactive_default: 1
+      offline_allowed: [2, 4]
+    kv_policy:
+      precision: "fp16"
+    quant_policy:
+      weights_bits: 8
+      activations_bits: 16
+      do_not_quantize: ["layernorm", "softmax"]
+    measure:
+      slice: { dataset: "data/contextual_final.jsonl", take: 100 }
+      split_ttft: { tokenizer_ms: true, first_step_ms: true }
+    profiling:
+      require_ane_residency_check: true
+      tools: ["Instruments/Core ML"]
+  # ===== Apple Silicon: additional common profiles =====
+
+  m1-pro-32g:
+    matches:
+      soc_regex: "^Apple[ ]?M1 Pro"
+      min_ram_gb: 32
+    export_path: "pytorch_exportedprogram_coreml"
+    enumerated_shapes: [512, 1024, 2048, 4096]
+    shape_mix: [0.45, 0.40, 0.12, 0.03]
+    speed_targets:
+      ttft_ms: { p50: [340, 560], p95: [520, 900] }
+      tps:     { p50: [22, 30],  p95: [18, 26]  }
+      ttfa_tokens: { p95: [0, 25] }
+    gating:
+      max_regression_pct:
+        ttft_ms_p50: 5
+        ttft_ms_p95: 5
+        tps_p50:      5
+        tps_p95:      5
+      require_same_profile: true
+    batch_policy: { interactive_default: 1, offline_allowed: [2] }
+    kv_policy: { precision: "fp16" }
+    quant_policy: { weights_bits: 8, activations_bits: 16, do_not_quantize: ["layernorm","softmax"] }
+    measure: { slice: { dataset: "data/contextual_final.jsonl", take: 100 }, split_ttft: { tokenizer_ms: true, first_step_ms: true } }
+    profiling: { require_ane_residency_check: true, tools: ["Instruments/Core ML"] }
+
+  m1-ultra-128g:
+    matches:
+      soc_regex: "^Apple[ ]?M1 Ultra"
+      min_ram_gb: 128
+    export_path: "pytorch_exportedprogram_coreml"
+    enumerated_shapes: [512, 1024, 2048, 4096]
+    shape_mix: [0.45, 0.35, 0.15, 0.05]
+    speed_targets:
+      ttft_ms: { p50: [260, 430], p95: [400, 700] }
+      tps:     { p50: [28, 40],  p95: [22, 34]  }
+      ttfa_tokens: { p95: [0, 25] }
+    gating:
+      max_regression_pct: { ttft_ms_p50: 5, ttft_ms_p95: 5, tps_p50: 5, tps_p95: 5 }
+      require_same_profile: true
+    batch_policy: { interactive_default: 1, offline_allowed: [2, 4] }
+    kv_policy: { precision: "fp16" }
+    quant_policy: { weights_bits: 8, activations_bits: 16, do_not_quantize: ["layernorm","softmax"] }
+    measure: { slice: { dataset: "data/contextual_final.jsonl", take: 120 }, split_ttft: { tokenizer_ms: true, first_step_ms: true } }
+    profiling: { require_ane_residency_check: true, tools: ["Instruments/Core ML"] }
+
+  m2-max-64g:
+    matches:
+      soc_regex: "^Apple[ ]?M2 Max"
+      min_ram_gb: 48
+    export_path: "pytorch_exportedprogram_coreml"
+    enumerated_shapes: [512, 1024, 2048, 4096]
+    shape_mix: [0.42, 0.38, 0.15, 0.05]
+    speed_targets:
+      ttft_ms: { p50: [280, 460], p95: [420, 740] }
+      tps:     { p50: [30, 42],  p95: [24, 35]  }
+      ttfa_tokens: { p95: [0, 25] }
+    gating:
+      max_regression_pct: { ttft_ms_p50: 5, ttft_ms_p95: 5, tps_p50: 5, tps_p95: 5 }
+      require_same_profile: true
+    batch_policy: { interactive_default: 1, offline_allowed: [2, 4] }
+    kv_policy: { precision: "fp16" }
+    quant_policy: { weights_bits: 8, activations_bits: 16, do_not_quantize: ["layernorm","softmax"] }
+    measure: { slice: { dataset: "data/contextual_final.jsonl", take: 100 }, split_ttft: { tokenizer_ms: true, first_step_ms: true } }
+    profiling: { require_ane_residency_check: true, tools: ["Instruments/Core ML"] }
+
+  m2-ultra-128g:
+    matches:
+      soc_regex: "^Apple[ ]?M2 Ultra"
+      min_ram_gb: 96
+    export_path: "pytorch_exportedprogram_coreml"
+    enumerated_shapes: [512, 1024, 2048, 4096]
+    shape_mix: [0.42, 0.36, 0.17, 0.05]
+    speed_targets:
+      ttft_ms: { p50: [240, 420], p95: [380, 680] }
+      tps:     { p50: [34, 48],  p95: [27, 40]  }
+      ttfa_tokens: { p95: [0, 25] }
+    gating:
+      max_regression_pct: { ttft_ms_p50: 5, ttft_ms_p95: 5, tps_p50: 5, tps_p95: 5 }
+    batch_policy: { interactive_default: 1, offline_allowed: [2, 4] }
+    kv_policy: { precision: "fp16" }
+    quant_policy: { weights_bits: 8, activations_bits: 16, do_not_quantize: ["layernorm","softmax"] }
+    measure: { slice: { dataset: "data/contextual_final.jsonl", take: 120 }, split_ttft: { tokenizer_ms: true, first_step_ms: true } }
+    profiling: { require_ane_residency_check: true, tools: ["Instruments/Core ML"] }
+
+  m3-max-48g:
+    matches:
+      soc_regex: "^Apple[ ]?M3 Max"
+      min_ram_gb: 36
+    export_path: "pytorch_exportedprogram_coreml"
+    enumerated_shapes: [512, 1024, 2048, 4096]
+    shape_mix: [0.45, 0.35, 0.15, 0.05]
+    speed_targets:
+      ttft_ms: { p50: [230, 410], p95: [360, 640] }
+      tps:     { p50: [35, 52],  p95: [28, 42]  }
+      ttfa_tokens: { p95: [0, 25] }
+    gating:
+      max_regression_pct: { ttft_ms_p50: 5, ttft_ms_p95: 5, tps_p50: 5, tps_p95: 5 }
+      require_same_profile: true
+    batch_policy: { interactive_default: 1, offline_allowed: [2, 4] }
+    kv_policy: { precision: "fp16" }
+    quant_policy: { weights_bits: 8, activations_bits: 16, do_not_quantize: ["layernorm","softmax"] }
+    measure: { slice: { dataset: "data/contextual_final.jsonl", take: 120 }, split_ttft: { tokenizer_ms: true, first_step_ms: true } }
+    profiling: { require_ane_residency_check: true, tools: ["Instruments/Core ML"] }
+
+  m3-max-96g:
+    matches:
+      soc_regex: "^Apple[ ]?M3 Max"
+      min_ram_gb: 64
+    export_path: "pytorch_exportedprogram_coreml"
+    enumerated_shapes: [512, 1024, 2048, 4096]
+    shape_mix: [0.45, 0.35, 0.15, 0.05]
+    speed_targets:
+      ttft_ms: { p50: [220, 390], p95: [340, 610] }
+      tps:     { p50: [38, 56],  p95: [30, 45]  }
+      ttfa_tokens: { p95: [0, 25] }
+    gating:
+      max_regression_pct: { ttft_ms_p50: 5, ttft_ms_p95: 5, tps_p50: 5, tps_p95: 5 }
+      require_same_profile: true
+    batch_policy: { interactive_default: 1, offline_allowed: [2, 4] }
+    kv_policy: { precision: "fp16" }
+    quant_policy: { weights_bits: 8, activations_bits: 16, do_not_quantize: ["layernorm","softmax"] }
+    measure: { slice: { dataset: "data/contextual_final.jsonl", take: 120 }, split_ttft: { tokenizer_ms: true, first_step_ms: true } }
+    profiling: { require_ane_residency_check: true, tools: ["Instruments/Core ML"] }
+
+  m4-pro-36g:
+    matches:
+      soc_regex: "^Apple[ ]?M4 Pro"
+      min_ram_gb: 18
+    export_path: "pytorch_exportedprogram_coreml"
+    enumerated_shapes: [512, 1024, 2048, 4096]
+    shape_mix: [0.46, 0.36, 0.14, 0.04]
+    speed_targets:
+      ttft_ms: { p50: [200, 360], p95: [320, 560] }
+      tps:     { p50: [40, 60],  p95: [32, 48]  }
+      ttfa_tokens: { p95: [0, 25] }
+    gating:
+      max_regression_pct: { ttft_ms_p50: 5, ttft_ms_p95: 5, tps_p50: 5, tps_p95: 5 }
+      require_same_profile: true
+    batch_policy: { interactive_default: 1, offline_allowed: [2, 4] }
+    kv_policy: { precision: "fp16" }
+    quant_policy: { weights_bits: 8, activations_bits: 16, do_not_quantize: ["layernorm","softmax"] }
+    measure: { slice: { dataset: "data/contextual_final.jsonl", take: 120 }, split_ttft: { tokenizer_ms: true, first_step_ms: true } }
+    profiling: { require_ane_residency_check: true, tools: ["Instruments/Core ML"] }
+
+  m4-max-64g:
+    matches:
+      soc_regex: "^Apple[ ]?M4 Max"
+      min_ram_gb: 48
+    export_path: "pytorch_exportedprogram_coreml"
+    enumerated_shapes: [512, 1024, 2048, 4096]
+    shape_mix: [0.46, 0.36, 0.14, 0.04]
+    speed_targets:
+      ttft_ms: { p50: [180, 340], p95: [300, 520] }
+      tps:     { p50: [44, 66],  p95: [35, 52]  }
+      ttfa_tokens: { p95: [0, 25] }
+    gating:
+      max_regression_pct: { ttft_ms_p50: 5, ttft_ms_p95: 5, tps_p50: 5, tps_p95: 5 }
+      require_same_profile: true
+    batch_policy: { interactive_default: 1, offline_allowed: [2, 4] }
+    kv_policy: { precision: "fp16" }
+    quant_policy: { weights_bits: 8, activations_bits: 16, do_not_quantize: ["layernorm","softmax"] }
+    measure: { slice: { dataset: "data/contextual_final.jsonl", take: 120 }, split_ttft: { tokenizer_ms: true, first_step_ms: true } }
+    profiling: { require_ane_residency_check: true, tools: ["Instruments/Core ML"] }
+
+# Fallback for unknown Apple Silicon; used only with --allow-cross-hw
+unknown-apple-silicon:
+  matches:
+    soc_regex: "^Apple[ ]?M[0-9]"
+    min_ram_gb: 8
+  export_path: "pytorch_exportedprogram_coreml"
+  enumerated_shapes: [512, 1024, 2048]
+  shape_mix: [0.5, 0.35, 0.15]
+  gating:
+    max_regression_pct:
+      ttft_ms_p50: 5
+      ttft_ms_p95: 5
+      tps_p50: 5
+      tps_p95: 5
+    require_same_profile: true
+

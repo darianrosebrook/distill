@@ -1,0 +1,26 @@
+{
+  "report": {
+    "rows": 376,
+    "mean_nll": 1.034536992381618,
+    "p50_nll": 1.0146803115071865,
+    "p95_nll": 1.4736225451381195
+  },
+  "calibration": {
+    "temperature": 0.6,
+    "bias": {
+      "support": -0.5,
+      "contradict": 0.5,
+      "insufficient": 0.5
+    },
+    "priors": {
+      "support": 0.2765957446808511,
+      "contradict": 0.2712765957446808,
+      "insufficient": 0.4521276595744681
+    },
+    "labels": [
+      "support",
+      "contradict",
+      "insufficient"
+    ]
+  }
+}

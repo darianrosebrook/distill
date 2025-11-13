@@ -199,6 +199,9 @@ apps/tools/caws/
 .windsurf/
 .github/copilot/
 
+# Cursor plans
+.cursor/plans/
+
 # Documentation Archive
 docs/archive/
 docs_status
