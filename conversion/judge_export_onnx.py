@@ -56,9 +56,9 @@ def main(config: str = "conversion/shape_sets.json", judge_config: str = "config
         judge_config: Path to judge model config YAML
     """
     # Load judge configuration from YAML - required for correct architecture
-    judge_cfg = load_judge_config(judge_config)
-    print(f"[judge_export_onnx] Loaded judge config from: {judge_config}")
-    print(
+        judge_cfg = load_judge_config(judge_config)
+        print(f"[judge_export_onnx] Loaded judge config from: {judge_config}")
+        print(
         f"[judge_export_onnx] Model config: d_model={judge_cfg.d_model}, n_layers={judge_cfg.n_layers}, "
         f"n_heads={judge_cfg.n_heads}, n_kv_heads={judge_cfg.n_kv_heads}, "
         f"d_head={judge_cfg.d_head}, vocab_size={judge_cfg.vocab_size}")

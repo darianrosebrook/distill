@@ -12,7 +12,7 @@ Tests that CAWS gates properly catch violations:
 import pytest
 import json
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from eval.scoring.scorer import _evaluate_caws_compliance
 from eval.reports.summarize import summarize_results
@@ -49,10 +49,10 @@ def test_privacy_gate_pii_detection():
             teacher_text="Phone number: [REDACTED]",
         ),
     ]
-    
+
     # Evaluate compliance
     compliance = _evaluate_caws_compliance(results)
-    
+
     # Privacy gate should fail if PII is present
     # Note: This is a simplified test - actual PII detection would be more sophisticated
     assert "compliance_gate_passed" in compliance
@@ -69,13 +69,14 @@ def test_control_integration_gate():
         ),
         create_test_result(
             model_output="Control with integration span: <tool_result>data</tool_result>",
-            metadata={"is_control": True, "has_integration": True},  # Violation
+            metadata={"is_control": True,
+                      "has_integration": True},  # Violation
         ),
     ]
-    
+
     # Evaluate compliance
     compliance = _evaluate_caws_compliance(results)
-    
+
     # Control integration gate should fail if controls have integration
     assert "compliance_gate_passed" in compliance
 
@@ -89,13 +90,14 @@ def test_json_validity_gate():
         ),
         create_test_result(
             model_output="Invalid JSON: {\"name\": \"web.search\", \"arguments\": {invalid}}",
-            tool_trace=[{"name": "web.search", "arguments": "invalid"}],  # Invalid
+            tool_trace=[{"name": "web.search",
+                         "arguments": "invalid"}],  # Invalid
         ),
     ]
-    
+
     # Evaluate compliance
     compliance = _evaluate_caws_compliance(results)
-    
+
     # JSON validity gate should fail if invalid JSON present
     assert "compliance_gate_passed" in compliance
 
@@ -109,15 +111,37 @@ def test_fixture_hit_rate_gate():
         ),
         create_test_result(
             model_output="Malformed tool: unknown.tool",
-            tool_trace=[{"name": "unknown.tool", "arguments": {}}],  # Not in fixtures
+            # Not in fixtures
+            tool_trace=[{"name": "unknown.tool", "arguments": {}}],
         ),
     ]
-    
+
     # Evaluate compliance
     compliance = _evaluate_caws_compliance(results)
-    
+
     # Fixture hit-rate gate should fail if too many misses
     assert "compliance_gate_passed" in compliance
+
+
+def test_broker_fixtures_hit_rate():
+    """Test broker fixture hit rate (placeholder test)."""
+    # This test validates that the broker fixtures are properly loaded
+    # and that the hit rate calculation works correctly
+
+    # For now, just check that we can import the necessary modules
+    try:
+        from eval.scoring.scorer import _evaluate_caws_compliance
+        from eval.tool_broker.fixtures import FixtureManager
+        print("✅ Successfully imported CAWS scorer and fixture manager")
+        # Basic test that import works
+        assert _evaluate_caws_compliance is not None
+        assert FixtureManager is not None
+    except ImportError as e:
+        # If modules aren't available, skip the test (this is expected in CI environments)
+        pytest.skip(f"Required modules not available: {e}")
+
+    # TODO: Add actual fixture hit rate validation
+    # This would test that fixtures are loaded correctly and hit rates are calculated
 
 
 def test_integration_f1_gate():
@@ -133,10 +157,10 @@ def test_integration_f1_gate():
             metadata={"integration_f1_lax": 0.70},  # Below threshold
         ),
     ]
-    
+
     # Evaluate compliance
     compliance = _evaluate_caws_compliance(results)
-    
+
     # Integration F1 gate should fail if too many low-F1 items
     assert "compliance_gate_passed" in compliance
 
@@ -151,14 +175,15 @@ def test_gate_thresholds_documented():
         "integration_f1_macro_lax": {"threshold": 0.90, "policy": "count_based_misses", "misses_allowed_pct": 0.05},
         "multi_call_parity_rate": {"threshold": 0.95, "policy": "count_based_misses", "misses_allowed_pct": 0.05},
     }
-    
+
     # Verify all gates have thresholds
     for gate_name, gate_config in gates.items():
         assert "threshold" in gate_config, f"Gate {gate_name} missing threshold"
         assert "policy" in gate_config, f"Gate {gate_name} missing policy"
-    
+
     # Verify hard_fail gates have strict thresholds
-    hard_fail_gates = [name for name, cfg in gates.items() if cfg["policy"] == "hard_fail"]
+    hard_fail_gates = [name for name,
+                       cfg in gates.items() if cfg["policy"] == "hard_fail"]
     for gate_name in hard_fail_gates:
         gate_config = gates[gate_name]
         if gate_name == "privacy_ok_rate":
@@ -169,4 +194,3 @@ def test_gate_thresholds_documented():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

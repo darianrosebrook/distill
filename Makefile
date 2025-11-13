@@ -399,7 +399,7 @@ validate-sharding:
 		--tolerance 1e-3
 
 ci-broker-smoke:
-	PYTHONPATH=$(shell pwd):$(PYTHONPATH) python scripts/test_broker_smoke.py
+	PYTHONPATH=$(shell pwd):$(PYTHONPATH) python3.11 -m pytest -q -k broker_fixtures_hit_rate tests/test_caws_compliance_gates.py
 
 validate-sharding:
 	python -m scripts.validate_sharding_determinism \

@@ -156,7 +156,7 @@ def check_export_contracts() -> Dict[str, Any]:
             capture_output=True,
             text=True
         )
-        
+    
         if result.returncode != 0:
             results["warnings"].append("Export contract tests failed (may be expected if no model available)")
             results["warnings"].append(result.stdout[:500])  # First 500 chars
