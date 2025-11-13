@@ -182,7 +182,6 @@ def magic_8_ball_teacher_logits(token_ids: torch.Tensor, vocab_size: int = 512, 
 
     # Apply gentle normalization (keep positive values for preferred tokens)
     # Only subtract a small baseline, don't make everything non-positive
-    max_logits = logits.max(dim=-1, keepdim=True)[0]
     # Dampen negative but keep positive
     logits = torch.where(logits > 0, logits, logits * 0.1)
     logits = logits * 1.5  # Mystical temperature scaling

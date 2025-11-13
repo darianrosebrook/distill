@@ -949,6 +949,7 @@ def train_step(
     scaler: Optional[torch.cuda.amp.GradScaler],
     cfg: Dict[str, Any],
     device: torch.device,
+    grad_clip_norm: float = 1.0,
     grad_accum_steps: int = 1,
     grad_accum_counter: int = 0,
     current_step: int = 0,
@@ -1940,8 +1941,8 @@ def train_step(
 
             # Compute and log gradient norm (every 100 steps)
             if current_step % 100 == 0:
-            # Get model for gradient norm computation (unwrap DDP if needed)
-            model_for_grads = model.module if isinstance(model, DDP) else model
+                # Get model for gradient norm computation (unwrap DDP if needed)
+                model_for_grads = model.module if isinstance(model, DDP) else model
 
             if scaler is not None:
                 scaler.unscale_(optimizer)
@@ -2152,6 +2153,9 @@ def main():
     # Create optimizer
     optimizer = create_optimizer(model, cfg)
 
+    # Setup FP16 scaler
+    train_cfg = cfg.get("train", {})
+
     # Create learning rate scheduler with warmup and cosine annealing
     # Based on our toy model optimizations for better convergence
     total_steps = train_cfg.get("steps", 10000)
@@ -2187,9 +2191,6 @@ def main():
             return max(min_lr_factor, cosine_decay)
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
-
-    # Setup FP16 scaler
-    train_cfg = cfg.get("train", {})
     use_fp16 = train_cfg.get("fp16", False)
     scaler = torch.cuda.amp.GradScaler() if use_fp16 and device.type == "cuda" else None
 
@@ -2546,6 +2547,7 @@ def main():
                     scaler=scaler,
                     cfg=cfg,
                     device=device,
+                    grad_clip_norm=grad_clip_norm,
                     grad_accum_steps=grad_accum,
                     grad_accum_counter=grad_accum_counter,
                     current_step=step,
@@ -2565,7 +2567,6 @@ def main():
                     # Memory usage tracking
                     if device.type == "cuda":
                         memory_allocated = torch.cuda.memory_allocated(device) / 1024**3  # GB
-                        memory_reserved = torch.cuda.memory_reserved(device) / 1024**3   # GB
                         memory_info = f", gpu_mem={memory_allocated:.2f}GB"
                     else:
                         memory_info = ""
@@ -2715,7 +2716,7 @@ def main():
             loss_dict=loss_dict,
             rng_states=rng_states,
             data_shard_index=current_shard_index,
-            dataset_fingerprint=dataset_fingerprint if "dataset_fingerprint" in locals() else None,
+            dataset_fingerprint=dataset.dataset_fingerprint if hasattr(dataset, 'dataset_fingerprint') else None,
         )
 
         # Close tracer and save summary

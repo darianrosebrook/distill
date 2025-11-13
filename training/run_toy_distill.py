@@ -202,7 +202,7 @@ def main():
                 teacher_logits_tensor = batch["teacher_logits"].to(device)
                 if batch_idx == 0 and epoch == 0:
                     print(
-                        f"[run_toy_distill] Using pre-computed teacher logits from dataset")
+                        "[run_toy_distill] Using pre-computed teacher logits from dataset")
             else:
                 # Generate teacher logits on-the-fly with improved stub
                 if args.magic_8_ball:
@@ -211,13 +211,13 @@ def main():
                     ).to(device)
                     if batch_idx == 0 and epoch == 0:
                         print(
-                            f"[run_toy_distill] Generated 8-ball teacher logits with tokenizer")
+                            "[run_toy_distill] Generated 8-ball teacher logits with tokenizer")
                 else:
                     teacher_logits_tensor = teacher_logits(input_ids, vocab_size=args.vocab_size).to(
                         device
                     )
                     if batch_idx == 0 and epoch == 0:
-                        print(f"[run_toy_distill] Generated toy teacher logits")
+                        print("[run_toy_distill] Generated toy teacher logits")
 
             # Compute loss with optimized distillation weights
             # Higher KL weight for better teacher alignment, balanced CE weights

@@ -9,7 +9,6 @@ Loads the CoreML model created by the 8-ball workflow and tests it with
 from training.dataset import load_tokenizer
 from coreml.runtime.generate_coreml import load_coreml_model
 import sys
-import random
 from pathlib import Path
 import json
 from typing import List, Dict, Any
@@ -235,7 +234,7 @@ def run_comprehensive_evaluation(model_path: str = None, output_file: str = None
         import time
         output_file = f"/tmp/8_ball_eval_{int(time.time())}.json"
 
-    print(f"🔬 Running comprehensive evaluation...")
+    print("🔬 Running comprehensive evaluation...")
     print(f"   Model: {model_path}")
     print(f"   Output: {output_file}")
 
@@ -246,7 +245,7 @@ def run_comprehensive_evaluation(model_path: str = None, output_file: str = None
     import time
     import numpy as np
 
-    print(f"🏃 Running performance benchmarks...")
+    print("🏃 Running performance benchmarks...")
 
     # Load model for benchmarking
     import coremltools as ct
@@ -257,7 +256,7 @@ def run_comprehensive_evaluation(model_path: str = None, output_file: str = None
     for _ in range(10):
         input_ids = np.random.randint(0, 512, size=(1, 128), dtype=np.int32)
         start_time = time.time()
-        result = model.predict({'input_ids': input_ids})
+        model.predict({'input_ids': input_ids})
         end_time = time.time()
         latencies.append((end_time - start_time) * 1000)  # Convert to ms
 
@@ -292,7 +291,7 @@ def run_comprehensive_evaluation(model_path: str = None, output_file: str = None
         import json
         json.dump(comprehensive_results, f, indent=2, default=str)
 
-    print(f"✅ Comprehensive evaluation complete")
+    print("✅ Comprehensive evaluation complete")
     print(f"📊 Results saved to: {output_file}")
     print(f"🏃 Inference latency: {benchmark_results['inference_latency_ms']['p50']:.2f}ms (P50)")
     print(f"🚀 Throughput: {benchmark_results['throughput_inf_per_sec']:.0f} inf/sec")
@@ -462,7 +461,7 @@ def main():
                 for i, (token_id, prob) in enumerate(zip(top_5_indices, top_5_probs)):
                     try:
                         token_text = tokenizer.decode([token_id])
-                    except:
+                    except (UnicodeDecodeError, ValueError, KeyError):
                         token_text = f"<unk_{token_id}>"
                     print(
                         f"          {i + 1}. '{token_text}' (id={token_id}, prob={prob:.4f})")
@@ -540,7 +539,6 @@ def main():
     print("\n📊 Test Results Summary")
     print("=" * 60)
 
-    valid_responses = sum(1 for r in results if r["is_valid_8ball"])
     mystical_phrases = sum(1 for r in results if r["contains_mystical_phrase"])
     exact_matches = sum(1 for r in results if r["exact_mystical_match"])
     avg_score = sum(r["score"] for r in results) / len(results)

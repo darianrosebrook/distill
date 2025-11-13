@@ -578,7 +578,7 @@ def convert_to_gguf_direct(hf_dir: Path, output_gguf: Path):
             try:
                 token_text = tokenizer.decode([i])
                 tokens.append(token_text)
-            except:
+            except (UnicodeDecodeError, ValueError, KeyError):
                 tokens.append(f"<token_{i}>")
 
         gguf_writer.add_token_list(tokens)
@@ -716,7 +716,7 @@ def convert_to_gguf(hf_dir: Path, output_gguf: Path, llama_convert_path: str = N
                 )
                 print(
                     "   GGUF is optional for toy models - CoreML conversion is the primary goal")
-        except:
+        except (IOError, OSError, ValueError, json.JSONDecodeError):
             pass
 
     # Try direct Python conversion first
@@ -799,7 +799,7 @@ def convert_to_gguf(hf_dir: Path, output_gguf: Path, llama_convert_path: str = N
         ]
 
     try:
-        result = subprocess.run(
+        subprocess.run(
             cmd, capture_output=True, text=True, check=True)
         if output_gguf.exists():
             print(f"✅ GGUF conversion complete: {output_gguf}")

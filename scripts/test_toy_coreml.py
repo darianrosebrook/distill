@@ -248,7 +248,7 @@ def main():
                 for i, (token_id, prob) in enumerate(zip(top_5_indices, top_5_probs)):
                     try:
                         token_text = tokenizer.decode([token_id])
-                    except:
+                    except (UnicodeDecodeError, ValueError, KeyError):
                         token_text = f"<unk_{token_id}>"
                     print(
                         f"          {i + 1}. '{token_text}' (id={token_id}, prob={prob:.4f})")
