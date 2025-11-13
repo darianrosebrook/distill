@@ -31,7 +31,7 @@ jobs:
         run: |
           make contextual-gen TOTAL=60
           # Skip extraction if transformers not available (for CI smoke test)
-          PYTHONPATH=/usr/local/lib/python3.11/site-packages:$PYTHONPATH make contextual-extract IN=data/contextual_prompts.jsonl OUT=data/contextual_final.smoke.jsonl || echo "⚠️ Skipping extraction (transformers not available)"
+          PYTHONPATH=/usr/local/lib/python3.11/site-packages:$PYTHONPATH make contextual-extract IN=data/contextual_prompts.jsonl OUT=data/contextual_final.smoke.jsonl || echo "WARNING: Skipping extraction (transformers not available)"
 
       - name: Evaluate (fixtures replay, no network)
         run: |
@@ -49,42 +49,42 @@ jobs:
 
       - name: Enforce gates and fingerprints
         run: |
-          python3 -c "
-import json
-import sys
-import os
+          python3 << EOF
+          import json
+          import sys
+          import os
 
-if not os.path.exists('eval/report.smoke.json'):
-    print('⚠️ Report not generated (likely missing model); skipping gate check')
-    sys.exit(0)
+          if not os.path.exists('eval/report.smoke.json'):
+              print('WARNING: Report not generated (likely missing model); skipping gate check')
+              sys.exit(0)
 
-r = json.load(open('eval/report.smoke.json'))
+          r = json.load(open('eval/report.smoke.json'))
 
-# Check fingerprints (P3)
-header = r.get('header', {})
-missing_fps = []
-if not header.get('dataset_sha256') or header.get('dataset_sha256') == 'unknown':
-    missing_fps.append('dataset_sha256')
-if not header.get('tool_registry_sha256'):
-    missing_fps.append('tool_registry_sha256')
-if not header.get('tokenizer_fingerprint'):
-    missing_fps.append('tokenizer_fingerprint')
+          # Check fingerprints (P3)
+          header = r.get('header', {})
+          missing_fps = []
+          if not header.get('dataset_sha256') or header.get('dataset_sha256') == 'unknown':
+              missing_fps.append('dataset_sha256')
+          if not header.get('tool_registry_sha256'):
+              missing_fps.append('tool_registry_sha256')
+          if not header.get('tokenizer_fingerprint'):
+              missing_fps.append('tokenizer_fingerprint')
 
-if missing_fps:
-    print(f'❌ Missing fingerprints: {missing_fps}')
-    sys.exit(1)
+          if missing_fps:
+              print(f'❌ Missing fingerprints: {missing_fps}')
+              sys.exit(1)
 
-# Check gates
-assert r.get('gates_ok', False), 'Eval gates failed'
+          # Check gates
+          assert r.get('gates_ok', False), 'Eval gates failed'
 
-# Extra cheap invariants
-s = r.get('summary', {})
-assert s.get('controls_with_integration', 0) == 0, f'Controls contaminated: {s.get(\"controls_with_integration\")}'
-assert s.get('privacy_ok_rate', 1.0) == 1.0, f'Privacy violations: {s.get(\"privacy_ok_rate\")}'
+          # Extra cheap invariants
+          s = r.get('summary', {})
+          assert s.get('controls_with_integration', 0) == 0, f'Controls contaminated: {s.get(\"controls_with_integration\")}'
+          assert s.get('privacy_ok_rate', 1.0) == 1.0, f'Privacy violations: {s.get(\"privacy_ok_rate\")}'
 
-print('✅ Gates OK:', s)
-print('✅ Fingerprints present:', list(header.keys()))
-          "
+          print('✅ Gates OK:', s)
+          print('✅ Fingerprints present:', list(header.keys()))
+          EOF
 
       - name: Upload artifacts
         if: always()

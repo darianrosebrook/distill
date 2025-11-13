@@ -23,7 +23,7 @@ jobs:
       - name: Fetch latest checkpoint
         run: |
           mkdir -p ckpts/latest
-          echo "⚠️ Customize checkpoint download logic for your storage"
+          echo "WARNING: Customize checkpoint download logic for your storage"
 
       - name: Verify dataset & fingerprints
         run: |
@@ -32,12 +32,12 @@ jobs:
             --report eval/reports/verify_dataset.json \
             --tokenizer models/student/tokenizer \
             --min-eligible-for-gates 15 \
-            --fail-on-fingerprint-mismatch || echo "⚠️ Dataset verification skipped (dataset may not exist)"
+            --fail-on-fingerprint-mismatch || echo "WARNING: Dataset verification skipped (dataset may not exist)"
 
       - name: Evaluate (sharded)
         run: |
           python -c "from training.callbacks.eval_harness_callback import run_eval_for_checkpoint; \
-            run_eval_for_checkpoint('ckpts/latest', num_shards=4)" || echo "⚠️ Evaluation skipped (checkpoint may not exist)"
+            run_eval_for_checkpoint('ckpts/latest', num_shards=4)" || echo "WARNING: Evaluation skipped (checkpoint may not exist)"
 
       - name: Validate sharding determinism
         if: success()
@@ -47,9 +47,9 @@ jobs:
               DATASET=data/contextual_final.jsonl \
               MODEL=ckpts/latest \
               RUNNER=hf_local \
-              SHARDS=4 || echo "⚠️ Sharding validation skipped (model may not be compatible)"
+              SHARDS=4 || echo "WARNING: Sharding validation skipped (model may not be compatible)"
           else
-            echo "⚠️ Sharding validation skipped (dataset or checkpoint not available)"
+            echo "WARNING: Sharding validation skipped (dataset or checkpoint not available)"
           fi
 
       - name: Publish artifacts

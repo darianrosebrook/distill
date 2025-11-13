@@ -60,14 +60,21 @@ jobs:
           baseline_dir = Path("eval/baselines")
           baseline_path = find_baseline("long_chain_task", seed=42, baseline_dir=baseline_dir)
           
+          import os
           if baseline_path:
               baseline = load_baseline(baseline_path)
               print(f"baseline_path={baseline_path}")
               print(f"baseline_accuracy={baseline['metrics'].accuracy}")
               print(f"baseline_tokens={baseline['metrics'].generated_tokens}")
+              # Set output
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write(f"baseline_path={baseline_path}\n")
           else:
               print("baseline_path=")
               print("WARN: No baseline found, will skip efficiency gates")
+              # Set empty output
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write("baseline_path=\n")
           EOF
       
       - name: Run latent evaluation
@@ -134,7 +141,7 @@ jobs:
           gate_results_path = Path("eval/results/efficiency_gates.json")
           gate_results_path.parent.mkdir(parents=True, exist_ok=True)
           with open(gate_results_path, 'w') as f:
-              json.dump(gate_results_path, f, indent=2, default=str)
+              json.dump(gate_results, f, indent=2, default=str)
           
           # Output summary
           print("=" * 60)
@@ -152,8 +159,10 @@ jobs:
                   print(f"  - {error}")
           
           # Set outputs
-          print(f"::set-output name=gates_passed::{gate_results.get('gates_passed', False)}")
-          print(f"::set-output name=token_reduction::{gate_results.get('details', {}).get('token_reduction', 0)}")
+          import os
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"gates_passed={gate_results.get('gates_passed', False)}\n")
+              f.write(f"token_reduction={gate_results.get('details', {}).get('token_reduction', 0)}\n")
           
           # Fail if gates not passed
           if not gate_results.get('gates_passed', False):
