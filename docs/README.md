@@ -21,6 +21,10 @@ This directory contains documentation for the kimi-student project.
 - **[ARBITER_THEORY.md](ARBITER_THEORY.md)** - Arbiter stack requirements and architecture
 - **[arbiter/README.md](../arbiter/README.md)** - Arbiter stack implementation details
 
+### Pipeline Review & Quality
+- **[PIPELINE_CRITICAL_PATH_REVIEW.md](PIPELINE_CRITICAL_PATH_REVIEW.md)** - Complete pipeline review with critical path analysis
+- **[PIPELINE_DEEP_REVIEW_FINDINGS.md](PIPELINE_DEEP_REVIEW_FINDINGS.md)** - Deep code quality review findings
+
 ## External Resources
 
 See [external/](external/) for:

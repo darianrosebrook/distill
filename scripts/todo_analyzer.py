@@ -322,6 +322,8 @@ class HiddenTodoAnalyzer:
 
         # High-confidence hidden TODO patterns (more specific and contextual)
         self.high_confidence_patterns = {
+            # NOTE: These are pattern definitions for detecting incomplete implementations,
+            # not actual incomplete implementations themselves.
             'incomplete_implementation': [
                 r'\bnot\s+yet\s+implemented\b',
                 r'\bmissing\s+implementation\b',

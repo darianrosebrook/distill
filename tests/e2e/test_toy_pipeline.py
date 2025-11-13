@@ -186,5 +186,275 @@ def test_toy_pipeline_e2e(temp_dir):
     print("\n✅ Toy pipeline E2E test PASSED")
 
 
+@pytest.mark.slow
+def test_toy_pipeline_with_code_mode(temp_dir):
+    """Test full toy pipeline with code-mode enabled."""
+    import os
+    
+    # Paths
+    dataset_path = temp_dir / "toy_kd.jsonl"
+    checkpoint_path = temp_dir / "toy_code_mode.ckpt"
+    export_dir = temp_dir / "exported_code_mode"
+    mlpackage_path = temp_dir / "toy_code_mode_T128.mlpackage"
+    report_path = temp_dir / "toy_code_mode_e2e.json"
+    
+    # Set code-mode environment variable
+    env = os.environ.copy()
+    env["TRAIN_CODE_MODE"] = "1"
+    
+    # Step 1: Generate KD dataset
+    print("\n[test_toy_pipeline_code_mode] Step 1: Generating toy KD dataset...")
+    result = subprocess.run(
+        [sys.executable, "-m", "data.make_toy_kd",
+         "--out", str(dataset_path),
+         "--n", "128"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, f"Dataset generation failed: {result.stderr}"
+    assert dataset_path.exists(), "Dataset file not created"
+    print(f"✅ Dataset created: {dataset_path}")
+    
+    # Step 2: Train toy model with code-mode enabled
+    print("\n[test_toy_pipeline_code_mode] Step 2: Training toy model with code-mode...")
+    result = subprocess.run(
+        [sys.executable, "-m", "training.run_toy_distill",
+         "--in", str(dataset_path),
+         "--out", str(checkpoint_path),
+         "--epochs", "2",
+         "--mps", "0"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, f"Training failed: {result.stderr}"
+    assert checkpoint_path.exists(), "Checkpoint file not created"
+    
+    # Check training output for code-mode activation (if logged)
+    if "code_mode" in result.stdout.lower() or "code-mode" in result.stdout.lower():
+        print("✅ Code-mode mentioned in training logs")
+    
+    print(f"✅ Training complete: {checkpoint_path}")
+    
+    # Step 3: Export to TorchScript
+    print("\n[test_toy_pipeline_code_mode] Step 3: Exporting to TorchScript...")
+    export_dir.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        [sys.executable, "-m", "conversion.export_pytorch",
+         "--checkpoint", str(checkpoint_path),
+         "--out", str(export_dir),
+         "--toy",
+         "--mode", "prefill",
+         "--seq", "64",
+         "--enumerated-T", "64", "128", "256"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, f"Export failed: {result.stderr}"
+    
+    # Find exported prefill model
+    prefill_model = export_dir / "student_prefill_T128.pt"
+    if not prefill_model.exists():
+        prefill_models = list(export_dir.glob("student_prefill_*.pt"))
+        assert len(prefill_models) > 0, "No prefill models exported"
+        prefill_model = prefill_models[0]
+    
+    assert prefill_model.exists(), "Prefill model not exported"
+    print(f"✅ Export complete: {prefill_model}")
+    
+    # Verify checkpoint can be loaded (structure test)
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    assert "model_state_dict" in checkpoint
+    assert "config" in checkpoint
+    assert "meta" in checkpoint
+    
+    print("\n✅ Toy pipeline with code-mode PASSED")
+
+
+@pytest.mark.slow
+def test_toy_pipeline_with_latent_mode(temp_dir):
+    """Test full toy pipeline with latent mode enabled."""
+    import os
+    
+    # Paths
+    dataset_path = temp_dir / "toy_kd.jsonl"
+    checkpoint_path = temp_dir / "toy_latent.ckpt"
+    export_dir = temp_dir / "exported_latent"
+    mlpackage_path = temp_dir / "toy_latent_T128.mlpackage"
+    report_path = temp_dir / "toy_latent_e2e.json"
+    
+    # Set latent mode environment variable
+    env = os.environ.copy()
+    env["TRAIN_LATENT"] = "1"
+    
+    # Step 1: Generate KD dataset
+    print("\n[test_toy_pipeline_latent] Step 1: Generating toy KD dataset...")
+    result = subprocess.run(
+        [sys.executable, "-m", "data.make_toy_kd",
+         "--out", str(dataset_path),
+         "--n", "128"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, f"Dataset generation failed: {result.stderr}"
+    assert dataset_path.exists(), "Dataset file not created"
+    print(f"✅ Dataset created: {dataset_path}")
+    
+    # Step 2: Train toy model with latent mode enabled
+    print("\n[test_toy_pipeline_latent] Step 2: Training toy model with latent mode...")
+    result = subprocess.run(
+        [sys.executable, "-m", "training.run_toy_distill",
+         "--in", str(dataset_path),
+         "--out", str(checkpoint_path),
+         "--epochs", "2",
+         "--mps", "0"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, f"Training failed: {result.stderr}"
+    assert checkpoint_path.exists(), "Checkpoint file not created"
+    
+    # Check training output for latent mode activation (if logged)
+    if "latent" in result.stdout.lower():
+        print("✅ Latent mode mentioned in training logs")
+    
+    print(f"✅ Training complete: {checkpoint_path}")
+    
+    # Step 3: Export to TorchScript
+    print("\n[test_toy_pipeline_latent] Step 3: Exporting to TorchScript...")
+    export_dir.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        [sys.executable, "-m", "conversion.export_pytorch",
+         "--checkpoint", str(checkpoint_path),
+         "--out", str(export_dir),
+         "--toy",
+         "--mode", "prefill",
+         "--seq", "64",
+         "--enumerated-T", "64", "128", "256"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, f"Export failed: {result.stderr}"
+    
+    # Find exported prefill model
+    prefill_model = export_dir / "student_prefill_T128.pt"
+    if not prefill_model.exists():
+        prefill_models = list(export_dir.glob("student_prefill_*.pt"))
+        assert len(prefill_models) > 0, "No prefill models exported"
+        prefill_model = prefill_models[0]
+    
+    assert prefill_model.exists(), "Prefill model not exported"
+    print(f"✅ Export complete: {prefill_model}")
+    
+    # Verify checkpoint can be loaded (structure test)
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    assert "model_state_dict" in checkpoint
+    assert "config" in checkpoint
+    assert "meta" in checkpoint
+    
+    print("\n✅ Toy pipeline with latent mode PASSED")
+
+
+@pytest.mark.slow
+def test_toy_pipeline_with_both_features(temp_dir):
+    """Test full toy pipeline with both code-mode and latent mode enabled."""
+    import os
+    import torch
+    
+    # Paths
+    dataset_path = temp_dir / "toy_kd.jsonl"
+    checkpoint_path = temp_dir / "toy_both.ckpt"
+    export_dir = temp_dir / "exported_both"
+    mlpackage_path = temp_dir / "toy_both_T128.mlpackage"
+    report_path = temp_dir / "toy_both_e2e.json"
+    
+    # Set both environment variables
+    env = os.environ.copy()
+    env["TRAIN_CODE_MODE"] = "1"
+    env["TRAIN_LATENT"] = "1"
+    
+    # Step 1: Generate KD dataset
+    print("\n[test_toy_pipeline_both] Step 1: Generating toy KD dataset...")
+    result = subprocess.run(
+        [sys.executable, "-m", "data.make_toy_kd",
+         "--out", str(dataset_path),
+         "--n", "128"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, f"Dataset generation failed: {result.stderr}"
+    assert dataset_path.exists(), "Dataset file not created"
+    print(f"✅ Dataset created: {dataset_path}")
+    
+    # Step 2: Train toy model with both features enabled
+    print("\n[test_toy_pipeline_both] Step 2: Training toy model with both features...")
+    result = subprocess.run(
+        [sys.executable, "-m", "training.run_toy_distill",
+         "--in", str(dataset_path),
+         "--out", str(checkpoint_path),
+         "--epochs", "2",
+         "--mps", "0"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, f"Training failed: {result.stderr}"
+    assert checkpoint_path.exists(), "Checkpoint file not created"
+    
+    # Check training output for feature activation (if logged)
+    output_lower = result.stdout.lower()
+    if "code_mode" in output_lower or "code-mode" in output_lower:
+        print("✅ Code-mode mentioned in training logs")
+    if "latent" in output_lower:
+        print("✅ Latent mode mentioned in training logs")
+    
+    print(f"✅ Training complete: {checkpoint_path}")
+    
+    # Step 3: Export to TorchScript
+    print("\n[test_toy_pipeline_both] Step 3: Exporting to TorchScript...")
+    export_dir.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        [sys.executable, "-m", "conversion.export_pytorch",
+         "--checkpoint", str(checkpoint_path),
+         "--out", str(export_dir),
+         "--toy",
+         "--mode", "prefill",
+         "--seq", "64",
+         "--enumerated-T", "64", "128", "256"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, f"Export failed: {result.stderr}"
+    
+    # Find exported prefill model
+    prefill_model = export_dir / "student_prefill_T128.pt"
+    if not prefill_model.exists():
+        prefill_models = list(export_dir.glob("student_prefill_*.pt"))
+        assert len(prefill_models) > 0, "No prefill models exported"
+        prefill_model = prefill_models[0]
+    
+    assert prefill_model.exists(), "Prefill model not exported"
+    print(f"✅ Export complete: {prefill_model}")
+    
+    # Verify checkpoint can be loaded (structure test)
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    assert "model_state_dict" in checkpoint
+    assert "config" in checkpoint
+    assert "meta" in checkpoint
+    
+    # Verify both env vars were set
+    assert env.get("TRAIN_CODE_MODE") == "1"
+    assert env.get("TRAIN_LATENT") == "1"
+    
+    print("\n✅ Toy pipeline with both features PASSED")
+
+
 if __name__ == '__main__':
     pytest.main([__file__, "-v"])

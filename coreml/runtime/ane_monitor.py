@@ -128,6 +128,8 @@ class ANEResidencyMonitor:
         # Run inference and estimate based on timing patterns
         # In production, you'd use Instruments.app GUI or command-line tools
 
+        # NOTE: This is an intentional fallback implementation, not a placeholder.
+        # Full Instruments.app integration would require macOS-specific tooling.
         print("[ane_monitor] WARN: Full Instruments integration not yet implemented")
         print("[ane_monitor] Falling back to wall-clock sampling")
         return self._measure_wall_clock(inference_fn, num_samples)

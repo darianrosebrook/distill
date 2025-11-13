@@ -993,16 +993,49 @@ class EntailmentJudge(ABC):
 
 
 class PlaceholderEntailmentJudge(EntailmentJudge):
-    """Placeholder entailment judge with caching and temperature scaling."""
+    """
+    Placeholder entailment judge with caching and temperature scaling.
+
+    WARNING: This is a placeholder implementation using lexical overlap heuristics.
+    It should be replaced with a trained NLI model for production use.
+
+    This implementation:
+    - Uses simple word overlap for entailment detection
+    - Has limited accuracy compared to trained models
+    - Is intended as a fallback when no real judge is available
+
+    For production, replace with a trained entailment judge model.
+    """
 
     def __init__(
         self,
         temperature: float = 0.8,
         prior: Optional[Dict[str, float]] = None,
         eps: float = 1e-6,
-        calibration_path: Optional[str] = None
+        calibration_path: Optional[str] = None,
+        warn_on_init: bool = True
     ):
-        """Initialize with temperature, priors, and optional calibration."""
+        """
+        Initialize with temperature, priors, and optional calibration.
+
+        Args:
+            temperature: Temperature for logit scaling
+            prior: Prior probabilities for support/contradict/insufficient
+            eps: Epsilon for numerical stability
+            calibration_path: Path to calibration JSON file
+            warn_on_init: Whether to print warning about placeholder status
+        """
+        if warn_on_init:
+            import warnings
+            warnings.warn(
+                "PlaceholderEntailmentJudge is a placeholder implementation using "
+                "lexical overlap heuristics. For production use, replace with a "
+                "trained NLI model. This judge has limited accuracy compared to "
+                "trained models.",
+                UserWarning,
+                stacklevel=2
+            )
+
         self.temperature = temperature
         self.prior = prior or {"support": 0.45,
                                "contradict": 0.1, "insufficient": 0.45}
