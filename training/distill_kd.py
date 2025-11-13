@@ -1925,7 +1925,7 @@ def train_step(
             loss_dict["grad_norm"] = torch.tensor(total_grad_norm.item(), device=device)
         else:
             # Normal update without gradient norm logging
-            if scaler is not None:
+            # Normal update without gradient norm logging
             if scaler is not None:
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.get(
