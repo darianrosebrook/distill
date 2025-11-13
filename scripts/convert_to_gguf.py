@@ -551,7 +551,7 @@ def convert_to_gguf_direct(hf_dir: Path, output_gguf: Path):
 
         # Set model metadata
         gguf_writer.add_name("8-ball")
-        gguf_writer.add_description("Magic 8 Ball fortune-telling model")
+        gguf_writer.add_description("8-Ball fortune-telling model")
         gguf_writer.add_author("darianrosebrook")
         gguf_writer.add_version("1.0.0")
 

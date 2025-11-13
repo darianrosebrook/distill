@@ -1,8 +1,8 @@
 """
-End-to-end Magic 8 Ball pipeline test.
+End-to-end 8-Ball pipeline test.
 
 Tests full flow: generate → train → export → convert → verify.
-Uses the Magic 8 Ball toy model to validate the complete distillation pipeline.
+Uses the 8-Ball toy model to validate the complete distillation pipeline.
 
 Usage:
     pytest tests/e2e/test_magic_8_ball_pipeline.py -v
@@ -48,7 +48,7 @@ def temp_dir():
 
 @pytest.mark.slow
 def test_magic_8_ball_pipeline_e2e(temp_dir):
-    """Test full Magic 8 Ball pipeline end-to-end."""
+    """Test full 8-Ball pipeline end-to-end."""
     # Paths
     dataset_path = temp_dir / "magic_8_ball_kd.jsonl"
     checkpoint_path = temp_dir / "magic_8_ball.ckpt"
@@ -59,8 +59,8 @@ def test_magic_8_ball_pipeline_e2e(temp_dir):
     print("\n🎱 MAGIC 8 BALL E2E PIPELINE TEST 🎱")
     print("=" * 60)
 
-    # Step 1: Generate Magic 8 Ball KD dataset
-    print("\n[Step 1] Generating Magic 8 Ball KD dataset...")
+    # Step 1: Generate 8-Ball KD dataset
+    print("\n[Step 1] Generating 8-Ball KD dataset...")
     result = subprocess.run(
         [
             sys.executable,
@@ -80,8 +80,8 @@ def test_magic_8_ball_pipeline_e2e(temp_dir):
     print(f"✅ Dataset created: {dataset_path}")
     print(f"   Output: {result.stdout}")
 
-    # Step 2: Train Magic 8 Ball model
-    print("\n[Step 2] Training Magic 8 Ball model...")
+    # Step 2: Train 8-Ball model
+    print("\n[Step 2] Training 8-Ball model...")
     result = subprocess.run(
         [
             sys.executable,
@@ -262,7 +262,7 @@ def test_magic_8_ball_pipeline_e2e(temp_dir):
         print(f"   Shapes OK: {summary.get('shapes_ok', [])}")
         print(f"   Tool span F1: {summary.get('tool_span_micro_f1', 0.0):.4f}")
 
-    print("\n🎉 Magic 8 Ball E2E pipeline test PASSED!")
+    print("\n🎉 8-Ball E2E pipeline test PASSED!")
     print("=" * 60)
 
 

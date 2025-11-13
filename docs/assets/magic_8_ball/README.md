@@ -1,6 +1,6 @@
-# Magic 8 Ball Model Card Assets
+# 8-Ball Model Card Assets
 
-This directory contains automatically generated SVG charts for the Magic 8 Ball model card.
+This directory contains automatically generated SVG charts for the 8-Ball model card.
 
 ## Charts
 

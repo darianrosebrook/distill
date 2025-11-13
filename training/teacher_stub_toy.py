@@ -4,7 +4,7 @@ Deterministic teacher stub for toy distillation training.
 Generates teacher logits without model weights - CPU-only, seeded for reproducibility.
 Used by run_toy_distill.py to generate teacher logits during training.
 
-Supports both regular toy training and Magic 8 Ball mystical training.
+Supports both regular toy training and 8-Ball mystical training.
 
 Usage:
     from training.teacher_stub_toy import teacher_logits, 8_ball_teacher_logits
@@ -68,7 +68,7 @@ def teacher_logits(token_ids: torch.Tensor, vocab_size: int = 512) -> torch.Tens
 
 def magic_8_ball_teacher_logits(token_ids: torch.Tensor, vocab_size: int = 512, tokenizer=None) -> torch.Tensor:
     """
-    Generate context-aware Magic 8 Ball teacher logits using real mystical token sequences.
+    Generate context-aware 8-Ball teacher logits using real mystical token sequences.
 
     Instead of arbitrary token preferences, this uses actual token IDs from real mystical
     phrases like "It is certain", "Outlook good", etc., making the teacher/student

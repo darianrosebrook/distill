@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Generate SVG charts for Magic 8 Ball model card.
+Generate SVG charts for 8-Ball model card.
 
-This script creates comparative performance charts showing how the Magic 8 Ball
+This script creates comparative performance charts showing how the 8-Ball
 model compares to major commercial LLMs on speed, cost, and efficiency metrics.
 """
 
@@ -22,7 +22,7 @@ sys.path.insert(0, str(project_root))
 
 
 def load_magic8_benchmarks(report_path="eval/reports/magic_8_ball_e2e.json"):
-    """Load Magic 8 Ball benchmark data."""
+    """Load 8-Ball benchmark data."""
     if os.path.exists(report_path):
         with open(report_path) as f:
             return json.load(f)
@@ -31,7 +31,7 @@ def load_magic8_benchmarks(report_path="eval/reports/magic_8_ball_e2e.json"):
 
 def generate_latency_chart(output_dir):
     """Generate inference latency comparison chart."""
-    models = ["Magic 8 Ball", "Claude-3 Haiku", "GPT-3.5 Turbo", "GPT-4"]
+    models = ["8-Ball", "Claude-3 Haiku", "GPT-3.5 Turbo", "GPT-4"]
     latencies_ms = [0.40, 300, 500, 2000]
 
     # Dark mode theme
@@ -41,7 +41,7 @@ def generate_latency_chart(output_dir):
     ax.set_facecolor("#2d2d2d")
 
     # Use log scale for better visualization
-    # Mid blue-ish purple for Magic 8 Ball, grey for others
+    # Mid blue-ish purple for 8-Ball, grey for others
     # Purple for M8B, grey for others
     colors = ["#8B5CF6", "#6B7280", "#6B7280", "#6B7280"]
     bars = ax.bar(models, latencies_ms, color=colors, edgecolor="#ffffff", linewidth=1.5, alpha=0.8)
@@ -65,7 +65,7 @@ def generate_latency_chart(output_dir):
         "Inference Latency (ms, log scale)", fontsize=12, fontweight="bold", color="white"
     )
     ax.set_title(
-        "Inference Speed Comparison: Magic 8 Ball vs Major LLMs",
+        "Inference Speed Comparison: 8-Ball vs Major LLMs",
         fontsize=14,
         fontweight="bold",
         pad=20,
@@ -74,7 +74,7 @@ def generate_latency_chart(output_dir):
     ax.grid(True, alpha=0.3, axis="y", linestyle="--", color="#666666")
     ax.set_axisbelow(True)
 
-    # Highlight Magic 8 Ball with brighter color and glow effect
+    # Highlight 8-Ball with brighter color and glow effect
     bars[0].set_edgecolor("#8B5CF6")
     bars[0].set_linewidth(3)
     bars[0].set_alpha(1.0)
@@ -97,7 +97,7 @@ def generate_latency_chart(output_dir):
 
 def generate_cost_chart(output_dir):
     """Generate cost per inference comparison chart."""
-    models = ["Magic 8 Ball", "Claude-3 Haiku", "GPT-3.5 Turbo", "GPT-4"]
+    models = ["8-Ball", "Claude-3 Haiku", "GPT-3.5 Turbo", "GPT-4"]
     costs = [0.0000000042, 0.00025, 0.002, 0.030]
 
     # Dark mode theme
@@ -133,7 +133,7 @@ def generate_cost_chart(output_dir):
         "Cost per Inference ($, log scale)", fontsize=12, fontweight="bold", color="white"
     )
     ax.set_title(
-        "Cost Efficiency: Magic 8 Ball vs Major LLMs",
+        "Cost Efficiency: 8-Ball vs Major LLMs",
         fontsize=14,
         fontweight="bold",
         pad=20,
@@ -142,7 +142,7 @@ def generate_cost_chart(output_dir):
     ax.grid(True, alpha=0.3, axis="y", linestyle="--", color="#666666")
     ax.set_axisbelow(True)
 
-    # Highlight Magic 8 Ball
+    # Highlight 8-Ball
     bars[0].set_edgecolor("#8B5CF6")
     bars[0].set_linewidth(3)
     bars[0].set_alpha(1.0)
@@ -165,7 +165,7 @@ def generate_cost_chart(output_dir):
 
 def generate_throughput_chart(output_dir):
     """Generate throughput per dollar comparison chart."""
-    models = ["Magic 8 Ball", "Claude-3 Haiku", "GPT-3.5 Turbo", "GPT-4 API"]
+    models = ["8-Ball", "Claude-3 Haiku", "GPT-3.5 Turbo", "GPT-4 API"]
     throughput = [605999318910, 10417, 500, 0.5]
 
     # Dark mode theme
@@ -201,7 +201,7 @@ def generate_throughput_chart(output_dir):
         color="white",
     )
     ax.set_title(
-        "Throughput Efficiency: Magic 8 Ball vs Major LLMs",
+        "Throughput Efficiency: 8-Ball vs Major LLMs",
         fontsize=14,
         fontweight="bold",
         pad=20,
@@ -210,7 +210,7 @@ def generate_throughput_chart(output_dir):
     ax.grid(True, alpha=0.3, axis="y", linestyle="--", color="#666666")
     ax.set_axisbelow(True)
 
-    # Highlight Magic 8 Ball
+    # Highlight 8-Ball
     bars[0].set_edgecolor("#8B5CF6")
     bars[0].set_linewidth(3)
     bars[0].set_alpha(1.0)
@@ -233,7 +233,7 @@ def generate_throughput_chart(output_dir):
 
 def generate_efficiency_multipliers_chart(output_dir):
     """Generate cost efficiency multipliers chart."""
-    models = ["Magic 8 Ball", "Claude-3 Haiku", "GPT-3.5 Turbo", "GPT-4"]
+    models = ["8-Ball", "Claude-3 Haiku", "GPT-3.5 Turbo", "GPT-4"]
     multipliers = [1, 23122, 476190, 1387343]
 
     # Dark mode theme
@@ -263,7 +263,7 @@ def generate_efficiency_multipliers_chart(output_dir):
 
     ax.set_yscale("log")
     ax.set_ylabel(
-        "Cost Multiplier (Magic 8 Ball = 1×)", fontsize=12, fontweight="bold", color="white"
+        "Cost Multiplier (8-Ball = 1×)", fontsize=12, fontweight="bold", color="white"
     )
     ax.set_title(
         "Cost Efficiency Multipliers: How Much More Expensive?",
@@ -275,7 +275,7 @@ def generate_efficiency_multipliers_chart(output_dir):
     ax.grid(True, alpha=0.3, axis="y", linestyle="--", color="#666666")
     ax.set_axisbelow(True)
 
-    # Highlight Magic 8 Ball
+    # Highlight 8-Ball
     bars[0].set_edgecolor("#8B5CF6")
     bars[0].set_linewidth(3)
     bars[0].set_alpha(1.0)
@@ -326,9 +326,9 @@ def generate_billion_scale_savings_chart(output_dir):
             color="white",
         )
 
-    ax.set_ylabel("Cost Savings vs Magic 8 Ball ($)", fontsize=12, fontweight="bold", color="white")
+    ax.set_ylabel("Cost Savings vs 8-Ball ($)", fontsize=12, fontweight="bold", color="white")
     ax.set_title(
-        "Cost Savings: 1 Billion Inferences vs Magic 8 Ball",
+        "Cost Savings: 1 Billion Inferences vs 8-Ball",
         fontsize=14,
         fontweight="bold",
         pad=20,
@@ -352,7 +352,7 @@ def generate_billion_scale_savings_chart(output_dir):
 
 def generate_model_size_chart(output_dir):
     """Generate model size comparison chart."""
-    models = ["Magic 8 Ball", "Claude-3 Haiku", "GPT-3.5 Turbo", "GPT-4"]
+    models = ["8-Ball", "Claude-3 Haiku", "GPT-3.5 Turbo", "GPT-4"]
     sizes_mb = [1.24, 23000, 100000, 500000]
 
     # Dark mode theme
@@ -382,7 +382,7 @@ def generate_model_size_chart(output_dir):
     ax.set_yscale("log")
     ax.set_ylabel("Model Size (MB, log scale)", fontsize=12, fontweight="bold", color="white")
     ax.set_title(
-        "Model Size Comparison: Magic 8 Ball vs Major LLMs",
+        "Model Size Comparison: 8-Ball vs Major LLMs",
         fontsize=14,
         fontweight="bold",
         pad=20,
@@ -391,7 +391,7 @@ def generate_model_size_chart(output_dir):
     ax.grid(True, alpha=0.3, axis="y", linestyle="--", color="#666666")
     ax.set_axisbelow(True)
 
-    # Highlight Magic 8 Ball
+    # Highlight 8-Ball
     bars[0].set_edgecolor("#8B5CF6")
     bars[0].set_linewidth(3)
     bars[0].set_alpha(1.0)
@@ -413,12 +413,12 @@ def generate_model_size_chart(output_dir):
 
 
 def main():
-    """Generate all Magic 8 Ball model card charts."""
+    """Generate all 8-Ball model card charts."""
     # Create output directory
     output_dir = project_root / "docs" / "assets" / "magic_8_ball"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print("🎨 Generating Magic 8 Ball Model Card Charts...")
+    print("🎨 Generating 8-Ball Model Card Charts...")
     print("=" * 60)
 
     # Generate all charts

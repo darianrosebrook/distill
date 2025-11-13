@@ -1,6 +1,6 @@
-![Magic 8 Ball](../8-ball.png)
+![8-Ball](../8-ball.png)
 
-# Magic 8 Ball
+# 8-Ball
 
 > **A distilled transformer model that generates mystical answers with tool integration. Despite its tiny size (0.62M parameters), it achieves inference speeds that surpass all major commercial LLMs while costing fractions of a penny per inference.**
 
@@ -32,7 +32,7 @@ import coremltools as ct
 import numpy as np
 
 # Load the model
-model = ct.models.MLModel('magic_8_ball_T128.mlpackage')
+model = ct.models.MLModel('8_ball_T128.mlpackage')
 
 # Generate mystical answers
 input_ids = np.random.randint(0, 512, size=(1, 128), dtype=np.int32)
@@ -147,13 +147,13 @@ The model was trained on 128 synthesized samples consisting of:
 
 ### Competitive Benchmarks
 
-Despite its tiny size and "toy" nature, the Magic 8 Ball model achieves performance metrics that surpass all major commercial LLMs:
+Despite its tiny size and "toy" nature, the 8-Ball model achieves performance metrics that surpass all major commercial LLMs:
 
 #### Inference Speed Comparison
 
 ```
 Model                  Size      Latency    Throughput    Cost/inf
-Magic 8 Ball         1.24 MB     0.40 ms    2,516/sec     $0.0000000042
+8-Ball         1.24 MB     0.40 ms    2,516/sec     $0.0000000042
 GPT-4               ~500 GB      2,000 ms   0.5/sec       $0.030
 Claude-3 Opus       ~200 GB      1,000 ms   1/sec         $0.075
 GPT-3.5 Turbo       ~100 GB      500 ms     2/sec         $0.002
@@ -162,7 +162,7 @@ Claude-3 Haiku      ~23 GB       300 ms     3.3/sec       $0.00025
 
 #### Cost Efficiency Analysis
 
-The Magic 8 Ball achieves extreme cost efficiency:
+The 8-Ball achieves extreme cost efficiency:
 
 - **Vs GPT-4**: 7,142,857× cheaper per inference
 - **Vs Claude-3**: 17,857,143× cheaper per inference
@@ -173,13 +173,13 @@ The Magic 8 Ball achieves extreme cost efficiency:
 
 ```
 1 Million Inferences:
-├── Magic 8 Ball: $0.0042
+├── 8-Ball: $0.0042
 ├── GPT-4 API: $30,000
 ├── Claude-3: $75,000
 └── Savings: $104,995.85 vs GPT-4
 
 1 Billion Inferences:
-├── Magic 8 Ball: $4.15
+├── 8-Ball: $4.15
 ├── GPT-4 API: $30,000,000
 ├── Claude-3: $75,000,000
 └── Savings: $104,995,995.85 vs GPT-4
@@ -248,7 +248,7 @@ The Magic 8 Ball achieves extreme cost efficiency:
 
 ### Model Analysis
 
-The Magic 8 Ball model demonstrates extreme efficiency despite its minimal size:
+The 8-Ball model demonstrates extreme efficiency despite its minimal size:
 
 **Parameter Distribution**:
 
@@ -269,39 +269,39 @@ The Magic 8 Ball model demonstrates extreme efficiency despite its minimal size:
 
 #### Inference Speed Comparison
 
-![Inference Latency Comparison](assets/magic_8_ball/latency_comparison.svg)
+![Inference Latency Comparison](assets/8_ball/latency_comparison.svg)
 
-_Magic 8 Ball achieves 0.40ms inference latency, making it 5,000× faster than GPT-4 and 750× faster than Claude-3 Haiku._
+_8-Ball achieves 0.40ms inference latency, making it 5,000× faster than GPT-4 and 750× faster than Claude-3 Haiku._
 
 #### Cost per Inference Comparison
 
-![Cost per Inference Comparison](assets/magic_8_ball/cost_comparison.svg)
+![Cost per Inference Comparison](assets/8_ball/cost_comparison.svg)
 
-_At $0.0000000042 per inference, Magic 8 Ball is 7,142,857× cheaper than GPT-4 and 59,524× cheaper than Claude-3 Haiku._
+_At $0.0000000042 per inference, 8-Ball is 7,142,857× cheaper than GPT-4 and 59,524× cheaper than Claude-3 Haiku._
 
 #### Throughput per Dollar Comparison
 
-![Throughput per Dollar Comparison](assets/magic_8_ball/throughput_comparison.svg)
+![Throughput per Dollar Comparison](assets/8_ball/throughput_comparison.svg)
 
-_Magic 8 Ball achieves 606 billion inferences per second per dollar, compared to 10K for Claude-3 Haiku and 500 for GPT-3.5 Turbo._
+_8-Ball achieves 606 billion inferences per second per dollar, compared to 10K for Claude-3 Haiku and 500 for GPT-3.5 Turbo._
 
 #### Cost Efficiency Multipliers
 
-![Cost Efficiency Multipliers](assets/magic_8_ball/efficiency_multipliers.svg)
+![Cost Efficiency Multipliers](assets/8_ball/efficiency_multipliers.svg)
 
-_This chart shows how many times more expensive each model is compared to Magic 8 Ball (baseline = 1×)._
+_This chart shows how many times more expensive each model is compared to 8-Ball (baseline = 1×)._
 
 #### Billion-Scale Cost Savings
 
-![Billion-Scale Cost Savings](assets/magic_8_ball/billion_scale_savings.svg)
+![Billion-Scale Cost Savings](assets/8_ball/billion_scale_savings.svg)
 
-_Cost savings when running 1 billion inferences with Magic 8 Ball instead of major commercial LLMs._
+_Cost savings when running 1 billion inferences with 8-Ball instead of major commercial LLMs._
 
 #### Model Size Comparison
 
-![Model Size Comparison](assets/magic_8_ball/model_size_comparison.svg)
+![Model Size Comparison](assets/8_ball/model_size_comparison.svg)
 
-_Magic 8 Ball is 1.24 MB compared to 23 GB (Claude-3 Haiku), 100 GB (GPT-3.5 Turbo), and 500 GB (GPT-4)._
+_8-Ball is 1.24 MB compared to 23 GB (Claude-3 Haiku), 100 GB (GPT-3.5 Turbo), and 500 GB (GPT-4)._
 
 ## How to Get Started with the Model
 
@@ -315,7 +315,7 @@ cd distill
 # Install dependencies
 pip install -e .
 
-# Create the Magic 8 Ball model
+# Create the 8-Ball model
 make 8-ball
 
 # Test inference
@@ -323,7 +323,7 @@ python3 -c "
 import coremltools as ct
 import numpy as np
 
-model = ct.models.MLModel('tmp/magic_8_ball_T128.mlpackage')
+model = ct.models.MLModel('tmp/8_ball_T128.mlpackage')
 input_ids = np.random.randint(0, 512, size=(1, 128), dtype=np.int32)
 result = model.predict({'input_ids': input_ids})
 print('Inference successful!')
@@ -347,7 +347,7 @@ For production deployment, see the [CoreML Runtime Guide](../coreml/runtime/READ
 
 ```bibtex
 @model{magic-8-ball-2025,
-  title={Magic 8 Ball: Ultra-Efficient Distilled Language Model},
+  title={8-Ball: Ultra-Efficient Distilled Language Model},
   author={Rosebrook, Darian},
   year={2025},
   publisher={Distillation Pipeline},
@@ -415,16 +415,16 @@ _This model is a demonstration of distillation pipeline capabilities. Despite it
 #### Per-Inference Costs
 
 ```
-Magic 8 Ball (Apple Silicon Mac Mini M2):
+8-Ball (Apple Silicon Mac Mini M2):
 ├── Hardware depreciation: $0.0000000023/inference (54.9%)
 ├── Electricity: $0.0000000019/inference (45.1%)
 └── Total: $0.0000000042/inference
 
-Magic 8 Ball (AWS Inferentia2 equivalent):
+8-Ball (AWS Inferentia2 equivalent):
 ├── Instance cost: $0.0000000840/inference
 └── Total: $0.0000000840/inference
 
-Magic 8 Ball (AWS Lambda ARM):
+8-Ball (AWS Lambda ARM):
 ├── Compute (256MB): $0.0000000004/inference
 ├── Request overhead: $0.0000002004/inference
 └── Total: $0.0000002008/inference
@@ -449,7 +449,7 @@ Cost per billion inferences: $4.15
 #### Extreme Scale Efficiency
 
 ```
-API LLM Cost Multipliers (Magic 8 Ball = 1x):
+API LLM Cost Multipliers (8-Ball = 1x):
 ├── GPT-4: 1,387,343×
 ├── GPT-3.5 Turbo: 53,952×
 ├── Claude-3 Opus: 142,857×
@@ -466,13 +466,13 @@ API LLM Cost Multipliers (Magic 8 Ball = 1x):
 
 ```
 Throughput per Dollar (inferences/second per $):
-├── Magic 8 Ball: 605,999,318,910 inf/sec/$
+├── 8-Ball: 605,999,318,910 inf/sec/$
 ├── GPT-3.5 API: 500 inf/sec/$
 ├── Claude-3 Haiku: 10,417 inf/sec/$
 └── Efficiency gain: 264,842× vs GPT-3.5, 58,206× vs Claude-3
 
 Model Size vs Cost:
-├── Magic 8 Ball: 1.24 MB → $0.0000000042/inference
+├── 8-Ball: 1.24 MB → $0.0000000042/inference
 ├── GPT-3.5 Turbo: ~100 GB → $0.002000/inference (476,190× more expensive)
 ├── GPT-4: ~500 GB → $0.060000/inference (14,285,714× more expensive)
 └── Claude-3 Haiku: ~23 GB → $0.000096/inference (23,122× more expensive)
@@ -550,7 +550,7 @@ Model Size vs Cost:
 import coremltools as ct
 
 # Load model
-model = ct.models.MLModel('magic_8_ball_T128.mlpackage')
+model = ct.models.MLModel('8_ball_T128.mlpackage')
 
 # Prepare input (batch_size=1, seq_len=128)
 input_ids = np.random.randint(0, 512, size=(1, 128), dtype=np.int32)
@@ -570,10 +570,10 @@ next_token = np.argmax(logits[0, -1, :])
 make 8-ball
 
 # Outputs:
-# ├── /tmp/magic_8_ball.ckpt (2.39 MB checkpoint)
-# ├── /tmp/magic_8_ball_exported/ (TorchScript exports)
-# ├── /tmp/magic_8_ball_T128.mlpackage (1.24 MB CoreML model)
-# └── eval/reports/magic_8_ball_e2e.json (verification report)
+# ├── /tmp/8_ball.ckpt (2.39 MB checkpoint)
+# ├── /tmp/8_ball_exported/ (TorchScript exports)
+# ├── /tmp/8_ball_T128.mlpackage (1.24 MB CoreML model)
+# └── eval/reports/8_ball_e2e.json (verification report)
 ```
 
 ## 📈 Evaluation Results
@@ -612,7 +612,7 @@ make 8-ball
 
 ```bibtex
 @model{magic-8-ball-2025,
-  title={Magic 8 Ball: Distilled Language Model},
+  title={8-Ball: Distilled Language Model},
   author={Rosebrook, Darian},
   year={2025},
   publisher={Distillation Pipeline},
@@ -633,7 +633,7 @@ make 8-ball
 
 ### Version 1.0.0 (2025-11-13)
 
-- Initial release of Magic 8 Ball model
+- Initial release of 8-Ball model
 - Complete distillation pipeline demonstration
 - CoreML optimization for Apple Silicon
 - Comprehensive benchmarking and evaluation

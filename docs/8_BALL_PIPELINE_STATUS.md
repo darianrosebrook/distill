@@ -1,4 +1,4 @@
-# Magic 8 Ball Pipeline Status
+# 8-Ball Pipeline Status
 
 **Last Updated**: $(date)
 
@@ -7,16 +7,16 @@
 ### ✅ **Working Components**
 
 1. **Dataset Generation** ✅
-   - Magic 8 Ball dataset generation works perfectly
+   - 8-Ball dataset generation works perfectly
    - Creates 128 samples with mystical answers
-   - Command: `python -m data.make_toy_kd --out magic_8_ball.jsonl --n 128 --magic-8-ball`
+   - Command: `python -m data.make_toy_kd --out 8_ball.jsonl --n 128 --8-ball`
    - Status: **FULLY FUNCTIONAL**
 
 2. **Training** ✅
-   - Magic 8 Ball training completes successfully
+   - 8-Ball training completes successfully
    - Loss converges from ~3.2 → ~1.8 over 64 steps
-   - Checkpoint saved with correct metadata (`model_type: magic-8-ball`)
-   - Command: `python -m training.run_toy_distill --in magic_8_ball.jsonl --out magic_8_ball.ckpt --epochs 2 --magic-8-ball`
+   - Checkpoint saved with correct metadata (`model_type: 8-ball`)
+   - Command: `python -m training.run_toy_distill --in 8_ball.jsonl --out 8_ball.ckpt --epochs 2 --8-ball`
    - Status: **FULLY FUNCTIONAL**
 
 3. **Checkpoint Verification** ✅
@@ -71,7 +71,7 @@ else:
 #### Priority 2: Test Full Pipeline
 
 Once export works:
-1. Test TorchScript export with Magic 8 Ball
+1. Test TorchScript export with 8-Ball
 2. Test CoreML conversion
 3. Test contract verification
 4. Document any additional issues
@@ -87,7 +87,7 @@ Once export works:
 
 **Full Pipeline**: ✅ **WORKING END-TO-END**
 - All major steps complete successfully
-- Magic 8 Ball model trains, exports, and converts
+- 8-Ball model trains, exports, and converts
 - Verification works for T128 shape (primary test shape)
 
 ### 🎯 **Next Steps**
@@ -103,7 +103,7 @@ Once export works:
 
 Run the E2E test:
 ```bash
-pytest tests/e2e/test_magic_8_ball_pipeline.py::test_magic_8_ball_pipeline_e2e -v -s
+pytest tests/e2e/test_8_ball_pipeline.py::test_8_ball_pipeline_e2e -v -s
 ```
 
 ### 📝 **Notes**
@@ -113,13 +113,13 @@ pytest tests/e2e/test_magic_8_ball_pipeline.py::test_magic_8_ball_pipeline_e2e -
 - **CoreML conversion**: **Working** (fixed torch import) ✅
 - **Verification**: **Working** (T128 shape validated) ✅
 - **Full pipeline**: **End-to-end validated** ✅
-- **Magic 8 Ball model**: Trains successfully, exports to TorchScript, converts to CoreML, and validates contracts 🎱✨
+- **8-Ball model**: Trains successfully, exports to TorchScript, converts to CoreML, and validates contracts 🎱✨
 - **Teacher Stub Quality**: Uses real mystical token sequences instead of arbitrary preferences
 - **Performance Metrics**: +25% model score, 100% mystical compliance vs previous implementation
 
 ### 🎉 **Summary**
 
-The Magic 8 Ball E2E pipeline test **PASSES**! All major components work:
+The 8-Ball E2E pipeline test **PASSES**! All major components work:
 - ✅ Dataset generation
 - ✅ Model training  
 - ✅ TorchScript export

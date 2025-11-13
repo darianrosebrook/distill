@@ -32,9 +32,9 @@ class ToyModelRunner:
 
     def generate(self, prompt: str, tools: List[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
         """
-        Generate deterministic toy output using Magic 8 Ball responses.
+        Generate deterministic toy output using 8-Ball responses.
 
-        The Magic 8 Ball is an iconic fortune-telling device that gives cryptic,
+        The 8-Ball is an iconic fortune-telling device that gives cryptic,
         mystical answers to yes/no questions. Perfect for a toy model that's
         hyper-optimized for M1 Macs!
 
@@ -46,7 +46,7 @@ class ToyModelRunner:
         if cache_key in self._cache:
             return self._cache[cache_key]
 
-        # Magic 8 Ball responses (classic 20 answers)
+        # 8-Ball responses (classic 20 answers)
         magic_answers = [
             "It is certain",
             "It is decidedly so",
@@ -89,7 +89,7 @@ class ToyModelRunner:
         )  # Different step for variety
         flair = flair_options[flair_hash]
 
-        # Magic 8 Ball gives mystical answers BUT also includes verifiable claims for testing!
+        # 8-Ball gives mystical answers BUT also includes verifiable claims for testing!
         prompt_lower = prompt.lower()
         if "authentication" in prompt_lower:
             output = f"The system handles authentication using JWT tokens. {mystical_answer}{flair}! [tool:read_file(path='auth.py')]"
@@ -180,13 +180,15 @@ class ToyEvidenceRetriever(EvidenceRetriever):
 
     def retrieve(self, claim_text: str, manifest: dict):
         """Return evidence items from manifest."""
-        evidence_items = manifest.get("evidence_items", manifest.get("evidence", []))
+        evidence_items = manifest.get(
+            "evidence_items", manifest.get("evidence", []))
         unified = []
         for item in evidence_items:
             text = item.get("text") or item.get("content", "")
             source = item.get("source", "test")
             quality = item.get("quality", item.get("quality_score", 0.7))
-            unified.append({"text": text, "source": source, "quality": float(quality)})
+            unified.append({"text": text, "source": source,
+                           "quality": float(quality)})
         return unified[:6]  # Limit to 6 items
 
 
@@ -197,8 +199,10 @@ def create_toy_context() -> ConversationContext:
             "The system processes user requests.",
             "We implemented authentication last week.",
         ],
-        entity_registry={"System": "the main application", "User": "end user of the application"},
-        code_spans=["def authenticate(user): return True", "class UserService: pass"],
+        entity_registry={"System": "the main application",
+                         "User": "end user of the application"},
+        code_spans=[
+            "def authenticate(user): return True", "class UserService: pass"],
         doc_sections=[
             "Authentication is handled by UserService",
             "The system supports multiple user types",
@@ -235,7 +239,8 @@ def test_toy_model_claims_extraction():
         if tool_call.get("result", {}).get("ok"):
             result_content = tool_call["result"].get("content", "")
             evidence_manifest["evidence"].append(
-                {"text": result_content, "source": f"tool:{tool_call['name']}", "quality": 0.9}
+                {"text": result_content,
+                    "source": f"tool:{tool_call['name']}", "quality": 0.9}
             )
 
     # Also add model output itself as evidence
@@ -246,14 +251,14 @@ def test_toy_model_claims_extraction():
     # Process through claims pipeline
     result = pipeline.process(model_output, context, evidence_manifest)
 
-    # Verify claims processing completed (Magic 8 Ball may not extract claims due to mystical nature)
+    # Verify claims processing completed (8-Ball may not extract claims due to mystical nature)
     assert "claims" in result
-    # Note: Magic 8 Ball mystical answers may not contain verifiable claims
+    # Note: 8-Ball mystical answers may not contain verifiable claims
     # This is acceptable for toy model testing - focus is on pipeline integration
     claims_extracted = len(result["claims"])
     if claims_extracted == 0:
         # Mystical answers don't extract claims - that's ok for this toy model!
-        print("⚠️  Magic 8 Ball wisdom doesn't extract claims (mystical nature)")
+        print("⚠️  8-Ball wisdom doesn't extract claims (mystical nature)")
         # Test passes - pipeline works, just no claims from mystical content
     else:
         # If claims were extracted, verify structure
@@ -266,7 +271,8 @@ def test_toy_model_claims_extraction():
         for v in result["verification"]:
             verif_result = v.get("verification")
             if verif_result:
-                assert verif_result.status in ["VERIFIED", "INSUFFICIENT_EVIDENCE", "UNVERIFIED"]
+                assert verif_result.status in [
+                    "VERIFIED", "INSUFFICIENT_EVIDENCE", "UNVERIFIED"]
                 assert verif_result.outcome_id is not None
 
 
@@ -285,9 +291,12 @@ def test_toy_model_eval_harness_pattern():
 
     # Simulate eval harness items
     eval_items = [
-        {"prompt": "How does authentication work?", "metadata": {"sample_id": "test-1"}},
-        {"prompt": "What is the system performance?", "metadata": {"sample_id": "test-2"}},
-        {"prompt": "How many requests were processed?", "metadata": {"sample_id": "test-3"}},
+        {"prompt": "How does authentication work?",
+            "metadata": {"sample_id": "test-1"}},
+        {"prompt": "What is the system performance?",
+            "metadata": {"sample_id": "test-2"}},
+        {"prompt": "How many requests were processed?",
+            "metadata": {"sample_id": "test-3"}},
     ]
 
     all_claims = []
@@ -300,7 +309,8 @@ def test_toy_model_eval_harness_pattern():
         # Build evidence manifest from tool traces
         evidence_manifest = {
             "evidence": [
-                {"text": generation["model_output"], "source": "model_output", "quality": 0.8}
+                {"text": generation["model_output"],
+                    "source": "model_output", "quality": 0.8}
             ]
         }
 
@@ -308,11 +318,13 @@ def test_toy_model_eval_harness_pattern():
             if tool_call.get("result", {}).get("ok"):
                 result_content = tool_call["result"].get("content", "")
                 evidence_manifest["evidence"].append(
-                    {"text": result_content, "source": f"tool:{tool_call['name']}", "quality": 0.9}
+                    {"text": result_content,
+                        "source": f"tool:{tool_call['name']}", "quality": 0.9}
                 )
 
         # Extract and verify claims
-        result = pipeline.process(generation["model_output"], context, evidence_manifest)
+        result = pipeline.process(
+            generation["model_output"], context, evidence_manifest)
 
         if result.get("claims"):
             all_claims.extend(result["claims"])
@@ -351,15 +363,17 @@ def test_toy_model_claims_with_policy():
     generation = runner.generate(prompt)
 
     # Evidence without required artifacts (should trigger policy gate)
-    # Magic 8 Ball gives mystical answers, so we use that as evidence
+    # 8-Ball gives mystical answers, so we use that as evidence
     evidence_manifest = {
         "evidence": [
-            {"text": generation["model_output"], "source": "model_output", "quality": 0.9}
+            {"text": generation["model_output"],
+                "source": "model_output", "quality": 0.9}
         ],
         "artifacts": [],  # Missing required artifacts
     }
 
-    result = pipeline.process(generation["model_output"], context, evidence_manifest)
+    result = pipeline.process(
+        generation["model_output"], context, evidence_manifest)
 
     # Should extract claims
     assert "claims" in result
@@ -370,7 +384,7 @@ def test_toy_model_claims_with_policy():
             verif_result = v.get("verification")
             if verif_result:
                 # Status claims without artifacts should be INSUFFICIENT_EVIDENCE
-                # Magic 8 Ball gives mystical answers, but the prompt was about production readiness
+                # 8-Ball gives mystical answers, but the prompt was about production readiness
                 if "production" in prompt.lower():
                     assert verif_result.status == "INSUFFICIENT_EVIDENCE"
                     assert verif_result.outcome_id == 6
@@ -393,7 +407,7 @@ def test_toy_model_determinism():
     evidence_manifest = {
         "evidence": [
             {
-                "text": "It is decidedly so 🔮",  # Magic 8 Ball wisdom
+                "text": "It is decidedly so 🔮",  # 8-Ball wisdom
                 "source": "mystical_realm",
                 "quality": 0.9,
             }
@@ -402,10 +416,12 @@ def test_toy_model_determinism():
 
     # Run twice
     generation1 = runner.generate(prompt)
-    result1 = pipeline.process(generation1["model_output"], context, evidence_manifest)
+    result1 = pipeline.process(
+        generation1["model_output"], context, evidence_manifest)
 
     generation2 = runner.generate(prompt)
-    result2 = pipeline.process(generation2["model_output"], context, evidence_manifest)
+    result2 = pipeline.process(
+        generation2["model_output"], context, evidence_manifest)
 
     # Results should be identical (deterministic)
     assert json.dumps(result1, sort_keys=True, default=str) == json.dumps(
@@ -438,7 +454,7 @@ def test_toy_model_coverage_scenarios():
             "prompt": "How does authentication work?",
             "evidence": [
                 {
-                    "text": "Outlook good 🔮",  # Magic 8 Ball wisdom
+                    "text": "Outlook good 🔮",  # 8-Ball wisdom
                     "source": "mystical_realm",
                     "quality": 0.9,
                 }
@@ -473,13 +489,15 @@ def test_toy_model_coverage_scenarios():
         generation = runner.generate(scenario["prompt"])
         evidence_manifest = {"evidence": scenario["evidence"]}
 
-        result = pipeline.process(generation["model_output"], context, evidence_manifest)
+        result = pipeline.process(
+            generation["model_output"], context, evidence_manifest)
 
         if result.get("verification"):
             for v in result["verification"]:
                 verif_result = v.get("verification")
                 if verif_result and verif_result.element_coverage:
-                    coverage_score = verif_result.element_coverage.get("score", 0.0)
+                    coverage_score = verif_result.element_coverage.get(
+                        "score", 0.0)
 
                     if scenario["expected_coverage"] == "high":
                         # Should have reasonable coverage
