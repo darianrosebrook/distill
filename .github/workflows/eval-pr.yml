@@ -36,36 +36,36 @@ jobs:
 
       - name: Fail if gates broken
         run: |
-          python - << 'PY'
+          python3 -c "
 import json
 import sys
 import os
 
 # If report exists, check gates and fingerprints
-if os.path.exists("eval/report.smoke.json"):
-    r = json.load(open("eval/report.smoke.json"))
+if os.path.exists('eval/report.smoke.json'):
+    r = json.load(open('eval/report.smoke.json'))
     
     # Check fingerprints (P3)
-    header = r.get("header", {})
+    header = r.get('header', {})
     missing_fps = []
-    if not header.get("dataset_sha256") or header.get("dataset_sha256") == "unknown":
-        missing_fps.append("dataset_sha256")
-    if not header.get("tool_registry_sha256"):
-        missing_fps.append("tool_registry_sha256")
-    if not header.get("tokenizer_fingerprint"):
-        missing_fps.append("tokenizer_fingerprint")
+    if not header.get('dataset_sha256') or header.get('dataset_sha256') == 'unknown':
+        missing_fps.append('dataset_sha256')
+    if not header.get('tool_registry_sha256'):
+        missing_fps.append('tool_registry_sha256')
+    if not header.get('tokenizer_fingerprint'):
+        missing_fps.append('tokenizer_fingerprint')
     
     if missing_fps:
-        print(f"❌ Missing fingerprints: {missing_fps}")
+        print(f'❌ Missing fingerprints: {missing_fps}')
         sys.exit(1)
     
     # Check gates
-    if not r.get("gates_ok", False):
-        print("❌ Gates failed:", r.get("summary", {}))
+    if not r.get('gates_ok', False):
+        print('❌ Gates failed:', r.get('summary', {}))
         sys.exit(1)
-    print("✅ Gates OK:", r.get("summary", {}))
-    print("✅ Fingerprints present:", list(header.keys()))
+    print('✅ Gates OK:', r.get('summary', {}))
+    print('✅ Fingerprints present:', list(header.keys()))
 else:
-    print("⚠️ Report not generated (model may be missing); broker smoke test passed")
-PY
+    print('⚠️ Report not generated (model may be missing); broker smoke test passed')
+"
 
