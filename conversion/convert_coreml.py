@@ -66,7 +66,17 @@ def convert_pytorch_to_coreml(
 
     Returns:
         Path to converted model or None if placeholder created
+
+    Note:
+        torch and coremltools are imported inside the function to avoid
+        import errors when these dependencies are not available. This allows
+        the module to be imported even if CoreML conversion dependencies
+        are missing, which is useful for environments that only need PyTorch
+        export functionality.
     """
+    # Import here to avoid import errors when coremltools is not available
+    # This allows the module to be imported even without CoreML dependencies
+    import torch
     import coremltools as ct
 
     cu_map = {
@@ -546,15 +556,26 @@ Examples:
     ap.add_argument('--seq', nargs='+', type=int,
                     help='Enumerated sequence lengths for toy models (e.g., --seq 64 128 256). '
                          'For toy models, converts the first prefill model matching these shapes.')
+    ap.add_argument('--toy', action='store_true',
+                    help='Skip version check for toy models (testing mode)')
 
     args = ap.parse_args()
 
-    # Version compatibility check - fail fast if versions are incompatible
-    try:
-        check_coreml_versions()
-    except RuntimeError as e:
-        print(f"[convert_coreml] ERROR: Version check failed: {e}")
-        sys.exit(1)
+    # Version compatibility check - skip for toy models (they're for testing)
+    if not args.toy:
+        try:
+            check_coreml_versions()
+        except RuntimeError as e:
+            print(f"[convert_coreml] ERROR: Version check failed: {e}")
+            print("\nTo fix this issue:")
+            print("1. Install Python 3.11: brew install python@3.11")
+            print("2. Use Python 3.11 for conversion: python3.11 -m conversion.convert_coreml ...")
+            print("3. Verify coremltools is installed: pip install coremltools>=9.0")
+            print("4. For toy models only, use --toy flag to bypass: python -m conversion.convert_coreml --toy ...")
+            print("\nSee docs/DEPLOYMENT.md for detailed environment setup instructions.")
+            sys.exit(1)
+    else:
+        print("[convert_coreml] ⚠️  Skipping version check for toy model (testing mode)")
 
     if args.ane_plan:
         os.environ["MLTOOLS_VERBOSE"] = "1"

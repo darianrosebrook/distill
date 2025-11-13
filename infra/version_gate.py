@@ -1,5 +1,46 @@
 """
 Version gates: Check Python, macOS, and dependency versions before proceeding.
+
+Version Gate Strategy:
+----------------------
+
+This module enforces version requirements for production model export and conversion.
+The gates ensure compatibility with TorchScript export and CoreML conversion, which
+have strict Python version requirements (3.10 or 3.11).
+
+Production Models:
+    - Version gates MUST be enforced for all production model exports/conversions
+    - Ensures compatibility with PyTorch TorchScript and CoreML toolchains
+    - Prevents deployment of models that may fail in production environments
+
+Toy Models:
+    - Version gates can be bypassed using `--toy` flag in export/conversion scripts
+    - Allows faster testing with any Python version (including 3.13+)
+    - Bypass is explicit and intentional - never bypass for production models
+
+Bypass Mechanism:
+    - Export scripts (`conversion/export_pytorch.py`) accept `--toy` flag
+    - Conversion scripts (`conversion/convert_coreml.py`) accept `--toy` flag
+    - When `--toy` is present, version checks are skipped entirely
+    - This allows toy model testing without Python version constraints
+
+Why Version Gates Exist:
+    - TorchScript export requires Python 3.10 or 3.11 (PyTorch limitation)
+    - CoreML conversion has compatibility requirements with specific PyTorch versions
+    - Production deployments need predictable, tested environments
+    - Version mismatches can cause silent failures or incorrect model behavior
+
+When to Bypass:
+    - ONLY for toy/test models during development
+    - NEVER for production model exports
+    - Use `--toy` flag explicitly when testing pipeline with toy checkpoints
+    - Document any bypass usage in commit messages or PR notes
+
+See Also:
+    - `docs/DEPLOYMENT.md` - Full deployment guide with version requirements
+    - `docs/PRODUCTION_PIPELINE_CHECKLIST.md` - Pre-deployment checklist
+    - `conversion/export_pytorch.py` - Export implementation with bypass support
+    - `conversion/convert_coreml.py` - CoreML conversion with bypass support
 """
 import sys
 import platform

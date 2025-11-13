@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
 from training.dataset import KDDataset, collate_kd_batch
 from training.losses import combined_kd_loss
-from training.teacher_stub_toy import teacher_logits
+from training.teacher_stub_toy import teacher_logits, magic_8_ball_teacher_logits
 
 
 def get_git_sha() -> str:
@@ -63,6 +63,8 @@ def main():
                     help='Maximum sequence length')
     ap.add_argument('--tokenizer', type=str, default='models/student/tokenizer',
                     help='Tokenizer path')
+    ap.add_argument('--magic-8-ball', action='store_true',
+                    help='Train a Magic 8 Ball model that gives mystical fortune-telling responses')
     args = ap.parse_args()
 
     # Setup device
@@ -147,8 +149,12 @@ def main():
             student_logits = model(input_ids)
 
             # Generate teacher logits on-the-fly
-            teacher_logits_tensor = teacher_logits(
-                input_ids, vocab_size=args.vocab_size).to(device)
+            if args.magic_8_ball:
+                teacher_logits_tensor = magic_8_ball_teacher_logits(
+                    input_ids, vocab_size=args.vocab_size).to(device)
+            else:
+                teacher_logits_tensor = teacher_logits(
+                    input_ids, vocab_size=args.vocab_size).to(device)
 
             # Compute loss
             loss_dict = combined_kd_loss(
@@ -211,6 +217,7 @@ def main():
             "step": step,
             "git_sha": git_sha,
             "sha256_state": state_sha256,
+            "model_type": "magic-8-ball" if args.magic_8_ball else "toy",
         },
     }
 

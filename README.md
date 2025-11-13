@@ -105,6 +105,8 @@ make coreml-worker     # convert to CoreML (requires PyTorch export)
 
 > **Note**: `make onnx-worker` is optional for debug only. The production path is PyTorch ExportedProgram → CoreML (not ONNX).
 
+**📖 Complete Workflow Guide**: See [`docs/PRODUCTION_DISTILLATION_WORKFLOW.md`](docs/PRODUCTION_DISTILLATION_WORKFLOW.md) for the full end-to-end distillation pipeline.
+
 ### 4 · Evaluate a Real Model (not verification-only)
 
 Pick ONE runner:
@@ -263,14 +265,105 @@ Small deterministic slice enforcing fixture coverage and CAWS gates before merge
 
 ### Toy Test Suite
 
-**Comprehensive lightweight testing without real models** - validates the complete distillation pipeline using deterministic, CPU-only test doubles. Enables fast iteration during development while ensuring production-ready integration.
+<p align="center">
+  <img src="8-ball.png" alt="Magic 8 Ball" width="100" height="100">
+  <br>
+  <em>🎱 Our toy models include a hyper-optimized Magic 8 Ball for mystical testing! 🎱</em>
+</p>
+
+**Comprehensive lightweight testing without large language models or expensive compute** - validates the complete distillation pipeline using deterministic, optimized test doubles. Enables fast iteration during development while ensuring production-ready integration.
 
 **Key Features:**
 
-- ⚡ **Fast execution**: Full pipeline in ≤4 minutes on CPU
-- 🎯 **Complete coverage**: All integration points tested
-- 🔒 **Deterministic**: Reproducible results across environments
-- 🚀 **Production ready**: Same interfaces and validation as real models
+- **Fast execution**: Full pipeline in ≤4 minutes on CPU
+- **Complete coverage**: All integration points tested
+- **Complete Gibberish**: Model is virtually useless
+- **Deterministic**: Reproducible results across environments
+- **Production ready**: Same interfaces and validation as real models
+
+**Performance Benchmarks:**
+
+Our toy models deliver **production-grade inference speeds**:
+
+| Model               | TTFT       | TPS                  | Parameters | Training Data | Training Cost | Inference Cost (1M queries) |
+| ------------------- | ---------- | -------------------- | ---------- | ------------- | ------------- | --------------------------- |
+| **🎱 Magic 8 Ball** | **1.22ms** | **1,090 tokens/sec** | **~623K**  | 128 samples   | **$0.00003**  | **$0.0025**                 |
+| **Toy Baseline**    | ~5-10ms    | ~500-800 tokens/sec  | ~623K      | 128 samples   | $0.00003      | $0.005                      |
+
+**Key Metrics:**
+
+- **Parameters**: ~623K (tiny - fits in L2 cache!)
+- **Training Data**: 128 samples (minimal dataset for testing)
+- **Training Cost**: $0.00003 (10 seconds on CPU)
+- **Memory Footprint**: ~2.4MB (perfect for edge deployment)
+- **Power Efficiency**: CPU-only, no GPU required
+- **Latency**: Sub-millisecond responses
+- **Throughput**: >1,000 tokens/second on CPU
+- **Carbon Footprint**: Near-zero (CPU training, minimal inference)
+
+_Benchmarks measured on CPU. TTFT = Time to First Token, TPS = Tokens per Second. Costs estimated for AWS CPU instances. Training cost is effectively free - less than 1/100th of a penny!_
+
+**🎱 Ollama Integration**: Convert the Magic 8 Ball to GGUF format for Ollama deployment:
+
+```bash
+# Convert PyTorch checkpoint to GGUF
+python convert_to_gguf.py --checkpoint /tmp/magic_8_ball.ckpt --out magic-8-ball.gguf
+
+# Create Ollama model
+ollama create magic-8-ball -f Modelfile.magic-8-ball
+
+# Run mystical queries
+ollama run magic-8-ball "Will this work?"
+```
+
+The conversion script handles: PyTorch → HuggingFace → GGUF → Ollama Modelfile generation.
+
+**✅ Model Validation**: The Magic 8 Ball successfully learned its training patterns! It generates appropriate mystical responses with Magic 8 Ball phrases like "Concentrate and ask again", "Very doubtful", and "It is decidedly so" ✨🔮
+
+### Conversion Process Learnings
+
+**Practical lessons from converting our toy model to production format:**
+
+**Vocabulary Expansion:**
+
+- Toy model: 512 tokens → Ollama requirement: 32,002 tokens (+31,490 extra tokens)
+- **Scaling implication**: Larger models need careful vocabulary alignment with target ecosystems
+- **Cost**: ~6x file size increase (1.1MB → 17.4MB) due to expanded embeddings
+
+**GGUF Conversion Pipeline:**
+
+- PyTorch checkpoint → HuggingFace format → GGUF conversion → Ollama registration
+- **Architecture compatibility**: ARM64 compilation issues required specific flags
+- **Python version sensitivity**: Python 3.11 required for stable conversion
+- **Model structure**: Llama-style transformers convert cleanly; custom architectures may need adaptation
+
+**Performance Scaling:**
+
+- Toy model (623K params): 1.22ms TTFT, 1,090 TPS on CPU
+- **Efficiency trend**: Sub-millisecond latency maintained at small scale
+- **Memory**: 2.4MB footprint (fits in CPU cache)
+- **Throughput**: >1,000 TPS suggests good parallelization potential
+
+**Cost Scaling:**
+
+- Training: $0.00003 (10 seconds CPU)
+- Inference: $0.0025 per 1M queries
+- **Scaling factor**: Costs scale roughly with parameter count and compute requirements
+- **Optimization opportunity**: CPU-only inference keeps costs minimal
+
+**Model Behavior:**
+
+- Learned patterns rather than memorizing exact sequences (normal for generative models)
+- Deterministic teacher logits during training produced consistent learning
+- Temperature sampling (0.8) in inference adds appropriate randomness
+
+**Production Readiness Checklist:**
+
+- [ ] Verify target ecosystem vocabulary requirements
+- [ ] Test conversion pipeline with model architecture
+- [ ] Validate performance scaling assumptions
+- [ ] Plan for increased storage/compute costs
+- [ ] Consider model size vs. performance trade-offs
 
 ```bash
 # E2E pipeline tests

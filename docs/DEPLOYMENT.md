@@ -55,6 +55,64 @@ python -m scripts.inference_production \
     --track-efficiency
 ```
 
+## Environment Requirements
+
+### Python Version Requirements
+
+**Critical**: Export and conversion steps require Python 3.10 or 3.11.
+
+- **Training**: Python 3.13+ is supported
+- **Export/Conversion**: Python 3.10 or 3.11 required (version gates enforce this)
+- **Toy Models**: Can bypass version checks with `--toy` flag
+
+#### Installing Python 3.11 (macOS)
+
+```bash
+# Using Homebrew
+brew install python@3.11
+
+# Verify installation
+python3.11 --version
+
+# Use for export/conversion steps
+python3.11 -m conversion.export_pytorch --checkpoint model.pt --out exported/
+```
+
+#### Multi-Python Environment Strategy
+
+The project uses different Python versions for different steps:
+
+1. **Training**: Use default Python (3.13+)
+   ```bash
+   python -m training.run_distill --checkpoint model.pt
+   ```
+
+2. **Export/Conversion**: Use Python 3.11 explicitly
+   ```bash
+   python3.11 -m conversion.export_pytorch --checkpoint model.pt --out exported/
+   python3.11 -m conversion.convert_coreml --backend pytorch --in exported/model.pt --out model.mlpackage
+   ```
+
+3. **Toy Models**: Can use any Python version with `--toy` flag
+   ```bash
+   python -m conversion.export_pytorch --checkpoint toy.pt --out exported/ --toy
+   ```
+
+### PyTorch Version Compatibility
+
+**Current Status**: PyTorch 2.9.1 shows compatibility warnings with coremltools but conversion still works.
+
+- **PyTorch**: 2.9.1+ (training and export)
+- **coremltools**: Latest version (conversion)
+- **Known Issue**: Version mismatch warnings are non-fatal but should be monitored
+
+#### Compatibility Notes
+
+- PyTorch 2.9.1 has not been fully tested with coremltools
+- Warnings appear during conversion but do not block functionality
+- Monitor conversion logs for any actual errors vs warnings
+- Consider pinning PyTorch version if issues arise: `pip install torch==2.8.0`
+
 ## Model Export
 
 ### PyTorch Export
@@ -62,7 +120,7 @@ python -m scripts.inference_production \
 Models are exported with architecture flags preserved:
 
 ```bash
-python -m conversion.export_pytorch \
+python3.11 -m conversion.export_pytorch \
     --checkpoint models/student/checkpoints/latest.pt \
     --out models/student/exported/ \
     --mode both
@@ -73,6 +131,25 @@ The export process:
 2. Recreates model with correct architecture (`use_halt_head`, etc.)
 3. Exports prefill and decode models
 4. Generates contract files with output specifications
+5. Validates enumerated shapes (T64, T128, T256, T512, T1024, T2048, T4096)
+
+### Shape Enumeration Validation
+
+Export includes shape enumeration to verify model works across different sequence lengths:
+
+- **Toy Models**: T64, T128, T256 (T128 is primary)
+- **Production Models**: T512, T1024, T2048, T4096 (T1024 is primary)
+
+**Known Issues**:
+- Some shapes may fail with RuntimeError (e.g., T64/T256 in toy models)
+- Primary shape (T128 for toy, T1024 for production) should always work
+- Shape failures are logged but don't block export if primary shape succeeds
+
+**Verification**:
+```bash
+# Check contract file for shape validation results
+cat models/student/exported/model_contract.json | jq '.shape_validation'
+```
 
 ### CoreML Conversion
 
@@ -259,6 +336,66 @@ All changes maintain backward compatibility:
 
 ## Troubleshooting
 
+### Python Version Errors
+
+**Error**: `Version check failed: Python 3.13 detected. This project requires Python 3.10 or 3.11.`
+
+**Solution**:
+1. Install Python 3.11: `brew install python@3.11`
+2. Use Python 3.11 for export/conversion: `python3.11 -m conversion.export_pytorch ...`
+3. For toy models, use `--toy` flag to bypass: `python -m conversion.export_pytorch --toy ...`
+
+**Error**: `python3.11: command not found`
+
+**Solution**:
+- Verify installation: `brew list python@3.11`
+- Check PATH: `which python3.11`
+- Reinstall if needed: `brew reinstall python@3.11`
+
+### PyTorch Version Compatibility Warnings
+
+**Warning**: `Torch version 2.9.1 has not been tested with coremltools.`
+
+**Solution**:
+- This is a non-fatal warning - conversion should still work
+- Monitor conversion logs for actual errors (not warnings)
+- If conversion fails, consider downgrading: `pip install torch==2.8.0`
+- Check coremltools version: `pip show coremltools`
+
+### Shape Enumeration Failures
+
+**Error**: `RuntimeError` during shape validation for T64/T256
+
+**Solution**:
+- Primary shapes (T128 for toy, T1024 for production) should always work
+- Secondary shape failures are logged but don't block export
+- Check contract file for which shapes succeeded: `jq '.shape_validation' contract.json`
+- If primary shape fails, investigate model architecture or export configuration
+
+**Verification**:
+```bash
+# Check which shapes validated successfully
+python -c "import json; print(json.load(open('contract.json'))['shape_validation'])"
+```
+
+### CoreML Conversion Errors
+
+**Error**: `UnboundLocalError: cannot access local variable 'torch'`
+
+**Solution**:
+- This bug was fixed - ensure you have latest code
+- If still occurring, check `conversion/convert_coreml.py` has `import torch` inside function
+- Verify PyTorch is installed: `python -c "import torch; print(torch.__version__)"`
+
+**Error**: CoreML conversion fails silently
+
+**Solution**:
+1. Check conversion logs for detailed error messages
+2. Verify PyTorch model loads correctly: `torch.jit.load('model.pt')`
+3. Check contract file exists and is valid JSON
+4. Verify coremltools installation: `python -c "import coremltools; print(coremltools.__version__)"`
+5. Try with `--allow-placeholder` flag to see if it's a non-critical issue
+
 ### Halt Head Not Working
 
 1. Verify checkpoint has `model_arch.use_halt_head = true`
@@ -279,6 +416,19 @@ All changes maintain backward compatibility:
 2. Check CoreML model spec has 2 outputs
 3. Ensure output names are `logits` and `halt_logits`
 4. Verify conversion logs show both outputs renamed
+
+### Version Gate Strategy
+
+**Understanding Version Gates**:
+
+- **Production Models**: Version gates enforce Python 3.10/3.11 for export/conversion
+- **Toy Models**: Can bypass gates with `--toy` flag for faster testing
+- **Purpose**: Ensure compatibility with TorchScript export and CoreML conversion
+
+**When to Bypass**:
+- Only for toy/test models
+- Never bypass for production models
+- Use `--toy` flag explicitly when testing pipeline with toy checkpoints
 
 ## See Also
 

@@ -213,12 +213,20 @@ def main():
                     help='Handle toy checkpoint schema (normalize arch config)')
     args = ap.parse_args()
 
-    # Version compatibility check - fail fast if versions are incompatible
-    try:
-        check_export_versions()
-    except RuntimeError as e:
-        print(f"[export_pytorch] ERROR: Version check failed: {e}")
-        sys.exit(1)
+    # Version compatibility check - skip for toy models (they're for testing)
+    if not args.toy:
+        try:
+            check_export_versions()
+        except RuntimeError as e:
+            print(f"[export_pytorch] ERROR: Version check failed: {e}")
+            print("\nTo fix this issue:")
+            print("1. Install Python 3.11: brew install python@3.11")
+            print("2. Use Python 3.11 for export: python3.11 -m conversion.export_pytorch ...")
+            print("3. For toy models only, use --toy flag to bypass: python -m conversion.export_pytorch --toy ...")
+            print("\nSee docs/DEPLOYMENT.md for detailed environment setup instructions.")
+            sys.exit(1)
+    else:
+        print("[export_pytorch] ⚠️  Skipping version check for toy model (testing mode)")
 
     # Load model
     checkpoint = torch.load(args.checkpoint, map_location='cpu')
