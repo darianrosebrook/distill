@@ -45,7 +45,8 @@ jobs:
             --seed 42 \
             --temperature 0.0 \
             --min-eligible-for-gates 15 \
-            --fail-on-fingerprint-mismatch
+            --fail-on-fingerprint-mismatch \
+            --no-fail-on-gate-failure
 
       - name: Enforce gates and fingerprints
         run: |

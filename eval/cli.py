@@ -184,6 +184,10 @@ def main() -> None:
     ap.add_argument("--no-fail-on-fingerprint-mismatch",
                     dest="fail_on_fingerprint_mismatch", action="store_false")
     ap.set_defaults(fail_on_fingerprint_mismatch=True)
+    ap.add_argument("--fail-on-gate-failure", action="store_true")
+    ap.add_argument("--no-fail-on-gate-failure",
+                    dest="fail_on_gate_failure", action="store_false")
+    ap.set_defaults(fail_on_gate_failure=True)
     ap.add_argument("--determinism-mode", action="store_true",
                     help="Determinism mode: temp=0, top_p=1, no retries, fail on any retry")
     ap.add_argument("--baseline-report", type=str, default=None,
@@ -425,6 +429,7 @@ def main() -> None:
             "shard_index": args.shard_index,
             "min_eligible_for_gates": args.min_eligible_for_gates,
             "fail_on_fingerprint_mismatch": args.fail_on_fingerprint_mismatch,
+            "fail_on_gate_failure": args.fail_on_gate_failure,
             "determinism_mode": args.determinism_mode,
         },
         wall_time_sec=time.time() - t0,
@@ -439,10 +444,11 @@ def main() -> None:
     with open(args.report, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
 
-    # Fail if gates fail
+    # Fail if gates fail (unless disabled for smoke testing)
     if not report.get("gates_ok", True):
         print("[EVAL] Gates FAILED (see report).", file=sys.stderr)
-        sys.exit(1)
+        if args.fail_on_gate_failure:
+            sys.exit(1)
 
 
 if __name__ == "__main__":
