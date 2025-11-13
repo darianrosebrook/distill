@@ -82,10 +82,11 @@ def per_tool_deltas(results: List[Dict[str, Any]]) -> Dict[str, Dict[str, float]
     buckets: Dict[str, List[Dict[str, Any]]] = {}
     for r in results:
         tool_trace = r.get("tool_trace", [])
-        tool_names = {tc.get("name") for tc in tool_trace if isinstance(tc, dict) and tc.get("name")}
+        tool_names = {tc.get("name") for tc in tool_trace if isinstance(
+            tc, dict) and tc.get("name")}
         for t in tool_names:
             buckets.setdefault(t, []).append(r)
-    
+
     out: Dict[str, Dict[str, float]] = {}
     for tool, bucket in buckets.items():
         if not bucket:
@@ -121,7 +122,7 @@ def summarize_results(
 ) -> Dict[str, Any]:
     """
     Summarize evaluation results into report.
-    
+
     Args:
         results: List of per-item result dicts
         report_version: Report schema version
@@ -132,14 +133,14 @@ def summarize_results(
         config: Evaluation config (runner, model, seed, etc.)
         wall_time_sec: Wall time for evaluation
         gates_overrides: Optional gate threshold overrides
-        
+
     Returns:
         Report dict with summary, gates, and fingerprints
     """
     total = len(results)
     eligible_results = [r for r in results if _eligible(r)]
     num_eligible = len(eligible_results)
-    
+
     # Count controls and negative controls
     num_controls = sum(
         1 for r in results
@@ -149,13 +150,17 @@ def summarize_results(
         1 for r in results
         if r.get("scores", {}).get("negative_control_ok", True) is False
     )
-    
+
     # Integration F1 metrics
-    avg_integration_f1_macro_lax = macro_f1(results, mode="lax") if eligible_results else None
-    avg_integration_f1_micro_lax = micro_f1(results, mode="lax") if eligible_results else None
-    avg_integration_f1_macro_strict = macro_f1(results, mode="strict") if eligible_results else None
-    avg_integration_f1_micro_strict = micro_f1(results, mode="strict") if eligible_results else None
-    
+    avg_integration_f1_macro_lax = macro_f1(
+        results, mode="lax") if eligible_results else None
+    avg_integration_f1_micro_lax = micro_f1(
+        results, mode="lax") if eligible_results else None
+    avg_integration_f1_macro_strict = macro_f1(
+        results, mode="strict") if eligible_results else None
+    avg_integration_f1_micro_strict = micro_f1(
+        results, mode="strict") if eligible_results else None
+
     # Integration span histogram
     integration_span_count_histogram = defaultdict(int)
     integration_spans_over_cap_count = 0
@@ -165,28 +170,35 @@ def summarize_results(
         integration_span_count_histogram[span_count] += 1
         if scores.get("integration_spans_exceeded_cap", False):
             integration_spans_over_cap_count += 1
-    
+
     # Multi-call parity
-    multi_call_parity_ok = sum(1 for r in results if r.get("scores", {}).get("multi_call_parity_ok", True))
+    multi_call_parity_ok = sum(1 for r in results if r.get(
+        "scores", {}).get("multi_call_parity_ok", True))
     multi_call_parity_total = total
-    multi_call_parity_rate = round(multi_call_parity_ok / multi_call_parity_total, 3) if multi_call_parity_total > 0 else None
-    
+    multi_call_parity_rate = round(
+        multi_call_parity_ok / multi_call_parity_total, 3) if multi_call_parity_total > 0 else None
+
     # JSON args validity
-    json_args_valid_count = sum(1 for r in results if r.get("scores", {}).get("json_args_valid", True))
-    json_args_valid_rate = round(json_args_valid_count / total, 3) if total > 0 else None
-    
+    json_args_valid_count = sum(1 for r in results if r.get(
+        "scores", {}).get("json_args_valid", True))
+    json_args_valid_rate = round(
+        json_args_valid_count / total, 3) if total > 0 else None
+
     # Controls with integration
-    controls_with_integration = sum(1 for r in results if r.get("scores", {}).get("controls_with_integration", 0) > 0)
-    
+    controls_with_integration = sum(1 for r in results if r.get(
+        "scores", {}).get("controls_with_integration", 0) > 0)
+
     # Privacy
-    privacy_ok_count = sum(1 for r in results if r.get("scores", {}).get("privacy_ok", True))
+    privacy_ok_count = sum(1 for r in results if r.get(
+        "scores", {}).get("privacy_ok", True))
     privacy_ok_rate = round(privacy_ok_count / total, 3) if total > 0 else None
-    
+
     # Per-tool deltas
     per_tool = per_tool_deltas(results)
-    
+
     # Define gates (mirror verifier gates)
-    min_eligible = gates_overrides.get("min_eligible_for_gates", 15) if gates_overrides else 15
+    min_eligible = gates_overrides.get(
+        "min_eligible_for_gates", 15) if gates_overrides else 15
     gates = {
         "integration_f1_macro_lax": {"threshold": 0.90, "policy": "count_based_misses", "misses_allowed_pct": 0.05, "min_eligible": min_eligible},
         "integration_f1_macro_strict": {"threshold": 0.75, "policy": "warning_only"},
@@ -195,33 +207,34 @@ def summarize_results(
         "controls_with_integration": {"threshold": 0, "policy": "hard_fail"},
         "privacy_ok_rate": {"threshold": 1.0, "policy": "hard_fail"},
     }
-    
+
     # Check gates
     gates_ok = True
     inconclusive = False
-    
+
     # Integration F1 gate (lax)
     if num_eligible >= min_eligible:
         f1_threshold = gates["integration_f1_macro_lax"]["threshold"]
         misses_allowed_pct = gates["integration_f1_macro_lax"]["misses_allowed_pct"]
         misses_allowed = max(1, math.ceil(misses_allowed_pct * num_eligible))
-        
+
         # Count misses (items with F1 < threshold)
-        misses_count = sum(1 for r in eligible_results if (_f1(r, "lax") or 0.0) < f1_threshold)
-        
+        misses_count = sum(1 for r in eligible_results if (
+            _f1(r, "lax") or 0.0) < f1_threshold)
+
         if avg_integration_f1_macro_lax and avg_integration_f1_macro_lax < f1_threshold and misses_count > misses_allowed:
             gates_ok = False
     elif num_eligible > 0:
         inconclusive = True
-    
+
     # Controls gate
     if controls_with_integration > 0:
         gates_ok = False
-    
+
     # Privacy gate
     if privacy_ok_rate and privacy_ok_rate < 1.0:
         gates_ok = False
-    
+
     # Multi-call parity gate
     if multi_call_parity_rate and multi_call_parity_rate < gates["multi_call_parity_rate"]["threshold"]:
         misses_allowed_pct = gates["multi_call_parity_rate"]["misses_allowed_pct"]
@@ -229,7 +242,7 @@ def summarize_results(
         misses_count = total - multi_call_parity_ok
         if misses_count > misses_allowed:
             gates_ok = False
-    
+
     # Build summary
     summary = {
         "total": total,
@@ -250,19 +263,19 @@ def summarize_results(
         "inconclusive": inconclusive,
         "wall_time_sec": round(wall_time_sec, 2),
     }
-    
+
     # Evaluate speed gates if speed metrics provided
     speed_gates_ok = True
     speed_gates_result = None
     if speed_metrics is not None:
         from eval.scoring.scorer import evaluate_speed_gates, load_baseline_speed_metrics
         from pathlib import Path
-        
+
         baseline_metrics = None
         hardware_match = True
         current_hw_profile_key = None
         baseline_hw_profile_key = None
-        
+
         # Get current hardware profile key
         try:
             from eval.hw_profile import load_profiles, match_profile
@@ -271,7 +284,7 @@ def summarize_results(
             current_hw_profile_key = current_profile.key
         except Exception:
             pass
-        
+
         baseline_ane_residency = None
         if baseline_report_path:
             # Load baseline report and extract speed_metrics
@@ -287,23 +300,25 @@ def summarize_results(
                     baseline_metrics = baseline_header.get("speed_metrics")
                     baseline_hw = baseline_header.get("hardware", {})
                     # Extract ANE residency if available
-                    baseline_ane_residency = baseline_header.get("ane_residency") or baseline_report.get("ane_residency")
+                    baseline_ane_residency = baseline_header.get(
+                        "ane_residency") or baseline_report.get("ane_residency")
                     # Check hardware match (compare soc if available)
                     if baseline_hw and hardware:
                         if baseline_hw.get("soc") != hardware.get("soc"):
                             hardware_match = False
                     # Extract hardware profile key if available
-                    baseline_hw_profile_key = baseline_report.get("hardware_profile_key") or baseline_header.get("hardware_profile_key")
+                    baseline_hw_profile_key = baseline_report.get(
+                        "hardware_profile_key") or baseline_header.get("hardware_profile_key")
             except Exception as e:
                 print(f"[summarize] WARN: Failed to load baseline report: {e}")
-        
+
         # Extract current ANE residency from speed_metrics or separate parameter
         # Note: ANE residency may be in speed_metrics dict or separate field
         current_ane_residency = None
         if isinstance(speed_metrics, dict):
             # Check if ANE residency is nested in speed_metrics
             current_ane_residency = speed_metrics.get("ane_residency")
-        
+
         speed_gates_result = evaluate_speed_gates(
             current_metrics=speed_metrics,
             baseline_metrics=baseline_metrics,
@@ -315,7 +330,7 @@ def summarize_results(
             baseline_ane_residency=baseline_ane_residency,
         )
         speed_gates_ok = speed_gates_result.get("gates_passed", True)
-    
+
     # Build report header
     report_header = {
         "report_version": report_version,
@@ -325,11 +340,12 @@ def summarize_results(
         "config": config,
         "gates": gates,
     }
-    
+
     # Add speed metrics and hardware to header if provided
     if speed_metrics is not None:
         # Remove ANE residency from speed_metrics if present (it's stored separately)
-        speed_metrics_copy = {k: v for k, v in speed_metrics.items() if k != "ane_residency"}
+        speed_metrics_copy = {
+            k: v for k, v in speed_metrics.items() if k != "ane_residency"}
         report_header["speed_metrics"] = speed_metrics_copy
     if hardware is not None:
         report_header["hardware"] = hardware
@@ -339,17 +355,17 @@ def summarize_results(
     # Add hardware profile key for relative gating
     if current_hw_profile_key:
         report_header["hardware_profile_key"] = current_hw_profile_key
-    
+
     # Build full report
     report = {
         "header": report_header,
         "summary": summary,
-        "gates_ok": gates_ok and speed_gates_ok,  # Co-gate: both quality and speed must pass
+        # Co-gate: both quality and speed must pass
+        "gates_ok": gates_ok and speed_gates_ok,
     }
-    
+
     # Add speed gates result if available
     if speed_gates_result is not None:
         report["speed_gates"] = speed_gates_result
-    
-    return report
 
+    return report
