@@ -267,13 +267,13 @@ def summarize_results(
     # Evaluate speed gates if speed metrics provided
     speed_gates_ok = True
     speed_gates_result = None
+    current_hw_profile_key = None  # Initialize outside conditional block
     if speed_metrics is not None:
         from eval.scoring.scorer import evaluate_speed_gates
         from pathlib import Path
 
         baseline_metrics = None
         hardware_match = True
-        current_hw_profile_key = None
         baseline_hw_profile_key = None
 
         # Get current hardware profile key

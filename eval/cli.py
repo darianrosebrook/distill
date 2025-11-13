@@ -10,6 +10,7 @@ import time
 from typing import Any, Dict, Iterable, List
 
 # Runners & scoring
+from eval.runners.base import Runner
 from eval.runners.openai_http import OpenAIHTTPRunner
 from eval.runners.hf_local import HFLocalRunner
 try:
@@ -23,9 +24,27 @@ from eval.scoring.scorer import score_item  # wraps your verify_* logic
 from eval.reports.summarize import summarize_results  # macro/micro, deltas, gates
 from tools.schema_registry import ToolSchemaRegistry
 
+class MockRunner(Runner):
+    """Mock runner for smoke testing without requiring a real model."""
+
+    def generate(self, prompt: str, tools: List[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
+        """Return mock generation result."""
+        return {
+            "text": f"[MOCK] Response to: {prompt[:50]}...",
+            "finish_reason": "stop",
+            "tool_calls": [],
+            "usage": {"prompt_tokens": len(prompt.split()), "completion_tokens": 10, "total_tokens": len(prompt.split()) + 10}
+        }
+
+    def fingerprint(self) -> Dict[str, Any]:
+        """Return mock fingerprint."""
+        return {"runner": "mock", "model": "mock-smoke-test"}
+
+
 RUNNERS = {
     "openai_http": OpenAIHTTPRunner,
     "hf_local": HFLocalRunner,
+    "mock": MockRunner,  # For smoke testing
 }
 if ORCHESTRATOR_RUNNER_AVAILABLE:
     RUNNERS["orchestrator"] = OrchestratorRunner
