@@ -144,6 +144,10 @@ def main() -> None:
                     help="Determinism mode: temp=0, top_p=1, no retries, fail on any retry")
     ap.add_argument("--baseline-report", type=str, default=None,
                     help="Path to baseline report for speed gate comparison")
+    ap.add_argument("--baseline-dir", type=str, default="eval/baselines",
+                    help="Directory for latent efficiency baseline artifacts")
+    ap.add_argument("--save-baseline", action="store_true",
+                    help="Save current run as baseline (for direct CoT)")
     ap.add_argument("--workload-type", type=str, default="interactive",
                     choices=["interactive", "offline"],
                     help="Workload type: 'interactive' (batch=1) or 'offline' (batch 2-4)")

@@ -26,6 +26,22 @@
       "rstrip": false,
       "single_word": false,
       "special": true
+    },
+    "3": {
+      "content": "<bot>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "4": {
+      "content": "<eot>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
     }
   },
   "bos_token": "<s>",

@@ -255,7 +255,7 @@ class Block(nn.Module):
 
 
 class StudentLM(nn.Module):
-    def __init__(self, cfg: Optional[ModelCfg] = None, use_self_evaluation: bool = False):
+    def __init__(self, cfg: Optional[ModelCfg] = None, use_self_evaluation: bool = False, use_halt_head: bool = False):
         super().__init__()
         self.cfg = cfg or ModelCfg()
         self.embed = nn.Embedding(self.cfg.vocab_size, self.cfg.d_model)
@@ -275,31 +275,40 @@ class StudentLM(nn.Module):
                 nn.Sigmoid()  # Output 0-1 confidence
             )
 
+        # Halt head for learned halting (optional)
+        self.use_halt_head = use_halt_head
+        if use_halt_head:
+            # Halt head outputs 2 logits: [continue, halt]
+            self.halt_head = nn.Linear(self.cfg.d_model, 2)
+
     def forward(
         self,
         input_ids: torch.Tensor,
         attn_mask: Optional[torch.Tensor] = None,
         return_hidden_states: bool = False,
-        return_eval_score: bool = False
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, List[torch.Tensor]], Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, List[torch.Tensor], torch.Tensor]]:
+        return_eval_score: bool = False,
+        return_halt_logits: bool = False
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, List[torch.Tensor]], Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, List[torch.Tensor], torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
         """
-        Forward pass with optional hidden states and evaluation score.
+        Forward pass with optional hidden states, evaluation score, and halt logits.
 
         Args:
             input_ids: [B, T] token IDs
             attn_mask: Optional attention mask
             return_hidden_states: If True, return list of hidden states per layer
             return_eval_score: If True, return self-evaluation score
+            return_halt_logits: If True, return halt head logits [B, 2] (if use_halt_head=True)
 
         Returns:
-            If return_hidden_states=False and return_eval_score=False:
+            If return_hidden_states=False and return_eval_score=False and return_halt_logits=False:
                 logits: [B, T, V]
+            If return_halt_logits=True:
+                logits: [B, T, V], halt_logits: [B, 2] (if use_halt_head=True)
             If return_hidden_states=True:
                 logits: [B, T, V], hidden_states: List[[B, T, D]]
             If return_eval_score=True:
                 logits: [B, T, V], eval_score: [B, 1] (if use_self_evaluation=True)
-            If both True:
-                logits: [B, T, V], hidden_states: List[[B, T, D]], eval_score: [B, 1]
+            Combinations return tuples accordingly
         """
         # input_ids: [B,T] int32/int64
         x = self.embed(input_ids)
@@ -321,30 +330,42 @@ class StudentLM(nn.Module):
             # Use last token's hidden state for evaluation
             eval_score = self.eval_head(x[:, -1, :])  # [B, 1]
 
+        # Halt head logits (if enabled)
+        halt_logits = None
+        if return_halt_logits and self.use_halt_head:
+            # Pool hidden state (mean over sequence length) for halt head
+            pooled = x.mean(dim=1)  # [B, D]
+            halt_logits = self.halt_head(pooled)  # [B, 2]
+
         logits = self.lm_head(x).to(dtype=torch.float16)
 
         # Return based on flags
-        if return_hidden_states and return_eval_score:
-            return logits, hidden_states, eval_score
-        elif return_hidden_states:
-            return logits, hidden_states
-        elif return_eval_score and eval_score is not None:
-            return logits, eval_score
-        else:
-            return logits  # [B,T,V]
+        result = [logits]
+        if return_hidden_states:
+            result.append(hidden_states)
+        if return_eval_score and eval_score is not None:
+            result.append(eval_score)
+        if return_halt_logits and halt_logits is not None:
+            result.append(halt_logits)
+        
+        if len(result) == 1:
+            return result[0]
+        return tuple(result)
 
     def forward_decode(self, input_ids: torch.Tensor, kv_caches: Optional[list] = None,
-                       pos: int = 0) -> Tuple[torch.Tensor, list]:
+                       pos: int = 0, return_halt_logits: bool = False) -> Union[Tuple[torch.Tensor, list], Tuple[torch.Tensor, list, torch.Tensor]]:
         """Decoder-only forward: single token with KV cache.
 
         Args:
             input_ids: [B, 1] single token
             kv_caches: Optional list of per-layer KV caches, each (k_cache, v_cache)
             pos: Position index for RoPE
+            return_halt_logits: If True, return halt head logits [B, 2] (if use_halt_head=True)
 
         Returns:
             logits: [B, 1, V] logits for next token
             kv_caches: Updated list of KV caches
+            halt_logits: [B, 2] halt head logits (if return_halt_logits=True and use_halt_head=True)
         """
         if kv_caches is None:
             kv_caches = [None] * self.cfg.n_layers
@@ -357,5 +378,33 @@ class StudentLM(nn.Module):
             updated_caches.append(kv_new)
 
         x = self.norm_f(x)
+        
+        # Halt head logits (if enabled)
+        halt_logits = None
+        if return_halt_logits and self.use_halt_head:
+            # Use current hidden state for halt head
+            pooled = x.squeeze(1)  # [B, D] (remove sequence dim)
+            halt_logits = self.halt_head(pooled)  # [B, 2]
+        
         logits = self.lm_head(x).to(dtype=torch.float16)
+        
+        if return_halt_logits and halt_logits is not None:
+            return logits, updated_caches, halt_logits
         return logits, updated_caches  # [B,1,V], list of (k,v) tuples
+
+    def forward_hidden(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass through transformer blocks using hidden state (no embedding, no LM head).
+        Used for latent mode processing where we process hidden states without token generation.
+
+        Args:
+            hidden_state: [B, T, D] hidden state tensor (already embedded)
+
+        Returns:
+            updated_hidden: [B, T, D] updated hidden state after transformer blocks
+        """
+        x = hidden_state
+        for blk in self.blocks:
+            x = blk(x, attn_mask=None)
+        x = self.norm_f(x)
+        return x

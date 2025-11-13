@@ -1,0 +1,210 @@
+name: Latent Reasoning Efficiency Gates
+
+on:
+  pull_request:
+    paths:
+      - 'runtime/**'
+      - 'training/**'
+      - 'eval/**'
+      - 'models/student/**'
+      - '.github/workflows/efficiency_gates.yml'
+  workflow_dispatch:
+    inputs:
+      baseline_run_id:
+        description: 'Baseline run ID for comparison'
+        required: false
+        type: string
+
+jobs:
+  efficiency-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+      
+      - name: Run baseline capture (if needed)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.baseline_run_id == ''
+        env:
+          EVAL_LATENT: "0"  # Direct CoT baseline
+        run: |
+          python -m eval.cli \
+            --runner hf_local \
+            --model models/student/checkpoints/latest.pt \
+            --in eval/fixtures/long_chain_task.jsonl \
+            --out eval/results/baseline_results.jsonl \
+            --report eval/results/baseline_report.json \
+            --fixtures eval/tool_broker/fixtures \
+            --save-baseline \
+            --baseline-dir eval/baselines \
+            --seed 42
+      
+      - name: Load baseline
+        id: load_baseline
+        run: |
+          python << EOF
+          import json
+          from pathlib import Path
+          from eval.scoring.baseline import find_baseline, load_baseline
+          
+          baseline_dir = Path("eval/baselines")
+          baseline_path = find_baseline("long_chain_task", seed=42, baseline_dir=baseline_dir)
+          
+          if baseline_path:
+              baseline = load_baseline(baseline_path)
+              print(f"baseline_path={baseline_path}")
+              print(f"baseline_accuracy={baseline['metrics'].accuracy}")
+              print(f"baseline_tokens={baseline['metrics'].generated_tokens}")
+          else:
+              print("baseline_path=")
+              print("WARN: No baseline found, will skip efficiency gates")
+          EOF
+      
+      - name: Run latent evaluation
+        env:
+          EVAL_LATENT: "1"
+          LATENT_MODE: "1"
+        run: |
+          python -m eval.cli \
+            --runner hf_local \
+            --model models/student/checkpoints/latest.pt \
+            --in eval/fixtures/long_chain_task.jsonl \
+            --out eval/results/latent_results.jsonl \
+            --report eval/results/latent_report.json \
+            --fixtures eval/tool_broker/fixtures \
+            --baseline-dir eval/baselines \
+            --seed 42
+      
+      - name: Evaluate efficiency gates
+        id: efficiency_gates
+        run: |
+          python << EOF
+          import json
+          import sys
+          from pathlib import Path
+          from eval.scoring.scorer import evaluate_latent_efficiency_gates
+          from eval.scoring.baseline import load_baseline
+          
+          # Load results
+          results_path = Path("eval/results/latent_results.jsonl")
+          results = []
+          with open(results_path, 'r') as f:
+              for line in f:
+                  if line.strip():
+                      results.append(json.loads(line))
+          
+          # Load baseline
+          baseline_path = Path("${{ steps.load_baseline.outputs.baseline_path }}")
+          baseline_summary = None
+          if baseline_path and baseline_path.exists():
+              baseline = load_baseline(baseline_path)
+              baseline_summary = {
+                  "f1_lax": baseline["metrics"].accuracy,
+                  "generated_tokens": baseline["metrics"].generated_tokens,
+                  "wall_clock_time_ms": baseline["metrics"].wall_clock_time_ms,
+                  "refinement_loops": baseline["metrics"].refinement_loops,
+              }
+          
+          # Load config
+          config_path = Path("eval/configs/latent.yaml")
+          config = {}
+          if config_path.exists():
+              import yaml
+              with open(config_path, 'r') as f:
+                  config = yaml.safe_load(f) or {}
+          
+          # Evaluate gates
+          gate_results = evaluate_latent_efficiency_gates(
+              results=results,
+              config=config,
+              baseline_summary=baseline_summary,
+          )
+          
+          # Save gate results
+          gate_results_path = Path("eval/results/efficiency_gates.json")
+          gate_results_path.parent.mkdir(parents=True, exist_ok=True)
+          with open(gate_results_path, 'w') as f:
+              json.dump(gate_results_path, f, indent=2, default=str)
+          
+          # Output summary
+          print("=" * 60)
+          print("Efficiency Gates Evaluation")
+          print("=" * 60)
+          print(f"Gates Passed: {gate_results.get('gates_passed', False)}")
+          print(f"Token Reduction: {gate_results.get('details', {}).get('token_reduction', 0):.1%}")
+          print(f"Accuracy Delta: {gate_results.get('details', {}).get('accuracy_delta', 0):.3f}")
+          print(f"Loop Delta: {gate_results.get('details', {}).get('loop_delta', 0)}")
+          print(f"Time Delta: {gate_results.get('details', {}).get('time_delta_percent', 0):.1f}%")
+          
+          if gate_results.get('errors'):
+              print("\nErrors:")
+              for error in gate_results['errors']:
+                  print(f"  - {error}")
+          
+          # Set outputs
+          print(f"::set-output name=gates_passed::{gate_results.get('gates_passed', False)}")
+          print(f"::set-output name=token_reduction::{gate_results.get('details', {}).get('token_reduction', 0)}")
+          
+          # Fail if gates not passed
+          if not gate_results.get('gates_passed', False):
+              print("\n❌ Efficiency gates failed!")
+              sys.exit(1)
+          else:
+              print("\n✅ Efficiency gates passed!")
+          EOF
+      
+      - name: Upload efficiency curves
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: efficiency-curves
+          path: |
+            eval/results/efficiency_gates.json
+            eval/results/latent_report.json
+            eval/baselines/*.json
+          retention-days: 30
+      
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = 'eval/results/efficiency_gates.json';
+            
+            if (fs.existsSync(path)) {
+              const results = JSON.parse(fs.readFileSync(path, 'utf8'));
+              const passed = results.gates_passed;
+              const tokenReduction = (results.details?.token_reduction || 0) * 100;
+              const accuracyDelta = results.details?.accuracy_delta || 0;
+              
+              const comment = `## Efficiency Gates Results
+              
+              **Status**: ${passed ? '✅ Passed' : '❌ Failed'}
+              
+              - Token Reduction: ${tokenReduction.toFixed(1)}%
+              - Accuracy Delta: ${accuracyDelta > 0 ? '+' : ''}${accuracyDelta.toFixed(3)}
+              - Loop Delta: ${results.details?.loop_delta || 0}
+              - Time Delta: ${results.details?.time_delta_percent?.toFixed(1) || 0}%
+              
+              ${results.errors?.length > 0 ? `### Errors\n${results.errors.map(e => `- ${e}`).join('\n')}` : ''}
+              `;
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            }
+

@@ -19,5 +19,19 @@
     "normalized": false,
     "rstrip": false,
     "single_word": false
+  },
+  "bot_token": {
+    "content": "<bot>",
+    "lstrip": false,
+    "normalized": false,
+    "rstrip": false,
+    "single_word": false
+  },
+  "eot_token": {
+    "content": "<eot>",
+    "lstrip": false,
+    "normalized": false,
+    "rstrip": false,
+    "single_word": false
   }
 }

@@ -1,0 +1,21 @@
+# Latent Reasoning Evaluation Gates Configuration
+#
+# Reference: code-mode-latent-reasoning.md Milestone 2
+#
+# This configuration is loaded when EVAL_LATENT=1
+
+gates:
+  efficiency:
+    enabled: true
+    min_token_reduction: 0.25  # Require ≥25% token reduction
+    max_token_reduction: 0.40  # Target ≤40% token reduction (upper bound)
+    max_accuracy_regression: 0.01  # Allow ≤1% accuracy regression
+    max_loop_increase: null  # No limit on loop increase (null = use baseline comparison)
+  
+  caws_compliance:
+    enabled: true
+    # CAWS tier limits enforced at runtime by RefinementController
+    # Tier-1: latent=0, loops≤1
+    # Tier-2: latent≤1, loops≤2
+    # Tier-3: latent≤3, loops≤3
+
