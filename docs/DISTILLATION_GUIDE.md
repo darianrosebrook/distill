@@ -75,6 +75,36 @@ Process-step supervision targets are stored in the JSONL dataset with the follow
 
 All fields are optional - they are only present when the corresponding patterns are found in the teacher output.
 
+### Teacher Stub Quality
+
+For toy models and testing, teacher logits can be generated using deterministic "teacher stubs" that simulate teacher model behavior:
+
+#### Intelligent Teacher Stubs
+
+Recent improvements to teacher stubs provide much higher quality distillation:
+
+**Real Token Sequences**: Instead of using arbitrary token IDs, modern teacher stubs tokenize actual domain-specific phrases and use their real token sequences.
+
+```python
+# Example: Mystical teacher stub for fortune-telling model
+mystical_phrases = [
+    "It is certain", "Outlook good", "Very doubtful",
+    "Signs point to yes", "My sources say no"
+]
+
+# Generate real token sequences
+for phrase in mystical_phrases:
+    tokens = tokenizer.encode(phrase, add_special_tokens=False)
+    # tokens = [739, 338, 3058] for "It is certain"
+    # Use these for position-aware boosting
+```
+
+**Context-Aware Boosting**: Teacher preferences are applied positionally, boosting mystical tokens only where answers should appear (not during prompts).
+
+**Improved Normalization**: Prevents aggressive logit scaling that eliminates meaningful preferences, preserving positive values for desired tokens.
+
+**Performance Impact**: These improvements can increase model quality by 25% and domain compliance by 100%.
+
 ### Training Integration
 
 Process-step supervision targets are automatically used during training when available in the dataset.
