@@ -17,9 +17,9 @@
 - **Training Time**: 11.7 seconds
 - **License**: MIT
 
-**Paper**: [Distillation Pipeline: Efficient AI at Scale](https://github.com/distill/distillation-pipeline)
+**Paper**: [Distillation Pipeline: Efficient AI at Scale](https://github.com/darianrosebrook/distill)
 
-**Repository**: [https://github.com/distill/distillation-pipeline](https://github.com/distill/distillation-pipeline)
+**Repository**: [https://github.com/darianrosebrook/distill](https://github.com/darianrosebrook/distill)
 
 **Point of Contact**: [@darianrosebrook](https://github.com/darianrosebrook)
 
@@ -298,8 +298,8 @@ _Magic 8 Ball is 1.24 MB compared to 23 GB (Claude-3 Haiku), 100 GB (GPT-3.5 Tur
 
 ```bash
 # Clone the repository
-git clone https://github.com/distill/distillation-pipeline.git
-cd distillation-pipeline
+git clone https://github.com/darianrosebrook/distill.git
+cd distill
 
 # Install dependencies
 pip install -e .
@@ -340,7 +340,7 @@ For production deployment, see the [CoreML Runtime Guide](../coreml/runtime/READ
   author={Rosebrook, Darian},
   year={2025},
   publisher={Distillation Pipeline},
-  url={https://github.com/distill/distillation-pipeline},
+  url={https://github.com/darianrosebrook/distill},
   version={1.0.0},
   note={Demonstrates extreme cost-efficiency in distilled language models}
 }
@@ -604,7 +604,7 @@ make 8-ball
   author={Rosebrook, Darian},
   year={2025},
   publisher={Distillation Pipeline},
-  url={https://github.com/distill/magic-8-ball},
+  url={https://github.com/darianrosebrook/distill},
   version={1.0.0}
 }
 ```
