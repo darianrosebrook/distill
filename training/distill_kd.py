@@ -1926,16 +1926,16 @@ def train_step(
         else:
             # Normal update without gradient norm logging
             if scaler is not None:
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.get(
-                "optimizer", {}).get("grad_clip", 1.0))
-            scaler.step(optimizer)
-            scaler.update()
-        else:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.get(
-                "optimizer", {}).get("grad_clip", 1.0))
-            optimizer.step()
-        optimizer.zero_grad()
+            if scaler is not None:
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.get(
+                    "optimizer", {}).get("grad_clip", 1.0))
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.get(
+                    "optimizer", {}).get("grad_clip", 1.0))
+                optimizer.step()
 
     # Convert to float for logging
     loss_dict_float = {k: float(v.item()) if isinstance(
