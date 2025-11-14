@@ -157,8 +157,9 @@ def test_masking_safety():
     # Note: pad_token_id might be None or might be a special token, so we use a safe padding token
     seq_len = len(encoded)
     pad_len = 5
-    # Use unk_token_id (0) or a regular token ID (e.g., 100) that's not a special token
-    pad_token_id = tokenizer.unk_token_id if tokenizer.unk_token_id not in special_token_ids else 100
+    # Use a regular token ID that's not a special token for padding
+    # Note: pad_token_id might be a special token (e.g., EOS=2), so we use a safe padding token
+    pad_token_id = 100  # Start with a regular token ID
     # Ensure pad_token_id is not a special token
     while pad_token_id in special_token_ids:
         pad_token_id += 1

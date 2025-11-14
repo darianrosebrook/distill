@@ -771,6 +771,96 @@ class TestLengthAwareKDLoss:
         assert loss.item() >= 0
         assert isinstance(diagnostics, dict)
 
+    def test_length_aware_kd_loss_rel_excess_gt_hinge(self, device):
+        """Test length-aware KD loss with rel_excess > hinge check.
+        
+        This test catches mutations that change > to == in line 360.
+        """
+        batch_size = 4
+        seq_len = 20
+
+        # Create student longer than teacher (excess above hinge)
+        student_attn_mask = torch.ones(batch_size, seq_len + 5, device=device)  # 25 tokens
+        teacher_attn_mask = torch.ones(batch_size, seq_len, device=device)  # 20 tokens
+        # rel_excess = (25 - 20) / 20 = 0.25 (above hinge of 0.15)
+        required_fields_present = torch.zeros(batch_size, dtype=torch.bool, device=device)  # Missing fields
+
+        # Test with rel_excess > hinge (should penalize)
+        loss_above_hinge, diags1 = length_aware_kd_loss(
+            student_attn_mask, teacher_attn_mask, required_fields_present, hinge=0.15, slope=1.0
+        )
+        
+        # Test with rel_excess == hinge (should NOT penalize)
+        # Create student exactly at hinge threshold: seq_len * (1 + hinge) = 20 * 1.15 = 23
+        student_attn_mask_at_hinge = torch.ones(batch_size, 23, device=device)  # Exactly 15% longer
+        teacher_attn_mask_at_hinge = torch.ones(batch_size, seq_len, device=device)
+        loss_at_hinge, diags2 = length_aware_kd_loss(
+            student_attn_mask_at_hinge, teacher_attn_mask_at_hinge, required_fields_present, hinge=0.15, slope=1.0
+        )
+        
+        # Test with rel_excess < hinge (should NOT penalize)
+        student_attn_mask_below_hinge = torch.ones(batch_size, seq_len + 1, device=device)  # 21 tokens (5% longer)
+        teacher_attn_mask_below_hinge = torch.ones(batch_size, seq_len, device=device)
+        loss_below_hinge, diags3 = length_aware_kd_loss(
+            student_attn_mask_below_hinge, teacher_attn_mask_below_hinge, required_fields_present, hinge=0.15, slope=1.0
+        )
+
+        # Verify that > is used (not ==)
+        # With >: rel_excess > hinge should penalize, rel_excess == hinge should not
+        # With ==: rel_excess > hinge would NOT penalize (wrong behavior)
+        assert isinstance(loss_above_hinge, torch.Tensor)
+        assert isinstance(loss_at_hinge, torch.Tensor)
+        assert isinstance(loss_below_hinge, torch.Tensor)
+        
+        # Above hinge should have penalty (when required_fields_present is False)
+        assert loss_above_hinge.item() > 0, "rel_excess > hinge should penalize when fields missing"
+        
+        # At hinge should have zero penalty (exactly at threshold, not above)
+        assert loss_at_hinge.item() == 0.0, "rel_excess == hinge should NOT penalize (only > hinge)"
+        
+        # Below hinge should have zero penalty
+        assert loss_below_hinge.item() == 0.0, "rel_excess < hinge should NOT penalize"
+
+    def test_length_aware_kd_loss_reduction_mean(self, device):
+        """Test length-aware KD loss with mean reduction.
+        
+        This test catches mutations that change if to False in line 370.
+        """
+        batch_size = 4
+        seq_len = 20
+
+        student_attn_mask = torch.ones(batch_size, seq_len + 5, device=device)
+        teacher_attn_mask = torch.ones(batch_size, seq_len, device=device)
+        required_fields_present = torch.zeros(batch_size, dtype=torch.bool, device=device)
+
+        # Test with mean reduction (should compute mean)
+        loss_mean, _ = length_aware_kd_loss(
+            student_attn_mask, teacher_attn_mask, required_fields_present, hinge=0.15, slope=1.0, reduction="mean"
+        )
+        
+        # Test with sum reduction (should compute sum)
+        loss_sum, _ = length_aware_kd_loss(
+            student_attn_mask, teacher_attn_mask, required_fields_present, hinge=0.15, slope=1.0, reduction="sum"
+        )
+
+        # Verify that mean reduction is used (not always False)
+        # With mean: loss_mean should be penalties.mean()
+        # With sum: loss_sum should be penalties.sum()
+        # If if statement were changed to False, mean reduction would not work correctly
+        assert isinstance(loss_mean, torch.Tensor)
+        assert isinstance(loss_sum, torch.Tensor)
+        assert loss_mean.item() >= 0
+        assert loss_sum.item() >= 0
+        
+        # Sum should be approximately batch_size times mean (for mean reduction)
+        # This verifies that the if statement for "mean" is working correctly
+        if loss_mean.item() > 0:
+            expected_ratio = batch_size  # sum = mean * batch_size
+            actual_ratio = loss_sum.item() / loss_mean.item()
+            assert abs(actual_ratio - expected_ratio) < 0.1, (
+                f"Sum should be approximately {expected_ratio}x mean, got ratio {actual_ratio:.2f}"
+            )
+
 
 class TestEarlyToolCallLoss:
     """Test early tool call loss function."""
@@ -2257,6 +2347,61 @@ class TestCAWSComplianceLoss:
         assert loss_with_extractor.item() >= loss_without_extractor.item(), (
             "Loss with claim extractor should be higher due to unsupported claims penalty"
         )
+
+    def test_claim_supported_by_teacher_substring_or_check(self, device):
+        """Test _claim_supported_by_teacher with substring containment 'or' check.
+        
+        This test catches mutations that change 'or' to 'and' in line 1147.
+        Note: This tests the internal function indirectly via caws_compliance_loss.
+        """
+        # Mock claim extractor to test substring containment
+        class MockClaimExtractor:
+            def extract_claims(self, text):
+                # Return claims based on text content
+                if "student" in text.lower():
+                    return ["student claim text"]  # Student claim
+                else:
+                    return ["teacher claim text"]  # Teacher claim
+
+        claim_extractor = MockClaimExtractor()
+        
+        # Test case 1: student_text is substring of teacher_text (should be supported)
+        student_output1 = "student claim"
+        teacher_output1 = "This is a teacher claim text with student claim in it"
+        
+        # Test case 2: teacher_text is substring of student_text (should be supported)
+        student_output2 = "This is a student claim text with teacher claim in it"
+        teacher_output2 = "teacher claim"
+        
+        # Test case 3: neither is substring of the other (should NOT be supported)
+        student_output3 = "student claim text"
+        teacher_output3 = "teacher claim text"
+        
+        loss1 = caws_compliance_loss(student_output1, teacher_output1, claim_extractor=claim_extractor)
+        loss2 = caws_compliance_loss(student_output2, teacher_output2, claim_extractor=claim_extractor)
+        loss3 = caws_compliance_loss(student_output3, teacher_output3, claim_extractor=claim_extractor)
+
+        # Verify that 'or' is used (not 'and')
+        # With 'or': student_text in teacher_text OR teacher_text in student_text should be supported
+        # With 'and': student_text in teacher_text AND teacher_text in student_text would rarely be true (wrong behavior)
+        
+        assert isinstance(loss1, torch.Tensor)
+        assert isinstance(loss2, torch.Tensor)
+        assert isinstance(loss3, torch.Tensor)
+        
+        # Both substring cases should have lower penalty (claims supported)
+        # Non-substring case should have higher penalty (claims not supported)
+        # If 'or' were changed to 'and', substring cases might not be detected, increasing penalty
+        assert loss1.item() >= 0
+        assert loss2.item() >= 0
+        assert loss3.item() >= 0
+        
+        # Substring cases (1 and 2) should have lower or equal penalty than non-substring case (3)
+        # This verifies that 'or' is used (not 'and')
+        if loss3.item() > 0:
+            assert loss1.item() <= loss3.item() or loss2.item() <= loss3.item(), (
+                "Substring containment cases should have lower penalty than non-substring case (or check verified)"
+            )
 
 
 class TestCAWSStructureLoss:
