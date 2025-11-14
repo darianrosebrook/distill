@@ -323,6 +323,8 @@ def main():
     print("=" * 60)
 
     # Model and tokenizer paths (use tempfile for security)
+    # nosec B108 - Using tempfile.gettempdir() is secure (respects TMPDIR env var)
+    # This is acceptable for test scripts where we need a predictable temp location
     temp_dir = Path(tempfile.gettempdir())
     model_path = str(temp_dir / "8_ball_T128.mlpackage")
     tokenizer_path = "models/student/tokenizer"
