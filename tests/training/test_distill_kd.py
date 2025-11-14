@@ -2565,6 +2565,9 @@ class TestMainFunction:
             "train": {"steps": 100, "micro_batch_size": 2},
             "distillation": {"w_tool": 0.0, "w_args": 0.0},
             "optimizer": {"lr": 1e-4},
+            "latent": {
+                "halt_head_enabled": False,
+            },
         }
 
     @patch("training.distill_kd.check_training_versions")
