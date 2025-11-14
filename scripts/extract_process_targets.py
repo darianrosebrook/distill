@@ -31,8 +31,9 @@ def load_tokenizer(tokenizer_path: str):
     """Load tokenizer from path."""
     try:
         from transformers import AutoTokenizer
+        from training.safe_model_loading import safe_from_pretrained_tokenizer
 
-        return AutoTokenizer.from_pretrained(tokenizer_path, use_fast=True)
+        return safe_from_pretrained_tokenizer(tokenizer_path, use_fast=True)
     except ImportError:
         raise RuntimeError("transformers required for token span extraction")
     except Exception as e:

@@ -60,8 +60,12 @@ class HFLocalRunner(Runner):
                 from transformers import AutoModelForCausalLM, AutoTokenizer
                 import torch
 
-                self._tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path, use_fast=True)
-                self._model = AutoModelForCausalLM.from_pretrained(
+                from training.safe_model_loading import (
+                    safe_from_pretrained_tokenizer,
+                    safe_from_pretrained_causal_lm,
+                )
+                self._tokenizer = safe_from_pretrained_tokenizer(self.tokenizer_path, use_fast=True)
+                self._model = safe_from_pretrained_causal_lm(
                     self.model,
                     torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
                     device_map="auto",

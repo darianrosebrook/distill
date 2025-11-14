@@ -87,11 +87,11 @@ def load_model_and_tokenizer(
         model = None
         tokenizer_path = tokenizer_path or Path("models/student/tokenizer")
 
-    # Load tokenizer
+    # Load tokenizer safely with revision pinning
     try:
-        from transformers import AutoTokenizer
+        from training.safe_model_loading import safe_from_pretrained_tokenizer
 
-        tokenizer = AutoTokenizer.from_pretrained(str(tokenizer_path), use_fast=True)
+        tokenizer = safe_from_pretrained_tokenizer(str(tokenizer_path), use_fast=True)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
     except ImportError:
@@ -117,9 +117,9 @@ def create_orchestrator(
             load_coreml_model(str(model_path))
             tokenizer_path = tokenizer_path or Path("models/student/tokenizer")
 
-            from transformers import AutoTokenizer
+            from training.safe_model_loading import safe_from_pretrained_tokenizer
 
-            tokenizer = AutoTokenizer.from_pretrained(str(tokenizer_path), use_fast=True)
+            tokenizer = safe_from_pretrained_tokenizer(str(tokenizer_path), use_fast=True)
             if tokenizer.pad_token is None:
                 tokenizer.pad_token = tokenizer.eos_token
 
@@ -167,9 +167,9 @@ def create_orchestrator(
 
             tokenizer_path = tokenizer_path or Path("models/student/tokenizer")
 
-            from transformers import AutoTokenizer
+            from training.safe_model_loading import safe_from_pretrained_tokenizer
 
-            tokenizer = AutoTokenizer.from_pretrained(str(tokenizer_path), use_fast=True)
+            tokenizer = safe_from_pretrained_tokenizer(str(tokenizer_path), use_fast=True)
             if tokenizer.pad_token is None:
                 tokenizer.pad_token = tokenizer.eos_token
 

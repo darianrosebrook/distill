@@ -1157,7 +1157,8 @@ def main():
         try:
             from transformers import AutoTokenizer
 
-            tok = AutoTokenizer.from_pretrained(args.tokenizer, use_fast=True)
+            from training.safe_model_loading import safe_from_pretrained_tokenizer
+            tok = safe_from_pretrained_tokenizer(args.tokenizer, use_fast=True)
         except Exception:
             tok = None
 
@@ -1167,7 +1168,8 @@ def main():
         try:
             from transformers import AutoTokenizer
 
-            secondary_tok = AutoTokenizer.from_pretrained(
+            from training.safe_model_loading import safe_from_pretrained_tokenizer
+            secondary_tok = safe_from_pretrained_tokenizer(
                 args.secondary_tokenizer, use_fast=True)
         except Exception as e:
             print(

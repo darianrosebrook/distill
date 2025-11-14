@@ -329,9 +329,14 @@ class TeacherClient:
         return cls(backend="hf", model_name=model_name, device=device)
 
     def _load_hf_model(self, model_name: str, device: str):
-        """Load HuggingFace model and tokenizer."""
+        """Load HuggingFace model and tokenizer safely with revision pinning."""
+        from training.safe_model_loading import (
+            safe_from_pretrained_tokenizer,
+            safe_from_pretrained_causal_lm,
+        )
+
         print(f"[TeacherClient] Loading HuggingFace model: {model_name}")
-        self._tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self._tokenizer = safe_from_pretrained_tokenizer(model_name)
 
         # Determine dtype based on device
         if device == "cpu":
@@ -346,20 +351,20 @@ class TeacherClient:
         if device in ("cuda", "mps"):
             # Use device_map for CUDA, manual .to() for MPS
             if device == "cuda":
-                self._model = AutoModelForCausalLM.from_pretrained(
+                self._model = safe_from_pretrained_causal_lm(
                     model_name,
                     torch_dtype=dtype,
                     device_map=device,
                 )
             else:  # MPS
-                self._model = AutoModelForCausalLM.from_pretrained(
+                self._model = safe_from_pretrained_causal_lm(
                     model_name,
                     torch_dtype=dtype,
                     device_map=None,
                 )
                 self._model = self._model.to(device)
         else:  # CPU
-            self._model = AutoModelForCausalLM.from_pretrained(
+            self._model = safe_from_pretrained_causal_lm(
                 model_name,
                 torch_dtype=dtype,
                 device_map=None,

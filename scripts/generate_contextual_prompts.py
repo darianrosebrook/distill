@@ -1056,8 +1056,9 @@ def main():
     if args.tokenizer:
         try:
             from transformers import AutoTokenizer
+            from training.safe_model_loading import safe_from_pretrained_tokenizer
 
-            tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, use_fast=True)
+            tokenizer = safe_from_pretrained_tokenizer(args.tokenizer, use_fast=True)
         except Exception:
             print(
                 f"[generate_contextual_prompts] WARN: Failed to load tokenizer {args.tokenizer}, using byte-based thresholds"

@@ -568,8 +568,9 @@ def export_to_huggingface_format(checkpoint_path: str, output_dir: Path):
     if tokenizer_dir.exists():
         try:
             from transformers import AutoTokenizer
+            from training.safe_model_loading import safe_from_pretrained_tokenizer
 
-            original_tokenizer = AutoTokenizer.from_pretrained(str(tokenizer_dir))
+            original_tokenizer = safe_from_pretrained_tokenizer(str(tokenizer_dir))
             if original_tokenizer.vocab_size == config["vocab_size"]:
                 # Vocab sizes match - use original tokenizer
                 import shutil
@@ -605,12 +606,16 @@ def convert_to_gguf_direct(hf_dir: Path, output_gguf: Path):
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
-        # Load the model and tokenizer
+        # Load the model and tokenizer safely with revision pinning
         print("   Loading model and tokenizer...")
-        model = AutoModelForCausalLM.from_pretrained(
+        from training.safe_model_loading import (
+            safe_from_pretrained_causal_lm,
+            safe_from_pretrained_tokenizer,
+        )
+        model = safe_from_pretrained_causal_lm(
             str(hf_dir), torch_dtype=torch.float16, low_cpu_mem_usage=True
         )
-        tokenizer = AutoTokenizer.from_pretrained(str(hf_dir))
+        tokenizer = safe_from_pretrained_tokenizer(str(hf_dir))
 
         # Create GGUF writer
         gguf_writer = GGUFWriter(path=str(output_gguf), arch="llama")

@@ -26,7 +26,8 @@ def load_tokenizer(tokenizer_path: str):
             "transformers library required for tokenizer. Install with: pip install transformers"
         )
 
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+    from training.safe_model_loading import safe_from_pretrained_tokenizer
+    tokenizer = safe_from_pretrained_tokenizer(tokenizer_path)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     return tokenizer
@@ -85,7 +86,8 @@ class KDDataset(Dataset):
                 "transformers library required for tokenizer. Install with: pip install transformers"
             )
 
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+        from training.safe_model_loading import safe_from_pretrained_tokenizer
+        self.tokenizer = safe_from_pretrained_tokenizer(tokenizer_path)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 

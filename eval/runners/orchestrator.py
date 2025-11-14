@@ -64,9 +64,9 @@ class OrchestratorRunner(Runner):
 
             # Load tokenizer
             try:
-                from transformers import AutoTokenizer
+                from training.safe_model_loading import safe_from_pretrained_tokenizer
 
-                self._tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path, use_fast=True)
+                self._tokenizer = safe_from_pretrained_tokenizer(self.tokenizer_path, use_fast=True)
                 if self._tokenizer.pad_token is None:
                     self._tokenizer.pad_token = self._tokenizer.eos_token
             except ImportError:

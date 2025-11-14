@@ -32,7 +32,8 @@ def download_tokenizer(model_id: str, output_dir: Path, verify_vocab_size: int =
     print(f"[download_models] Output directory: {output_dir}")
 
     try:
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        from training.safe_model_loading import safe_from_pretrained_tokenizer
+        tokenizer = safe_from_pretrained_tokenizer(model_id)
 
         # Verify vocab size
         vocab_size = len(tokenizer)
@@ -101,7 +102,8 @@ def main():
         if expected_path.exists():
             print(f"[verify] Checking existing tokenizer at: {expected_path}")
             try:
-                tokenizer = AutoTokenizer.from_pretrained(str(expected_path))
+                from training.safe_model_loading import safe_from_pretrained_tokenizer
+                tokenizer = safe_from_pretrained_tokenizer(str(expected_path))
                 vocab_size = len(tokenizer)
                 print(f"✅ Tokenizer found: vocab_size={vocab_size}")
                 if vocab_size == args.vocab_size:

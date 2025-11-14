@@ -322,7 +322,8 @@ def main():
 
     io_cfg = cfg.get("io", {})
     tokenizer_path = io_cfg.get("tokenizer_path", "models/student/tokenizer")
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+    from training.safe_model_loading import safe_from_pretrained_tokenizer
+    tokenizer = safe_from_pretrained_tokenizer(tokenizer_path)
 
     # Create dataset
     train_shards = io_cfg.get("train_shards", ["data/kd_mix.jsonl"])
