@@ -198,6 +198,20 @@ class TestModelCreation:
         with pytest.raises(KeyError):
             create_model(invalid_config, device)
 
+    def test_create_model_arch_not_dict(self, device):
+        """Test model creation when arch is not a dict (line 360)."""
+        invalid_config = {"arch": "not a dict"}  # arch is not a dict
+
+        with pytest.raises(TypeError, match="Expected 'arch' to be a dict"):
+            create_model(invalid_config, device)
+
+    def test_create_model_missing_arch(self, device):
+        """Test model creation when arch section is missing (line 354-355)."""
+        invalid_config = {}  # Missing arch section entirely
+
+        with pytest.raises(KeyError, match="Missing required 'arch' configuration section"):
+            create_model(invalid_config, device)
+
 
 class TestOptimizerCreation:
     """Test optimizer creation functionality."""
@@ -238,10 +252,10 @@ class TestOptimizerCreation:
         assert optimizer.defaults["lr"] == 2e-4
 
     def test_create_optimizer_invalid_type(self, simple_model):
-        """Test invalid optimizer type raises error."""
+        """Test invalid optimizer type raises error (line 460)."""
         config = {"optimizer": {"name": "invalid_optimizer"}}
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Unknown optimizer"):
             create_optimizer(simple_model, config)
 
 
@@ -2364,6 +2378,112 @@ class TestSaveCheckpointExpanded:
             assert loaded["step"] == 100
             assert loaded["model_arch"]["use_halt_head"] is False
 
+    def test_save_checkpoint_exception_handling(self, tmp_path, small_model):
+        """Test save_checkpoint exception handling (lines 948-953)."""
+        output_dir = tmp_path / "checkpoints"
+        optimizer = AdamW(small_model.parameters(), lr=1e-3)
+        config = {"model": {}, "training": {}}
+        
+        # Mock torch.save to raise exception
+        with patch("torch.save", side_effect=Exception("Save error")):
+            with patch("builtins.print"):  # Suppress error prints
+                with patch("traceback.print_exc"):  # Suppress traceback
+                    # Should not raise, but handle gracefully
+                    save_checkpoint(
+                        model=small_model,
+                        optimizer=optimizer,
+                        step=100,
+                        loss=0.5,
+                        output_dir=output_dir,
+                        config=config,
+                    )
+        
+        # Training should continue (no exception raised)
+
+    def test_save_checkpoint_fsync_exception(self, tmp_path, small_model):
+        """Test save_checkpoint with fsync exception (lines 933-934)."""
+        output_dir = tmp_path / "checkpoints"
+        optimizer = AdamW(small_model.parameters(), lr=1e-3)
+        config = {"model": {}, "training": {}}
+        
+        # Mock os.sync to raise exception (fsync path)
+        with patch("os.sync", side_effect=Exception("Sync error")):
+            # Should handle gracefully and continue
+            save_checkpoint(
+                model=small_model,
+                optimizer=optimizer,
+                step=100,
+                loss=0.5,
+                output_dir=output_dir,
+                config=config,
+            )
+        
+        # Checkpoint should still be saved (fsync is not critical)
+        assert (output_dir / "latest.pt").exists()
+
+    def test_save_checkpoint_loss_components_float(self, tmp_path, small_model):
+        """Test save_checkpoint with float loss components (line 878)."""
+        output_dir = tmp_path / "checkpoints"
+        optimizer = AdamW(small_model.parameters(), lr=1e-3)
+        config = {"model": {}, "training": {}}
+        loss_dict = {
+            "kl": 0.5,  # float, not tensor
+            "ce_teacher": 0.3,
+            "total": 0.8,
+        }
+        
+        save_checkpoint(
+            model=small_model,
+            optimizer=optimizer,
+            step=100,
+            loss=0.8,
+            output_dir=output_dir,
+            config=config,
+            loss_dict=loss_dict,
+        )
+        
+        # Verify checkpoint was saved
+        assert (output_dir / "latest.pt").exists()
+        checkpoint = torch.load(output_dir / "latest.pt", weights_only=False)
+        assert "meta" in checkpoint
+        assert "loss_components" in checkpoint["meta"]
+
+    def test_save_checkpoint_loss_components_tensor_conversion(self, tmp_path, small_model):
+        """Test save_checkpoint with tensor loss components (line 878)."""
+        output_dir = tmp_path / "checkpoints"
+        optimizer = AdamW(small_model.parameters(), lr=1e-3)
+        config = {"model": {}, "training": {}}
+        
+        # Test with tensor loss components (should convert to float via .item())
+        loss_dict = {
+            "total": torch.tensor(0.5),
+            "kl_div": torch.tensor(0.3),
+            "ce_teacher": torch.tensor(0.2),
+        }
+        
+        save_checkpoint(
+            model=small_model,
+            optimizer=optimizer,
+            step=100,
+            loss=0.5,
+            output_dir=output_dir,
+            config=config,
+            loss_dict=loss_dict,
+        )
+        
+        checkpoint_path = output_dir / "checkpoint_step_100.pt"
+        assert checkpoint_path.exists()
+        
+        # Verify loss components are saved correctly (tensors converted to float)
+        from training.safe_checkpoint_loading import safe_load_checkpoint
+        loaded = safe_load_checkpoint(checkpoint_path)
+        
+        assert "meta" in loaded
+        assert "loss_components" in loaded["meta"]
+        assert loaded["meta"]["loss_components"]["total"] == 0.5
+        assert loaded["meta"]["loss_components"]["kl_div"] == 0.3
+        assert loaded["meta"]["loss_components"]["ce_teacher"] == 0.2
+
 
 class TestTrainingStepExpanded:
     """Test expanded training step scenarios."""
@@ -2635,6 +2755,225 @@ class TestTrainingStepExpanded:
             assert "total" in result
             # Code mode weight may be in result dict or computed separately
             assert "code_mode_pref" in result or "code_mode_weight" in result
+
+    def test_train_step_code_mode_weight_warmup(self, small_model, sample_batch, simple_optimizer, training_config, device):
+        """Test code-mode weight warmup calculation (lines 1221-1222)."""
+        training_config["distill"] = {
+            "code_mode": {
+                "enabled": True,
+                "weight": 0.3,
+                "weight_schedule": {
+                    "warmup_steps": 1000,
+                    "start_weight": 0.05,
+                },
+                "code_mode_pref": {
+                    "eligibility_rules": {"min_tools": 2},
+                    "reward": {"prefer_ts_api_over_direct_tool": True},
+                    "weights": {"pos": 1.0, "neg": 1.0},
+                },
+            }
+        }
+        training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
+        
+        sample_batch["meta"] = [{"span_targets": {}} for _ in range(2)]
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+        
+        # Initialize code_mode_loss_module
+        from training.losses import CodeModePreferenceLoss
+        train_step._code_mode_loss_module = CodeModePreferenceLoss(
+            eligibility_rules={"min_tools": 2},
+            reward={"prefer_ts_api_over_direct_tool": True},
+            vocab_ids={},
+        )
+        
+        # Test during warmup (line 1221-1222)
+        result = train_step(
+            model=small_model,
+            batch=sample_batch,
+            optimizer=simple_optimizer,
+            scaler=None,
+            cfg=training_config,
+            device=device,
+            current_step=500,  # During warmup (500 < 1000)
+        )
+        
+        assert "total" in result
+
+    def test_train_step_code_mode_batch_meta_as_dict(self, small_model, sample_batch, simple_optimizer, training_config, device):
+        """Test code-mode with batch_meta as dict (lines 1296-1301)."""
+        training_config["distill"] = {
+            "code_mode": {
+                "enabled": True,
+                "weight": 0.3,
+                "code_mode_pref": {
+                    "eligibility_rules": {"min_tools": 2},
+                    "reward": {"prefer_ts_api_over_direct_tool": True},
+                    "weights": {"pos": 1.0, "neg": 1.0},
+                },
+            }
+        }
+        training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
+        
+        # Add batch_meta as dict (not list) - line 1296
+        # The loss module expects batch_meta to be a list, so we need to provide proper structure
+        # When batch_meta is dict, span_targets is extracted, but batch_meta itself is passed
+        # The loss module will iterate over batch_meta, so we need to ensure it's iterable correctly
+        batch_size = sample_batch["input_ids"].shape[0]
+        sample_batch["meta"] = {
+            "span_targets": {"ts_mode_spans": [(5, 10)], "direct_tool_spans": []},
+            "tool_count": 2,  # Add required fields for eligibility
+        }
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+        
+        # Initialize code_mode_loss_module
+        from training.losses import CodeModePreferenceLoss
+        train_step._code_mode_loss_module = CodeModePreferenceLoss(
+            eligibility_rules={"min_tools": 2},
+            reward={"prefer_ts_api_over_direct_tool": True},
+            vocab_ids={},
+        )
+        
+        # Mock the loss module to handle dict batch_meta
+        with patch.object(train_step._code_mode_loss_module, "forward") as mock_forward:
+            mock_forward.return_value = torch.tensor(0.1, device=device, requires_grad=True)
+            
+            result = train_step(
+                model=small_model,
+                batch=sample_batch,
+                optimizer=simple_optimizer,
+                scaler=None,
+                cfg=training_config,
+                device=device,
+            )
+            
+            assert "total" in result
+
+    def test_train_step_code_mode_batch_meta_dict_span_targets_list(self, small_model, sample_batch, simple_optimizer, training_config, device):
+        """Test code-mode with batch_meta dict containing span_targets_list (lines 1300-1301)."""
+        training_config["distill"] = {
+            "code_mode": {
+                "enabled": True,
+                "weight": 0.3,
+                "code_mode_pref": {
+                    "eligibility_rules": {"min_tools": 2},
+                    "reward": {"prefer_ts_api_over_direct_tool": True},
+                    "weights": {"pos": 1.0, "neg": 1.0},
+                },
+            }
+        }
+        training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
+        
+        # Add batch_meta as dict with span_targets_list (line 1301)
+        sample_batch["meta"] = {
+            "span_targets_list": [{"ts_mode_spans": [(5, 10)], "direct_tool_spans": []}],
+            "tool_count": 2,
+        }
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+        
+        # Initialize code_mode_loss_module
+        from training.losses import CodeModePreferenceLoss
+        train_step._code_mode_loss_module = CodeModePreferenceLoss(
+            eligibility_rules={"min_tools": 2},
+            reward={"prefer_ts_api_over_direct_tool": True},
+            vocab_ids={},
+        )
+        
+        # Mock the loss module to handle dict batch_meta
+        with patch.object(train_step._code_mode_loss_module, "forward") as mock_forward:
+            mock_forward.return_value = torch.tensor(0.1, device=device, requires_grad=True)
+            
+            result = train_step(
+                model=small_model,
+                batch=sample_batch,
+                optimizer=simple_optimizer,
+                scaler=None,
+                cfg=training_config,
+                device=device,
+            )
+            
+            assert "total" in result
+
+    def test_train_step_halt_targets_batch_metadata_expansion(self, small_model, sample_batch, simple_optimizer, training_config, device):
+        """Test halt targets with batch_metadata expansion (line 1326)."""
+        training_config["latent"]["halt_head_enabled"] = True
+        training_config["latent"]["halt_weight"] = 0.05
+        training_config["latent"]["halt_targets"] = {
+            "judge_score_threshold": 0.8,
+            "delta_shrinking_threshold": 0.05,
+            "caws_tier": "Tier-2",
+            "warmup_steps": 1000,
+        }
+        
+        # Add batch_metadata as single dict (not list) - should be expanded (line 1326)
+        sample_batch["metadata"] = {
+            "loop_index": 0,
+            "max_loops": 2,
+            "judge_score": 0.9,
+            "prev_score": 0.85,
+            "curriculum_stage": 1,
+        }
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+        
+        # Mock halt targets
+        with patch("training.halt_targets.HaltHeadTargets") as mock_halt_class:
+            with patch("training.halt_targets.create_halt_targets_batch") as mock_create_halt:
+                mock_halt_instance = Mock()
+                mock_halt_instance.warmup_steps = 1000
+                mock_halt_class.return_value = mock_halt_instance
+                mock_create_halt.return_value = torch.tensor([0], device=device)
+                
+                result = train_step(
+                    model=small_model,
+                    batch=sample_batch,
+                    optimizer=simple_optimizer,
+                    scaler=None,
+                    cfg=training_config,
+                    device=device,
+                    current_step=2000,
+                )
+                
+                assert "total" in result
+
+    def test_train_step_halt_targets_import_error(self, small_model, sample_batch, simple_optimizer, training_config, device):
+        """Test halt targets import error path (lines 1354-1356)."""
+        training_config["latent"]["halt_head_enabled"] = True
+        training_config["latent"]["halt_weight"] = 0.05
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+        
+        # Mock ImportError for halt_targets
+        with patch("training.halt_targets.HaltHeadTargets", side_effect=ImportError("Not available")):
+            with patch("builtins.print"):  # Suppress warning print
+                result = train_step(
+                    model=small_model,
+                    batch=sample_batch,
+                    optimizer=simple_optimizer,
+                    scaler=None,
+                    cfg=training_config,
+                    device=device,
+                    current_step=100,  # Multiple of 100 to trigger warning
+                )
+                
+                assert "total" in result
 
     def test_train_step_with_intermediate_layers_and_teacher_states(
         self, small_model, sample_batch, simple_optimizer, training_config, device
