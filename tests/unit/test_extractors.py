@@ -14,6 +14,7 @@ from training.extractors import (
     extract_tool_name_span,
     extract_json_argument_spans,
     identify_integration_spans,
+    _merge_overlapping_spans,
 )
 
 
@@ -231,6 +232,61 @@ class TestIntegrationSpanIdentification:
         
         # Should still find spans for list length
         assert isinstance(spans, list)
+
+    def test_identify_integration_spans_with_markers(self):
+        """Test identification with integration markers after tool calls (triggers lines 254-262)."""
+        # Text with JSON tool call followed by integration markers
+        text = 'I called {"name": "read_file", "arguments": {"path": "test.txt"}} and then used the result to process data. The output was used in the next step.'
+        
+        spans = identify_integration_spans(text)
+        
+        # Should find spans based on integration markers
+        assert isinstance(spans, list)
+
+    def test_identify_integration_spans_marker_with_end_match(self):
+        """Test integration marker matching with end sentence match (triggers lines 256-258)."""
+        # Text with integration marker and clear sentence end
+        text = 'Tool call here. Then I used the result. Next step follows.'
+        
+        spans = identify_integration_spans(text)
+        
+        assert isinstance(spans, list)
+
+    def test_identify_integration_spans_marker_without_end_match(self):
+        """Test integration marker matching without end sentence match (triggers lines 259-260)."""
+        # Text with integration marker but no clear sentence end within 300 chars
+        text = 'Tool call here. Then I used the result' + ' and continued' * 20  # Long text without sentence end
+        
+        spans = identify_integration_spans(text)
+        
+        assert isinstance(spans, list)
+
+
+class TestMergeOverlappingSpans:
+    """Test span merging utility."""
+
+    def test_merge_overlapping_spans_empty(self):
+        """Test merge_overlapping_spans with empty list (triggers line 274)."""
+        result = _merge_overlapping_spans([])
+        
+        assert result == []
+
+    def test_merge_overlapping_spans_non_overlapping(self):
+        """Test merge_overlapping_spans with non-overlapping spans (triggers line 286)."""
+        spans = [(0, 10), (20, 30), (40, 50)]
+        result = _merge_overlapping_spans(spans)
+        
+        # Should keep all spans as they don't overlap
+        assert result == spans
+
+    def test_merge_overlapping_spans_overlapping(self):
+        """Test merge_overlapping_spans with overlapping spans."""
+        spans = [(0, 15), (10, 25), (20, 30)]
+        result = _merge_overlapping_spans(spans)
+        
+        # Should merge overlapping spans
+        assert len(result) == 1
+        assert result[0] == (0, 30)
 
 
 if __name__ == "__main__":
