@@ -623,8 +623,8 @@ class TestCheckpointOperations:
             config=config,
         )
 
-        # Should create checkpoint file
-        checkpoint_files = list(output_dir.glob("checkpoint_step_100_*.pt"))
+        # Should create checkpoint file (format: checkpoint_step_{step}.pt)
+        checkpoint_files = list(output_dir.glob("checkpoint_step_100.pt"))
         assert len(checkpoint_files) == 1
 
         checkpoint_path = checkpoint_files[0]
@@ -632,6 +632,7 @@ class TestCheckpointOperations:
 
         # Load and verify
         from training.safe_checkpoint_loading import safe_load_checkpoint
+        # safe_load_checkpoint handles weights_only fallback automatically
         loaded = safe_load_checkpoint(checkpoint_path)
         assert loaded["step"] == 100
         assert loaded["loss"] == 0.5
@@ -656,14 +657,18 @@ class TestCheckpointOperations:
             loss_dict={"ce": 0.2, "kl": 0.1},
         )
 
-        checkpoint_files = list(output_dir.glob("checkpoint_step_200_*.pt"))
+        checkpoint_files = list(output_dir.glob("checkpoint_step_200.pt"))
         assert len(checkpoint_files) == 1
 
         from training.safe_checkpoint_loading import safe_load_checkpoint
+        # safe_load_checkpoint handles weights_only fallback automatically
         loaded = safe_load_checkpoint(checkpoint_files[0])
         assert loaded["step"] == 200
         assert loaded["loss"] == 0.3
-        assert loaded["loss_dict"]["ce"] == 0.2
+        # loss_dict is stored in meta.loss_components, not directly in checkpoint
+        assert "meta" in loaded
+        assert "loss_components" in loaded["meta"]
+        assert loaded["meta"]["loss_components"]["ce"] == 0.2
 
 
 class TestConfigValidation:
@@ -1716,27 +1721,27 @@ class TestTrainingStepExpanded:
         training_config["distillation"]["min_temperature"] = 1.5
         training_config["distillation"]["max_temperature"] = 3.0
         training_config["train"] = {"total_steps": 1000}
-        
-        # Mock adaptive_temperature if it doesn't exist
-        with patch("training.distill_kd.adaptive_temperature", create=True) as mock_adaptive:
-            mock_adaptive.return_value = 2.0
 
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
 
-        result = train_step(
-            model=small_model,
-            batch=sample_batch,
-            optimizer=simple_optimizer,
-            scaler=None,
-            cfg=training_config,
-            device=device,
-            current_step=500,
-        )
+        # Mock adaptive_temperature import inside train_step
+        with patch("training.losses.adaptive_temperature", create=True) as mock_adaptive:
+            mock_adaptive.return_value = 2.0
 
-        assert "total" in result
+            result = train_step(
+                model=small_model,
+                batch=sample_batch,
+                optimizer=simple_optimizer,
+                scaler=None,
+                cfg=training_config,
+                device=device,
+                current_step=500,
+            )
+
+            assert "total" in result
 
     def test_train_step_with_weight_schedule(
         self, small_model, sample_batch, simple_optimizer, training_config, device
@@ -1752,17 +1757,21 @@ class TestTrainingStepExpanded:
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
 
-        result = train_step(
-            model=small_model,
-            batch=sample_batch,
-            optimizer=simple_optimizer,
-            scaler=None,
-            cfg=training_config,
-            device=device,
-            current_step=500,
-        )
+        # Mock loss_weight_schedule import inside train_step
+        with patch("training.losses.loss_weight_schedule", create=True) as mock_schedule:
+            mock_schedule.return_value = {"kl_weight": 0.6, "ce_teacher_weight": 0.2, "ce_ground_truth_weight": 0.2}
 
-        assert "total" in result
+            result = train_step(
+                model=small_model,
+                batch=sample_batch,
+                optimizer=simple_optimizer,
+                scaler=None,
+                cfg=training_config,
+                device=device,
+                current_step=500,
+            )
+
+            assert "total" in result
 
     def test_train_step_with_length_aware_kd(
         self, small_model, sample_batch, simple_optimizer, training_config, device

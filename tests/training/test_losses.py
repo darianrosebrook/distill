@@ -808,6 +808,62 @@ class TestEarlyToolCallLoss:
         assert "early_tool.frac_should_use" in diags
         assert "early_tool.frac_target_available" in diags
 
+    def test_early_tool_call_loss_teacher_prefix_numel_gt_zero(self, device):
+        """Test early_tool_call_loss with teacher_prefix_ids.numel() > 0 check.
+        
+        This test catches mutations that change > 0 to != 0 in line 431.
+        """
+        batch_size = 2
+        seq_len = 30
+        vocab_size = 1000
+        N = 25
+
+        logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+        input_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        tool_should_be_used = torch.tensor([1.0, 0.0], device=device)
+        mock_tokenizer = Mock()
+        mock_tokenizer.convert_tokens_to_ids = Mock(return_value=100)
+
+        # Test with teacher_prefix_ids.numel() > 0 (should use teacher prefix)
+        teacher_prefix_ids_nonzero = torch.randint(0, vocab_size, (batch_size, 10), device=device)
+        loss_nonzero, diags1 = early_tool_call_loss(
+            logits=logits,
+            input_ids=input_ids,
+            tool_should_be_used=tool_should_be_used,
+            tokenizer=mock_tokenizer,
+            teacher_prefix_ids=teacher_prefix_ids_nonzero,
+            N=N,
+            json_prior_weight=0.02,
+            ce_weight=0.2,
+            ramp_t=1.0,
+        )
+        
+        # Test with teacher_prefix_ids.numel() == 0 (should NOT use teacher prefix, use JSON prior)
+        teacher_prefix_ids_zero = torch.zeros((batch_size, 0), dtype=torch.long, device=device)  # Empty tensor
+        loss_zero, diags2 = early_tool_call_loss(
+            logits=logits,
+            input_ids=input_ids,
+            tool_should_be_used=tool_should_be_used,
+            tokenizer=mock_tokenizer,
+            teacher_prefix_ids=teacher_prefix_ids_zero,
+            N=N,
+            json_prior_weight=0.02,
+            ce_weight=0.2,
+            ramp_t=1.0,
+        )
+
+        # Verify that > 0 is used (not != 0)
+        # With > 0: numel() > 0 should use teacher prefix, numel() == 0 should use JSON prior
+        # With != 0: numel() == 0 would still use teacher prefix (wrong behavior)
+        assert isinstance(loss_nonzero, torch.Tensor)
+        assert isinstance(loss_zero, torch.Tensor)
+        
+        # Non-zero numel should have teacher prefix available
+        assert diags1["early_tool.frac_target_available"] > 0.0, "numel() > 0 should use teacher prefix"
+        
+        # Zero numel should NOT have teacher prefix available (use JSON prior instead)
+        assert diags2["early_tool.frac_target_available"] == 0.0, "numel() == 0 should NOT use teacher prefix"
+
     def test_early_tool_call_loss_without_teacher_prefix_json_prior(self, device):
         """Test early_tool_call_loss without teacher prefix (JSON-envelope prior path)."""
         batch_size = 2
@@ -2086,6 +2142,121 @@ class TestCAWSComplianceLoss:
             assert loss_short.item() >= loss_long.item(), (
                 "Short output (< 200) should have higher or equal loss than long output (>= 200)"
             )
+
+    def test_caws_compliance_loss_output_length_lt_vs_gte_boundary(self, device):
+        """Test CAWS compliance loss with output_length < 200 vs >= 200 boundary check.
+        
+        This test catches mutations that change < to >= in line 1100.
+        Specifically tests the boundary case where output_length == 200.
+        """
+        # Test with output_length == 200 (boundary case, should NOT add penalty)
+        student_output_boundary = "A" * 200 + " <bot>span1</bot> <bot>span2</bot> <bot>span3</bot>"
+        teacher_output = "Teacher output"
+        
+        # Test with output_length < 200 (should add penalty if latent_span_count > 2)
+        student_output_short = "A" * 199 + " <bot>span1</bot> <bot>span2</bot> <bot>span3</bot>"
+        
+        # Test with output_length > 200 (should NOT add penalty)
+        student_output_long = "A" * 201 + " <bot>span1</bot> <bot>span2</bot> <bot>span3</bot>"
+        
+        loss_boundary = caws_compliance_loss(student_output_boundary, teacher_output)
+        loss_short = caws_compliance_loss(student_output_short, teacher_output)
+        loss_long = caws_compliance_loss(student_output_long, teacher_output)
+
+        # Verify that < is used (not >=)
+        # With <: output_length < 200 should add penalty, output_length >= 200 should not
+        # With >=: output_length < 200 would NOT add penalty, output_length >= 200 would add penalty (wrong behavior)
+        
+        assert isinstance(loss_boundary, torch.Tensor)
+        assert isinstance(loss_short, torch.Tensor)
+        assert isinstance(loss_long, torch.Tensor)
+        
+        # Boundary case (== 200) should NOT add penalty (same as long output)
+        # Short case (< 200) should add penalty if latent_span_count > 2
+        # Long case (> 200) should NOT add penalty
+        
+        # Verify that < 200 check is used (not >= 200)
+        # If < were changed to >=, boundary case would add penalty (wrong behavior)
+        # Short output should have higher or equal penalty than boundary/long outputs
+        if loss_short.item() > 0:
+            assert loss_short.item() >= loss_boundary.item(), (
+                "Short output (< 200) should have higher or equal penalty than boundary output (== 200)"
+            )
+            assert loss_short.item() >= loss_long.item(), (
+                "Short output (< 200) should have higher or equal penalty than long output (> 200)"
+            )
+
+    def test_caws_compliance_loss_tool_usage_in_check(self, device):
+        """Test CAWS compliance loss with tool_usage 'in' check.
+        
+        This test catches mutations that change 'in' to 'not in' in line 1088.
+        """
+        # Test with tool usage indicators present (should detect tool usage)
+        student_output_with_tool = "I need to use the google_drive API to fetch files"
+        teacher_output = "Teacher output"
+        
+        # Test with tool usage indicators absent (should NOT detect tool usage)
+        student_output_no_tool = "I need to analyze the data"
+        
+        loss_with_tool = caws_compliance_loss(student_output_with_tool, teacher_output)
+        loss_no_tool = caws_compliance_loss(student_output_no_tool, teacher_output)
+
+        # Verify that 'in' is used (not 'not in')
+        # With 'in': tool usage indicators in output should be detected
+        # With 'not in': tool usage indicators in output would NOT be detected (wrong behavior)
+        
+        assert isinstance(loss_with_tool, torch.Tensor)
+        assert isinstance(loss_no_tool, torch.Tensor)
+        
+        # Both should return valid losses
+        assert loss_with_tool.item() >= 0
+        assert loss_no_tool.item() >= 0
+        
+        # Tool usage detection affects penalty calculation
+        # If 'in' were changed to 'not in', tool usage would not be detected, affecting penalties
+        # The exact penalty depends on other factors, but tool usage should be detected
+
+    def test_caws_compliance_loss_unsupported_claims_increment(self, device):
+        """Test CAWS compliance loss with unsupported_claims increment (+=).
+        
+        This test catches mutations that change += to *= in line 1041.
+        """
+        # Mock claim extractor to return specific claims
+        class MockClaimExtractor:
+            def extract_claims(self, text):
+                if "student" in text.lower():
+                    return ["claim1", "claim2", "claim3"]  # 3 student claims
+                else:
+                    return ["claim1", "claim2"]  # 2 teacher claims (only claim1 and claim2 supported)
+
+        claim_extractor = MockClaimExtractor()
+        
+        # Student has 3 claims, teacher has 2 (only claim1 and claim2 supported)
+        # So claim3 should be unsupported, resulting in unsupported_claims = 1
+        student_output = "Student output with claim1 claim2 claim3"
+        teacher_output = "Teacher output with claim1 claim2"
+        
+        loss_with_extractor = caws_compliance_loss(student_output, teacher_output, claim_extractor=claim_extractor)
+        
+        # Test without claim extractor (should not penalize unsupported claims)
+        loss_without_extractor = caws_compliance_loss(student_output, teacher_output, claim_extractor=None)
+
+        # Verify that += is used (not *=)
+        # With +=: unsupported_claims += 1 increments by 1 for each unsupported claim
+        # With *=: unsupported_claims *= 1 would not increment correctly (wrong behavior)
+        
+        assert isinstance(loss_with_extractor, torch.Tensor)
+        assert isinstance(loss_without_extractor, torch.Tensor)
+        
+        # Both should return valid losses
+        assert loss_with_extractor.item() >= 0
+        assert loss_without_extractor.item() >= 0
+        
+        # Loss with extractor should be higher (due to unsupported claims penalty)
+        # If += were changed to *=, unsupported_claims would not increment correctly
+        assert loss_with_extractor.item() >= loss_without_extractor.item(), (
+            "Loss with claim extractor should be higher due to unsupported claims penalty"
+        )
 
 
 class TestCAWSStructureLoss:

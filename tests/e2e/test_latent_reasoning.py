@@ -15,6 +15,7 @@ from unittest.mock import Mock
 from data.wrappers.curriculum import LatentCurriculum
 from runtime.engine.loop import LatentModeEngine
 from runtime.orchestration.refine import RefinementController, CAWSBudgetTier
+from models.student.tokenizer.constants import BOT_TOKEN_ID, EOT_TOKEN_ID
 
 
 class TestLatentReasoningE2E:
