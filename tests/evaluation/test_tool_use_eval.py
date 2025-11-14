@@ -1026,9 +1026,10 @@ class TestToolUseEvalIntegration:
         """Test evaluate_tool_use with checkpoint path when tokenizer load fails."""
         with (
             patch("evaluation.tool_use_eval.load_model", return_value=Mock()),
-            patch("transformers.AutoTokenizer") as mock_tokenizer_class,
+            patch("training.safe_model_loading.safe_from_pretrained_tokenizer") as mock_load_tokenizer,
         ):
-            mock_tokenizer_class.from_pretrained.side_effect = Exception("Tokenizer load failed")
+            # Mock tokenizer loading failure
+            mock_load_tokenizer.side_effect = Exception("Tokenizer load failed")
             
             test_prompts = [{"prompt": "Test"}]
             device = torch.device("cpu")
