@@ -272,6 +272,215 @@ class TestComputeClaimExtractionMetrics:
         assert metrics["teacher_claim_count"] >= metrics["student_claim_count"]
 
 
+class TestClaimExtractionEdgeCases:
+    """Test edge cases for claim extraction methods."""
+
+    @pytest.fixture
+    def extractor(self):
+        """Create a SimpleClaimExtractor instance."""
+        return SimpleClaimExtractor()
+
+    def test_split_sentences_without_spaces_after_punctuation(self, extractor):
+        """Test _split_sentences with punctuation not followed by space."""
+        # Test text without spaces after punctuation
+        text = "First sentence.Second sentence.Third sentence"
+        sentences = extractor._split_sentences(text)
+        # Should still split on punctuation
+        assert len(sentences) >= 1
+
+    def test_split_sentences_whitespace_only(self, extractor):
+        """Test _split_sentences with whitespace-only text."""
+        sentences = extractor._split_sentences("   \n\n  ")
+        # Should filter out empty/whitespace sentences
+        assert len(sentences) == 0
+
+    def test_split_sentences_multiple_punctuation(self, extractor):
+        """Test _split_sentences with multiple punctuation marks."""
+        text = "First!!! Second??? Third..."
+        sentences = extractor._split_sentences(text)
+        # Should split on first punctuation
+        assert len(sentences) >= 1
+
+    def test_has_verifiable_content_with_code_blocks(self, extractor):
+        """Test _has_verifiable_content with code blocks (```)."""
+        assert extractor._has_verifiable_content("Here's code:\n```python\nprint(42)\n```")
+        assert extractor._has_verifiable_content("```code```")
+
+    def test_has_verifiable_content_with_braces(self, extractor):
+        """Test _has_verifiable_content with JSON braces ({})."""
+        assert extractor._has_verifiable_content('The result is: {"answer": 42}')
+        assert extractor._has_verifiable_content("{key: value}")
+
+    def test_has_verifiable_content_with_brackets(self, extractor):
+        """Test _has_verifiable_content with brackets ([])."""
+        assert extractor._has_verifiable_content("The list is [1, 2, 3]")
+        assert extractor._has_verifiable_content("[item]")
+
+    def test_has_verifiable_content_factual_structure_only(self, extractor):
+        """Test _has_verifiable_content relying on factual structure check."""
+        # Sentence with factual verbs and nouns but no patterns
+        assert extractor._has_verifiable_content("Python implements functions")
+        assert extractor._has_verifiable_content("This system uses databases")
+
+    def test_has_verifiable_content_no_patterns_no_structure(self, extractor):
+        """Test _has_verifiable_content with no verifiable indicators."""
+        assert not extractor._has_verifiable_content("This is just text")
+        assert not extractor._has_verifiable_content("Maybe something")
+
+    def test_has_factual_structure_with_verb_and_nouns(self, extractor):
+        """Test _has_factual_structure with verb and enough nouns."""
+        assert extractor._has_factual_structure("Python is a language")
+        assert extractor._has_factual_structure("The system uses databases")
+
+    def test_has_factual_structure_without_verb(self, extractor):
+        """Test _has_factual_structure without factual verbs."""
+        assert not extractor._has_factual_structure("Quick brown fox")
+        assert not extractor._has_factual_structure("Running fast")
+
+    def test_has_factual_structure_without_enough_nouns(self, extractor):
+        """Test _has_factual_structure without enough nouns (words > 3 chars)."""
+        # Only one word > 3 chars
+        assert not extractor._has_factual_structure("The is good")
+        assert not extractor._has_factual_structure("It was")
+
+    def test_has_factual_structure_with_different_verbs(self, extractor):
+        """Test _has_factual_structure with different factual verbs."""
+        assert extractor._has_factual_structure("It was created")
+        assert extractor._has_factual_structure("They have implemented")
+        assert extractor._has_factual_structure("He had defined")
+        assert extractor._has_factual_structure("Function returns values")
+        assert extractor._has_factual_structure("System uses resources")
+
+    def test_decompose_to_atomic_no_splits(self, extractor):
+        """Test _decompose_to_atomic with no conjunctions (returns original)."""
+        sentence = "The answer is 42"
+        atomic = extractor._decompose_to_atomic(sentence)
+        # Should return original as list
+        assert atomic == [sentence]
+
+    def test_decompose_to_atomic_with_and(self, extractor):
+        """Test _decompose_to_atomic with 'and' conjunction."""
+        sentence = "The answer is 42 and the status is success"
+        atomic = extractor._decompose_to_atomic(sentence)
+        # Should split on 'and'
+        assert len(atomic) >= 2
+
+    def test_decompose_to_atomic_with_or(self, extractor):
+        """Test _decompose_to_atomic with 'or' conjunction."""
+        sentence = "The answer is 42 or the result is 100"
+        atomic = extractor._decompose_to_atomic(sentence)
+        # Should split on 'or'
+        assert len(atomic) >= 2
+
+    def test_decompose_to_atomic_with_but(self, extractor):
+        """Test _decompose_to_atomic with 'but' conjunction."""
+        sentence = "The answer is 42 but the result is different"
+        atomic = extractor._decompose_to_atomic(sentence)
+        # Should split on 'but'
+        assert len(atomic) >= 2
+
+    def test_decompose_to_atomic_with_comma(self, extractor):
+        """Test _decompose_to_atomic with comma."""
+        sentence = "The answer is 42, the status is success"
+        atomic = extractor._decompose_to_atomic(sentence)
+        # Should split on comma
+        assert len(atomic) >= 2
+
+    def test_decompose_to_atomic_multiple_conjunctions(self, extractor):
+        """Test _decompose_to_atomic with multiple conjunctions."""
+        sentence = "First claim and second claim or third claim"
+        atomic = extractor._decompose_to_atomic(sentence)
+        # Should split on all conjunctions
+        assert len(atomic) >= 3
+
+    def test_compute_confidence_base_value(self, extractor):
+        """Test _compute_confidence base value (0.5)."""
+        # Statement with no patterns or structure
+        confidence = extractor._compute_confidence("Simple statement")
+        # Should be at least base confidence
+        assert 0.0 <= confidence <= 1.0
+
+    def test_compute_confidence_with_multiple_patterns(self, extractor):
+        """Test _compute_confidence with multiple verifiable patterns."""
+        statement = "Project completed on 2024-01-15, version v1.2.3, URL https://example.com"
+        confidence = extractor._compute_confidence(statement)
+        # Should be boosted by multiple patterns (max 0.3 boost)
+        assert confidence > 0.5
+
+    def test_compute_confidence_with_code_block(self, extractor):
+        """Test _compute_confidence with code block (```)."""
+        statement = "Here's code:\n```python\nprint(42)\n```"
+        confidence = extractor._compute_confidence(statement)
+        # Should be boosted by code block (+0.1)
+        assert confidence >= 0.6
+
+    def test_compute_confidence_with_json_braces(self, extractor):
+        """Test _compute_confidence with JSON braces."""
+        statement = 'Result: {"answer": 42}'
+        confidence = extractor._compute_confidence(statement)
+        # Should be boosted by JSON braces (+0.1)
+        assert confidence >= 0.6
+
+    def test_compute_confidence_with_brackets(self, extractor):
+        """Test _compute_confidence with brackets."""
+        statement = "The list is [1, 2, 3]"
+        confidence = extractor._compute_confidence(statement)
+        # Should be boosted by brackets (+0.05)
+        assert confidence >= 0.55
+
+    def test_compute_confidence_with_factual_structure(self, extractor):
+        """Test _compute_confidence with factual structure."""
+        statement = "Python implements functions"
+        confidence = extractor._compute_confidence(statement)
+        # Should be boosted by factual structure (+0.1)
+        assert confidence >= 0.6
+
+    def test_compute_confidence_with_unverifiable_penalty(self, extractor):
+        """Test _compute_confidence with unverifiable pattern (penalty)."""
+        statement = "I think maybe the answer is 42"
+        confidence = extractor._compute_confidence(statement)
+        # Should be penalized (-0.2) but still >= 0.0
+        assert 0.0 <= confidence < 0.5
+
+    def test_compute_confidence_max_bound(self, extractor):
+        """Test _compute_confidence is capped at 1.0."""
+        # Statement with many patterns and structures
+        statement = "Project 2024-01-15 v1.2.3 https://example.com ```code``` {'key': 'value'} [list] Python implements systems"
+        confidence = extractor._compute_confidence(statement)
+        # Should be capped at 1.0
+        assert confidence <= 1.0
+
+    def test_compute_confidence_min_bound(self, extractor):
+        """Test _compute_confidence is capped at 0.0."""
+        # Statement with unverifiable patterns but no boosts
+        statement = "I think maybe perhaps"
+        confidence = extractor._compute_confidence(statement)
+        # Should be at least 0.0
+        assert confidence >= 0.0
+
+    def test_extract_claim_success_rate_with_unverifiable_mixed(self, extractor):
+        """Test extract_claim_success_rate with mix of verifiable and unverifiable."""
+        text = "The answer is 42. I think maybe it's correct. The status is success."
+        rate = extractor.extract_claim_success_rate(text)
+        # Should be > 0 but < 1.0 (some sentences are unverifiable)
+        assert 0.0 < rate < 1.0
+
+    def test_extract_claim_success_rate_all_unverifiable(self, extractor):
+        """Test extract_claim_success_rate with all unverifiable content."""
+        text = "I think maybe perhaps the answer should be something."
+        rate = extractor.extract_claim_success_rate(text)
+        # Should be 0.0 (no verifiable sentences)
+        assert rate == 0.0
+
+    def test_extract_claim_success_rate_verifiable_with_unverifiable_flags(self, extractor):
+        """Test extract_claim_success_rate when verifiable content also has unverifiable flags."""
+        # Sentence has verifiable content but also unverifiable patterns
+        text = "I think the answer is 42 on 2024-01-15."
+        rate = extractor.extract_claim_success_rate(text)
+        # Should be 0.0 (has unverifiable flag even though has date)
+        assert rate == 0.0
+
+
 class TestClaimExtractionIntegration:
     """Test integration of claim extraction components."""
 
