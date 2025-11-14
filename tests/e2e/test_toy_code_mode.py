@@ -45,7 +45,7 @@ def test_toy_training_without_code_mode():
     seq_len = 10
     vocab_size = 128
 
-    student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+    student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
     teacher_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
     teacher_targets = teacher_logits.argmax(dim=-1)
     ground_truth = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
@@ -407,26 +407,22 @@ def test_toy_code_mode_with_span_targets():
         weights={"pos": 1.0, "neg": 1.0},
     ).to(device)
 
-    # Create eligible batch metadata
-    batch_meta = {
-        "tool_count": 2,
-        "intermediate_sizes": [15000],
-        "pii_tags_present": False,
-    }
+    # Create eligible batch metadata (must be a list of dicts, one per sample)
+    batch_meta = [
+        {
+            "tool_count": 2,
+            "intermediate_sizes": [15000],
+            "pii_tags_present": False,
+        }
+    ]
 
-    # Convert span targets dict to tensor format (if needed)
-    # For now, pass as dict since CodeModePreferenceLoss accepts Dict[str, torch.Tensor]
-    # The actual implementation may need tensor conversion, but for toy test we verify structure
-    if span_targets_dict["ts_mode_spans"]:
-        # Create a simple tensor representation for testing
-        # In real implementation, this would be token position tensors
-        # For toy test, we just verify span_targets can be passed
-        pass
+    # Convert span targets dict to list format (one per sample)
+    span_targets_list = [span_targets_dict]
 
     # Compute code-mode loss with span targets
     code_mode_loss = code_mode_loss_module(
         student_logits=student_logits,
-        span_targets=span_targets_dict,  # Pass computed span targets
+        span_targets=span_targets_list,  # Pass as list of span target dicts
         batch_meta=batch_meta,
     )
 

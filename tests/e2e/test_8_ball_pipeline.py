@@ -60,6 +60,7 @@ def test_8_ball_pipeline_e2e(temp_dir):
 
     # Step 1: Generate 8-ball KD dataset
     print("\n[Step 1] Generating 8-ball KD dataset...")
+    # Use absolute path - script now respects absolute paths
     result = subprocess.run(
         [
             sys.executable,
@@ -75,7 +76,7 @@ def test_8_ball_pipeline_e2e(temp_dir):
         text=True,
     )
     assert result.returncode == 0, f"Dataset generation failed: {result.stderr}"
-    assert dataset_path.exists(), "Dataset file not created"
+    assert dataset_path.exists(), f"Dataset file not created at {dataset_path}. stderr: {result.stderr}"
     print(f"✅ Dataset created: {dataset_path}")
     print(f"   Output: {result.stdout}")
 

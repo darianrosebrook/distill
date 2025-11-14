@@ -177,4 +177,5 @@ class TestTokenReductionE2E:
         assert "accuracy_vs_time" in curves
 
         # Verify curves show improvement
-        assert len(curves["accuracy_vs_tokens"]["accuracy"]) == len(current_metrics)
+        # EfficiencyCurve is a dataclass with accuracies attribute, not a dict
+        assert len(curves["accuracy_vs_tokens"].accuracies) == len(current_metrics) + 1  # +1 for baseline
