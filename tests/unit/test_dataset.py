@@ -86,37 +86,47 @@ class TestKDDataset:
 
     def test_dataset_with_teacher_logits(self, mock_tokenizer):
         """Test dataset with teacher logits available."""
+        # Reset mock to ensure clean state (fixes flaky test in full suite)
+        mock_auto_tokenizer_class.reset_mock()
         mock_auto_tokenizer_class.from_pretrained.return_value = mock_tokenizer
+        mock_auto_tokenizer_class.from_pretrained.side_effect = None
+        
+        # Patch safe_from_pretrained_tokenizer at the source to ensure it returns our mock
+        from unittest.mock import patch
+        with patch("training.safe_model_loading.safe_from_pretrained_tokenizer", return_value=mock_tokenizer):
+            # Create temp file with teacher logits
+            vocab_size = mock_tokenizer.vocab_size
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
+                test_data = {
+                    "prompt": "Test prompt",
+                    "teacher_text": "Test response",
+                    "teacher_logits": [[0.1] * vocab_size] * 5,  # 5 tokens, vocab_size vocab
+                }
+                f.write(json.dumps(test_data) + "\n")
+                temp_path = Path(f.name)
 
-        # Create temp file with teacher logits
-        vocab_size = mock_tokenizer.vocab_size
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
-            test_data = {
-                "prompt": "Test prompt",
-                "teacher_text": "Test response",
-                "teacher_logits": [[0.1] * vocab_size] * 5,  # 5 tokens, vocab_size vocab
-            }
-            f.write(json.dumps(test_data) + "\n")
-            temp_path = Path(f.name)
+            try:
+                dataset = KDDataset(
+                    jsonl_path=str(temp_path),
+                    tokenizer_path="mock_tokenizer",
+                    max_seq_length=128,
+                    teacher_logits_available=True,
+                )
 
-        try:
-            dataset = KDDataset(
-                jsonl_path=str(temp_path),
-                tokenizer_path="mock_tokenizer",
-                max_seq_length=128,
-                teacher_logits_available=True,
-            )
+                item = dataset[0]
 
-            item = dataset[0]
-
-            assert "teacher_logits" in item
-            assert item["teacher_logits"] is not None
-            assert item["teacher_logits"].dim() == 2, (
-                "teacher_logits should be 2D [seq_len, vocab_size]"
-            )
-        finally:
-            if temp_path.exists():
-                temp_path.unlink()
+                assert "teacher_logits" in item
+                assert item["teacher_logits"] is not None
+                assert item["teacher_logits"].dim() == 2, (
+                    "teacher_logits should be 2D [seq_len, vocab_size]"
+                )
+                # Verify dimensions match expected values
+                assert item["teacher_logits"].size(1) == vocab_size, (
+                    f"vocab_size mismatch: expected {vocab_size}, got {item['teacher_logits'].size(1)}"
+                )
+            finally:
+                if temp_path.exists():
+                    temp_path.unlink()
 
     def test_dataset_truncation(self, mock_tokenizer):
         """Test that dataset truncates sequences to max_seq_length."""
