@@ -709,4 +709,145 @@ class TestInputValidatorAdditional:
         with pytest.raises(ValidationError, match="contains suspicious content"):
             strict_validator.validate_training_example(example_with_suspicious_answer)
 
+    def test_validate_file_path_directory_not_file(self, strict_validator, tmp_path):
+        """Test validate_file_path when path exists but is a directory (not a file) - line 485."""
+        # Create a directory
+        test_dir = tmp_path / "test_dir"
+        test_dir.mkdir()
+        
+        # Directory exists but is not a file, so file size check is skipped
+        result = strict_validator.validate_file_path(test_dir, must_exist=True)
+        assert isinstance(result, str)
+        # Should succeed (directories don't go through file size check)
+
+    def test_validate_file_path_path_is_not_file(self, strict_validator, tmp_path):
+        """Test validate_file_path when path exists but is_file() returns False - line 485."""
+        # Path exists but is not a file - should skip file size check
+        test_dir = tmp_path / "subdir"
+        test_dir.mkdir()
+        
+        result = strict_validator.validate_file_path(test_dir, must_exist=True)
+        assert isinstance(result, str)
+        # Should not raise error for directory (file size check only for files)
+
+    def test_validate_batch_tensor_without_isnan(self, strict_validator):
+        """Test validate_batch with tensor that doesn't have isnan() method - line 423."""
+        # Create a mock tensor-like object without isnan() method
+        class MockTensor:
+            shape = (2, 128)
+            def isnan(self):
+                raise AttributeError("isnan not available")
+        
+        batch = {"input_ids": MockTensor()}
+        # Should not raise error if isnan() is not available
+        result = strict_validator.validate_batch(batch)
+        assert "input_ids" in result
+
+    def test_validate_batch_tensor_without_isinf(self, strict_validator):
+        """Test validate_batch with tensor that doesn't have isinf() method - line 426."""
+        # Create a mock tensor-like object without isinf() method
+        class MockTensor:
+            shape = (2, 128)
+            def isnan(self):
+                return type('MockResult', (), {'any': lambda self: False})()
+            def isinf(self):
+                raise AttributeError("isinf not available")
+        
+        batch = {"input_ids": MockTensor()}
+        # Should not raise error if isinf() is not available
+        result = strict_validator.validate_batch(batch)
+        assert "input_ids" in result
+
+    def test_validate_file_path_relative_to_success(self, strict_validator, tmp_path):
+        """Test validate_file_path when relative_to() succeeds (normal case) - line 468."""
+        # Normal path should succeed relative_to check
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test")
+        
+        result = strict_validator.validate_file_path(test_file, must_exist=True)
+        assert isinstance(result, str)
+        assert Path(result).exists()
+
+    def test_validate_metadata_eligible_for_code_mode(self, strict_validator):
+        """Test validate_metadata with eligible_for_code_mode field - line 388-393."""
+        metadata = {
+            "tool_count": 2,
+            "eligible_for_code_mode": True,
+        }
+        result = strict_validator.validate_metadata(metadata)
+        assert result["eligible_for_code_mode"] is True
+        
+        # Test invalid type
+        invalid_metadata = {"eligible_for_code_mode": "not a boolean"}
+        with pytest.raises(ValidationError, match="must be a boolean"):
+            strict_validator.validate_metadata(invalid_metadata)
+
+    def test_validate_training_example_cot_steps_with_suspicious_content(self, strict_validator):
+        """Test validate_training_example when cot_steps contains suspicious content."""
+        example = {
+            "prompt": "Test prompt",
+            "response": "Test response",
+            "cot_steps": ["Step 1", '<script>alert("xss")</script>'],  # Suspicious content in cot_step
+        }
+        with pytest.raises(ValidationError, match="contains suspicious content"):
+            strict_validator.validate_training_example(example)
+
+    def test_validate_batch_partial_tensor_fields(self, strict_validator):
+        """Test validate_batch with only some tensor fields present."""
+        import torch
+        
+        # Only input_ids present (not labels or attention_mask)
+        batch = {"input_ids": torch.randint(0, 1000, (2, 128))}
+        result = strict_validator.validate_batch(batch)
+        assert "input_ids" in result
+        assert "labels" not in result
+        assert "attention_mask" not in result
+
+    def test_validate_batch_all_tensor_fields(self, strict_validator):
+        """Test validate_batch with all tensor fields present."""
+        import torch
+        
+        batch = {
+            "input_ids": torch.randint(0, 1000, (2, 128)),
+            "labels": torch.randint(0, 1000, (2, 128)),
+            "attention_mask": torch.ones(2, 128, dtype=torch.bool),
+        }
+        result = strict_validator.validate_batch(batch)
+        assert "input_ids" in result
+        assert "labels" in result
+        assert "attention_mask" in result
+
+    def test_sanitize_json_string_exactly_at_boundary(self, strict_validator):
+        """Test sanitize_json_string at exactly 1000000 character boundary - line 446."""
+        # Exactly at boundary should pass through unchanged
+        exact_boundary = "x" * 1000000
+        result = strict_validator.sanitize_json_string(exact_boundary)
+        assert len(result) == 1000000
+        assert result == exact_boundary
+
+    def test_validate_metadata_intermediate_sizes_empty_list(self, strict_validator):
+        """Test validate_metadata with empty intermediate_sizes list."""
+        metadata = {"intermediate_sizes": []}
+        result = strict_validator.validate_metadata(metadata)
+        assert result["intermediate_sizes"] == []
+
+    def test_validate_metadata_intermediate_sizes_multiple(self, strict_validator):
+        """Test validate_metadata with multiple intermediate sizes."""
+        metadata = {"intermediate_sizes": [100, 200, 300]}
+        result = strict_validator.validate_metadata(metadata)
+        assert result["intermediate_sizes"] == [100, 200, 300]
+
+    def test_validate_metadata_preserves_unknown_fields(self, strict_validator):
+        """Test that validate_metadata preserves unknown fields - line 366."""
+        metadata = {
+            "tool_count": 2,
+            "unknown_field": "should be preserved",
+            "another_unknown": 42,
+        }
+        result = strict_validator.validate_metadata(metadata)
+        assert "unknown_field" in result
+        assert "another_unknown" in result
+        assert result["unknown_field"] == "should be preserved"
+        assert result["another_unknown"] == 42
+
 
