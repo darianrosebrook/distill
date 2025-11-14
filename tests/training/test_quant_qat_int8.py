@@ -8,6 +8,7 @@ Tests min-max observers, fake quantization, quantized layers, and model quantiza
 import pytest
 import torch
 import torch.nn as nn
+from unittest.mock import patch
 from training.quant_qat_int8 import (
     MinMaxObserver,
     FakeQuantize,
@@ -526,4 +527,5 @@ class TestQuantizationIntegration:
         result = quantized(x)
 
         assert result.shape == (2, 10, 512)
+
 
