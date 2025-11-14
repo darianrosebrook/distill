@@ -108,6 +108,73 @@ class TestHeuristicQualityScore:
         score = compute_heuristic_quality_score(teacher_output, prompt=prompt)
         assert score > 0.6  # Should be higher due to relevant code response
 
+    def test_compute_heuristic_quality_score_word_count_50_to_500(self):
+        """Test scoring with word count in optimal range (50-500) - line 58."""
+        # Create text with ~100 words (in optimal range)
+        text = "word " * 100
+        score = compute_heuristic_quality_score(text)
+        # Should be boosted by +0.15 for optimal length
+        assert score >= 0.5
+
+    def test_compute_heuristic_quality_score_word_count_20_to_50(self):
+        """Test scoring with word count in acceptable range (20-50) - line 60."""
+        # Create text with ~30 words (in acceptable range)
+        text = "word " * 30
+        score = compute_heuristic_quality_score(text)
+        # Should be boosted by +0.05 for acceptable length
+        assert score >= 0.5
+
+    def test_compute_heuristic_quality_score_unique_ratio_high(self):
+        """Test scoring with high unique word ratio (>0.7) - line 74."""
+        # Text with high diversity (unique ratio > 0.7)
+        text = "python implements functions databases systems processes returns values"
+        score = compute_heuristic_quality_score(text)
+        # Should be boosted by +0.05 for good diversity
+        assert score >= 0.0
+
+    def test_compute_heuristic_quality_score_unique_ratio_low(self):
+        """Test scoring with low unique word ratio (<0.3) - line 72."""
+        # Very repetitive text (unique ratio < 0.3)
+        text = "word word word word word word word word word word word word word"
+        score = compute_heuristic_quality_score(text)
+        # Should be penalized by -0.2 for being too repetitive
+        assert score < 0.5
+
+    def test_compute_heuristic_quality_score_bounds_clamping(self):
+        """Test that score is clamped between 0.0 and 1.0 - line 117."""
+        # Create text that would push score above 1.0 or below 0.0
+        # Very high quality with all features
+        high_quality = "word " * 100 + "```python\ncode\n```" + '{"json": true}' + "## markdown"
+        score = compute_heuristic_quality_score(high_quality)
+        assert score <= 1.0
+
+        # Very low quality (repetitive, errors, too short)
+        low_quality = "word word word word word word undefined error exception failed cannot"
+        score = compute_heuristic_quality_score(low_quality)
+        assert score >= 0.0
+
+    def test_compute_heuristic_quality_score_ground_truth_empty(self):
+        """Test scoring with empty ground truth."""
+        teacher_output = "The answer is 42"
+        score = compute_heuristic_quality_score(teacher_output, ground_truth="")
+        # Should handle empty ground truth gracefully
+        assert score >= 0.0
+
+    def test_compute_heuristic_quality_score_prompt_empty(self):
+        """Test scoring with empty prompt."""
+        teacher_output = "The answer is 42"
+        score = compute_heuristic_quality_score(teacher_output, prompt="")
+        # Should handle empty prompt gracefully (no keyword coverage)
+        assert score >= 0.0
+
+    def test_compute_heuristic_quality_score_ground_truth_full_overlap(self):
+        """Test scoring with full word overlap with ground truth."""
+        teacher_output = "The answer is 42"
+        ground_truth = "The answer is 42"
+        score = compute_heuristic_quality_score(teacher_output, ground_truth)
+        # Should boost score with full overlap
+        assert score > 0.5
+
 
 class TestJSONValidityScore:
     """Test JSON validity scoring functionality."""
@@ -180,6 +247,28 @@ class TestJSONValidityScore:
     def test_compute_json_validity_score_empty_text(self):
         """Test scoring with empty text."""
         score = compute_json_validity_score("")
+        assert score == 0.0
+
+    def test_compute_json_validity_score_mixed_valid_invalid(self):
+        """Test scoring with mix of valid and invalid JSON - line 151."""
+        # Text with both valid and invalid JSON
+        text = 'Valid: {"key": "value"} Invalid: {"broken": "json"'
+        score = compute_json_validity_score(text)
+        # Should return ratio of valid to total matches
+        assert 0.0 < score < 1.0
+
+    def test_compute_json_validity_score_multiple_valid_json(self):
+        """Test scoring with multiple valid JSON objects."""
+        text = 'First: {"a": 1} Second: {"b": 2} Third: {"c": 3}'
+        score = compute_json_validity_score(text)
+        # All valid, should be 1.0
+        assert score == 1.0
+
+    def test_compute_json_validity_score_multiple_invalid_json(self):
+        """Test scoring with multiple invalid JSON objects."""
+        text = 'First: {"a": 1 Second: {"b": 2 Third: {"c": 3'
+        score = compute_json_validity_score(text)
+        # All invalid, should be 0.0
         assert score == 0.0
 
 
@@ -282,6 +371,63 @@ x = 1
         # Should be penalized for being too short
         assert score < 0.8
 
+    def test_compute_code_block_score_no_language(self):
+        """Test scoring with code block without language specification - line 175-176."""
+        # Code block without language
+        code_no_lang = """```
+def function():
+    return 42
+```"""
+        score = compute_code_block_score(code_no_lang)
+        # Should be lower without language specification
+        assert score >= 0.0
+
+    def test_compute_code_block_score_optimal_length(self):
+        """Test scoring with code block in optimal length range (5-100 lines) - line 182."""
+        # Code block with ~10 lines (optimal range)
+        optimal_code = """```python
+def fibonacci(n):
+    if n <= 1:
+        return n
+    return fibonacci(n-1) + fibonacci(n-2)
+
+result = fibonacci(10)
+print(result)
+# More lines to reach optimal range
+x = 1
+y = 2
+z = 3
+```"""
+        score = compute_code_block_score(optimal_code)
+        # Should be boosted for optimal length
+        assert score >= 0.6
+
+    def test_compute_code_block_score_very_long_code(self):
+        """Test scoring with very long code block (>100 lines)."""
+        # Create very long code block
+        long_code = """```python
+""" + "\n".join([f"x{i} = {i}" for i in range(150)]) + "\n```"
+        score = compute_code_block_score(long_code)
+        # Should not be boosted for very long code (outside optimal range)
+        assert score >= 0.0
+        assert score <= 1.0
+
+    def test_compute_code_block_score_multiple_blocks_averaging(self):
+        """Test that score is averaged across multiple blocks - line 187."""
+        # Multiple code blocks - score should be divided by count
+        multiple_blocks = """```python
+def func1():
+    return 1
+```
+Some text
+```python
+def func2():
+    return 2
+```"""
+        score = compute_code_block_score(multiple_blocks)
+        # Should be averaged across blocks
+        assert 0.0 <= score <= 1.0
+
 
 class TestCompositeQualityScore:
     """Test composite quality scoring functionality."""
@@ -362,6 +508,33 @@ The algorithm returns: {"result": 42, "time_complexity": "O(n)", "space_complexi
         """Test composite scoring with empty text."""
         score = compute_composite_quality_score("")
         assert score == 0.0
+
+    def test_compute_composite_quality_score_zero_total_weight(self):
+        """Test composite scoring with zero total weight - line 233."""
+        text = "Some text"
+        # Custom weights that sum to zero (edge case)
+        zero_weights = {"heuristic": 0.0, "json_validity": 0.0, "code_blocks": 0.0}
+        score = compute_composite_quality_score(text, weights=zero_weights)
+        # Should return 0.0 when total_weight is 0
+        assert score == 0.0
+
+    def test_compute_composite_quality_score_partial_weights(self):
+        """Test composite scoring with partial weights (some metrics missing)."""
+        text = '{"json": true}'
+        # Only specify some weights
+        partial_weights = {"json_validity": 1.0}
+        score = compute_composite_quality_score(text, weights=partial_weights)
+        # Should use only specified weights
+        assert 0.0 <= score <= 1.0
+
+    def test_compute_composite_quality_score_missing_metric_in_scores(self):
+        """Test composite scoring when a metric is missing from scores dict."""
+        text = "Some text"
+        # Weights that don't match all computed scores
+        unusual_weights = {"heuristic": 0.5, "unknown_metric": 0.5}
+        score = compute_composite_quality_score(text, weights=unusual_weights)
+        # Should handle missing metrics gracefully (uses 0.0 for missing)
+        assert 0.0 <= score <= 1.0
 
 
 class TestBatchQualityScoring:
@@ -510,6 +683,33 @@ Result: {"processed": true, "items": 42}""",
 
         assert len(results) == 1
         assert isinstance(results[0], float)
+
+    def test_batch_compute_quality_scores_mismatched_ground_truth_length(self):
+        """Test batch scoring with mismatched ground_truths list length - line 257."""
+        texts = ["Text 1", "Text 2", "Text 3"]
+        ground_truths = ["GT 1", "GT 2"]  # Shorter than texts
+        results = batch_compute_quality_scores(texts, ground_truths=ground_truths)
+        # Should handle gracefully (third text has no ground truth)
+        assert len(results) == 3
+        assert all(isinstance(r, float) for r in results)
+
+    def test_batch_compute_quality_scores_mismatched_prompts_length(self):
+        """Test batch scoring with mismatched prompts list length - line 258."""
+        texts = ["Text 1", "Text 2", "Text 3"]
+        prompts = ["Prompt 1"]  # Shorter than texts
+        results = batch_compute_quality_scores(texts, prompts=prompts)
+        # Should handle gracefully (second and third texts have no prompt)
+        assert len(results) == 3
+        assert all(isinstance(r, float) for r in results)
+
+    def test_batch_compute_quality_scores_longer_ground_truths_than_texts(self):
+        """Test batch scoring when ground_truths is longer than texts."""
+        texts = ["Text 1", "Text 2"]
+        ground_truths = ["GT 1", "GT 2", "GT 3"]  # Longer than texts
+        results = batch_compute_quality_scores(texts, ground_truths=ground_truths)
+        # Should only use first 2 ground truths
+        assert len(results) == 2
+        assert all(isinstance(r, float) for r in results)
 
 
 class TestQualityScoringIntegration:
