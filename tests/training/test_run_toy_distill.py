@@ -6,10 +6,8 @@ and checkpoint saving.
 """
 # @author: @darianrosebrook
 
-import pytest
 import subprocess
-from unittest.mock import Mock, patch, MagicMock
-from pathlib import Path
+from unittest.mock import Mock, patch
 import torch
 import torch.nn as nn
 from training.run_toy_distill import (
@@ -21,7 +19,7 @@ from training.run_toy_distill import (
 class TestGetGitSHA:
     """Test get_git_sha function."""
 
-    @patch("subprocess.run")
+    @patch("training.run_toy_distill.subprocess.run")
     def test_get_git_sha_success(self, mock_run):
         """Test getting git SHA successfully."""
         mock_result = Mock()
@@ -33,7 +31,7 @@ class TestGetGitSHA:
         assert sha == "abc123de"
         assert len(sha) == 8
 
-    @patch("subprocess.run")
+    @patch("training.run_toy_distill.subprocess.run")
     def test_get_git_sha_failure(self, mock_run):
         """Test getting git SHA when git command fails."""
         mock_run.side_effect = subprocess.CalledProcessError(1, "git")
@@ -41,7 +39,7 @@ class TestGetGitSHA:
         sha = get_git_sha()
         assert sha == "unknown"
 
-    @patch("subprocess.run")
+    @patch("training.run_toy_distill.subprocess.run")
     def test_get_git_sha_exception(self, mock_run):
         """Test getting git SHA when exception occurs."""
         mock_run.side_effect = Exception("Git not available")
@@ -49,7 +47,7 @@ class TestGetGitSHA:
         sha = get_git_sha()
         assert sha == "unknown"
 
-    @patch("subprocess.run")
+    @patch("training.run_toy_distill.subprocess.run")
     def test_get_git_sha_shortens(self, mock_run):
         """Test that git SHA is shortened to 8 characters."""
         mock_result = Mock()
@@ -681,4 +679,8 @@ class TestRunToyDistillIntegration:
         assert cfg.n_kv_heads == 2
         assert cfg.d_head == 32
         assert cfg.vocab_size == 512
+
+
+
+
 

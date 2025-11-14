@@ -42,7 +42,7 @@ class TestValidateBudgetAdherence:
 
         result = validate_budget_adherence(change_diff, max_loc=10, max_files=5)
 
-        assert result["within_budget"] == True
+        assert result["within_budget"]
         assert result["lines_added"] == 3
         assert result["lines_removed"] == 1
         assert result["files_changed_count"] == 1
@@ -60,7 +60,7 @@ class TestValidateBudgetAdherence:
 
         result = validate_budget_adherence(change_diff, max_loc=10, max_files=5)
 
-        assert result["within_budget"] == False
+        assert not result["within_budget"]
         assert result["lines_added"] == 50
         assert result["lines_removed"] == 1
         assert result["total_loc"] == 51
@@ -85,7 +85,7 @@ diff --git a/file3.py b/file3.py
 
         result = validate_budget_adherence(change_diff, max_loc=100, max_files=2)
 
-        assert result["within_budget"] == False
+        assert not result["within_budget"]
         assert result["files_changed_count"] == 3
 
     def test_validate_budget_adherence_empty_diff(self):
@@ -94,7 +94,7 @@ diff --git a/file3.py b/file3.py
 
         result = validate_budget_adherence(change_diff, max_loc=10, max_files=5)
 
-        assert result["within_budget"] == True
+        assert result["within_budget"]
         assert result["lines_added"] == 0
         assert result["lines_removed"] == 0
         assert result["files_changed_count"] == 1  # Default when no files detected
@@ -118,7 +118,7 @@ diff --git a/tests/file2.py b/tests/file2.py
 
         result = validate_budget_adherence(change_diff, max_loc=10, max_files=5)
 
-        assert result["within_budget"] == True
+        assert result["within_budget"]
         assert result["lines_added"] == 4
         assert result["lines_removed"] == 1
         assert result["files_changed_count"] == 2
@@ -132,7 +132,7 @@ Binary files differ
 
         result = validate_budget_adherence(change_diff, max_loc=10, max_files=5)
 
-        assert result["within_budget"] == True
+        assert result["within_budget"]
         assert result["files_changed_count"] == 1
         # Binary files don't contribute to line counts
 
@@ -182,10 +182,10 @@ class TestValidateGateIntegrity:
 
         result = validate_gate_integrity(test_results, lint_results, coverage_results)
 
-        assert result["tests_pass"] == True
-        assert result["lint_clean"] == True
-        assert result["coverage_sufficient"] == True
-        assert result["overall_integrity"] == True
+        assert result["tests_pass"]
+        assert result["lint_clean"]
+        assert result["coverage_sufficient"]
+        assert result["overall_integrity"]
 
     def test_validate_gate_integrity_tests_fail(self):
         """Test gate integrity when tests fail."""
@@ -195,8 +195,8 @@ class TestValidateGateIntegrity:
 
         result = validate_gate_integrity(test_results, lint_results, coverage_results)
 
-        assert result["tests_pass"] == False
-        assert result["overall_integrity"] == False
+        assert not result["tests_pass"]
+        assert not result["overall_integrity"]
 
     def test_validate_gate_integrity_lint_fail(self):
         """Test gate integrity when linting fails."""
@@ -206,8 +206,8 @@ class TestValidateGateIntegrity:
 
         result = validate_gate_integrity(test_results, lint_results, coverage_results)
 
-        assert result["lint_clean"] == False
-        assert result["overall_integrity"] == False
+        assert not result["lint_clean"]
+        assert not result["overall_integrity"]
 
     def test_validate_gate_integrity_coverage_fail(self):
         """Test gate integrity when coverage is insufficient."""
@@ -217,8 +217,8 @@ class TestValidateGateIntegrity:
 
         result = validate_gate_integrity(test_results, lint_results, coverage_results)
 
-        assert result["coverage_sufficient"] == False
-        assert result["overall_integrity"] == False
+        assert not result["coverage_sufficient"]
+        assert not result["overall_integrity"]
 
     def test_validate_gate_integrity_missing_fields(self):
         """Test gate integrity with missing result fields."""
@@ -230,7 +230,7 @@ class TestValidateGateIntegrity:
 
         # Should handle missing fields gracefully
         assert "overall_integrity" in result
-        assert result["overall_integrity"] == False
+        assert not result["overall_integrity"]
 
 
 class TestValidateProvenanceClarity:
@@ -244,10 +244,10 @@ class TestValidateProvenanceClarity:
 
         result = validate_provenance_clarity(rationale, evidence, diff_present)
 
-        assert result["rationale_present"] == True
-        assert result["evidence_present"] == True
-        assert result["change_diff_present"] == True
-        assert result["overall_clarity"] == True
+        assert result["rationale_present"]
+        assert result["evidence_present"]
+        assert result["change_diff_present"]
+        assert result["overall_clarity"]
 
     def test_validate_provenance_clarity_missing_rationale(self):
         """Test provenance clarity with missing rationale."""
@@ -257,8 +257,8 @@ class TestValidateProvenanceClarity:
 
         result = validate_provenance_clarity(rationale, evidence, diff_present)
 
-        assert result["rationale_present"] == False
-        assert result["overall_clarity"] == False
+        assert not result["rationale_present"]
+        assert not result["overall_clarity"]
 
     def test_validate_provenance_clarity_missing_evidence(self):
         """Test provenance clarity with missing evidence."""
@@ -268,8 +268,8 @@ class TestValidateProvenanceClarity:
 
         result = validate_provenance_clarity(rationale, evidence, diff_present)
 
-        assert result["evidence_present"] == False
-        assert result["overall_clarity"] == False
+        assert not result["evidence_present"]
+        assert not result["overall_clarity"]
 
     def test_validate_provenance_clarity_no_diff(self):
         """Test provenance clarity with no diff present."""
@@ -279,8 +279,8 @@ class TestValidateProvenanceClarity:
 
         result = validate_provenance_clarity(rationale, evidence, diff_present)
 
-        assert result["change_diff_present"] == False
-        assert result["overall_clarity"] == False
+        assert not result["change_diff_present"]
+        assert not result["overall_clarity"]
 
     def test_validate_provenance_clarity_whitespace_only(self):
         """Test provenance clarity with whitespace-only inputs."""
@@ -290,9 +290,9 @@ class TestValidateProvenanceClarity:
 
         result = validate_provenance_clarity(rationale, evidence, diff_present)
 
-        assert result["rationale_present"] == False
-        assert result["evidence_present"] == False
-        assert result["overall_clarity"] == False
+        assert not result["rationale_present"]
+        assert not result["evidence_present"]
+        assert not result["overall_clarity"]
 
 
 class TestEvaluateCawsCompliance:
@@ -323,9 +323,9 @@ class TestEvaluateCawsCompliance:
         )
 
         assert result["verdict"] == "APPROVED"
-        assert result["budget_adherence"]["within_budget"] == True
-        assert result["gate_integrity"]["overall_integrity"] == True
-        assert result["provenance_clarity"]["overall_clarity"] == True
+        assert result["budget_adherence"]["within_budget"]
+        assert result["gate_integrity"]["overall_integrity"]
+        assert result["provenance_clarity"]["overall_clarity"]
 
     @patch("evaluation.caws_eval.validate_budget_adherence")
     @patch("evaluation.caws_eval.validate_gate_integrity")
@@ -493,7 +493,7 @@ class TestHelperFunctions:
 
         assert result is None
 
-    @patch("subprocess.run")
+    @patch("evaluation.caws_eval.subprocess.run")
     def test_run_tests_success(self, mock_run):
         """Test running tests successfully."""
         mock_process = Mock()
@@ -507,7 +507,7 @@ class TestHelperFunctions:
         assert result["failed"] == 0
         assert result["skipped"] == 5
 
-    @patch("subprocess.run")
+    @patch("evaluation.caws_eval.subprocess.run")
     def test_run_tests_failure(self, mock_run):
         """Test running tests when they fail."""
         mock_process = Mock()
@@ -520,7 +520,7 @@ class TestHelperFunctions:
         assert result["passed"] == 140
         assert result["failed"] == 10
 
-    @patch("subprocess.run")
+    @patch("evaluation.caws_eval.subprocess.run")
     def test_run_linter_success(self, mock_run):
         """Test running linter successfully."""
         mock_process = Mock()
@@ -533,7 +533,7 @@ class TestHelperFunctions:
         assert result["errors"] == 0
         assert result["warnings"] == 2
 
-    @patch("subprocess.run")
+    @patch("evaluation.caws_eval.subprocess.run")
     def test_run_coverage_success(self, mock_run):
         """Test running coverage successfully."""
         mock_process = Mock()
@@ -584,7 +584,6 @@ class TestMainFunction:
         }
 
         # Mock typer context - main() will call sys.exit(0) on success
-        import typer
 
         with pytest.raises(SystemExit) as exc_info:
             main(
@@ -654,9 +653,9 @@ class TestCawsEvalIntegration:
 
         # Should pass all checks
         assert result["verdict"] == "APPROVED"
-        assert result["budget_adherence"]["within_budget"] == True
-        assert result["gate_integrity"]["overall_integrity"] == True
-        assert result["provenance_clarity"]["overall_clarity"] == True
+        assert result["budget_adherence"]["within_budget"]
+        assert result["gate_integrity"]["overall_integrity"]
+        assert result["provenance_clarity"]["overall_clarity"]
 
     def test_caws_evaluation_with_violations(self):
         """Test CAWS evaluation that fails checks."""
@@ -681,15 +680,15 @@ class TestCawsEvalIntegration:
 
         # Should fail all checks
         assert result["verdict"] == "REJECTED"
-        assert result["budget_adherence"]["within_budget"] == False
-        assert result["gate_integrity"]["overall_integrity"] == False
-        assert result["provenance_clarity"]["overall_clarity"] == False
+        assert not result["budget_adherence"]["within_budget"]
+        assert not result["gate_integrity"]["overall_integrity"]
+        assert not result["provenance_clarity"]["overall_clarity"]
 
     def test_budget_adherence_edge_cases(self):
         """Test budget adherence with various edge cases."""
         # Empty diff
         result = validate_budget_adherence("", 100, 5)
-        assert result["within_budget"] == True
+        assert result["within_budget"]
 
         # Only file additions/deletions
         diff_only_files = """diff --git a/new_file.py b/new_file.py
@@ -715,12 +714,12 @@ rename to new_name.py
         coverage_results = {"line_percent": 80.0, "branch_percent": 90.0}
 
         result = validate_gate_integrity(test_results, lint_results, coverage_results)
-        assert result["overall_integrity"] == True
+        assert result["overall_integrity"]
 
         # Just below threshold
         coverage_results["line_percent"] = 79.9
         result = validate_gate_integrity(test_results, lint_results, coverage_results)
-        assert result["overall_integrity"] == False
+        assert not result["overall_integrity"]
 
     def test_provenance_clarity_validation(self):
         """Test provenance clarity with various input scenarios."""
@@ -728,15 +727,15 @@ rename to new_name.py
         result = validate_provenance_clarity(
             "Fixing bug in auth system", "Added test case, verified fix works", True
         )
-        assert result["overall_clarity"] == True
+        assert result["overall_clarity"]
 
         # Only whitespace
         result = validate_provenance_clarity("   \n\t  ", "  ", True)
-        assert result["overall_clarity"] == False
+        assert not result["overall_clarity"]
 
         # Very short inputs
         result = validate_provenance_clarity("ok", "done", True)
-        assert result["overall_clarity"] == True  # Short but present
+        assert result["overall_clarity"]  # Short but present
 
     def test_validate_budget_adherence_inferred_removals_special_case(self):
         """Test validate_budget_adherence infers removals for @@ -1,1 +1,6 @@ case."""
@@ -841,8 +840,8 @@ deleted file mode 100644
         coverage_results = {"meets_threshold": True}
         
         result = validate_gate_integrity(test_results, lint_results, coverage_results)
-        assert result["tests_pass"] == True
-        assert result["overall_integrity"] == True
+        assert result["tests_pass"]
+        assert result["overall_integrity"]
 
     def test_validate_gate_integrity_custom_coverage_threshold(self):
         """Test validate_gate_integrity with custom coverage threshold."""
@@ -851,7 +850,7 @@ deleted file mode 100644
         coverage_results = {"line_percent": 75.0, "threshold": 70.0}  # Custom threshold
         
         result = validate_gate_integrity(test_results, lint_results, coverage_results)
-        assert result["coverage_sufficient"] == True  # 75% >= 70%
+        assert result["coverage_sufficient"]  # 75% >= 70%
 
     def test_validate_gate_integrity_no_passed_tests(self):
         """Test validate_gate_integrity when no tests passed."""
@@ -860,14 +859,14 @@ deleted file mode 100644
         coverage_results = {"line_percent": 85.0}
         
         result = validate_gate_integrity(test_results, lint_results, coverage_results)
-        assert result["tests_pass"] == False  # Need at least 1 passed test
+        assert not result["tests_pass"]  # Need at least 1 passed test
 
     def test_validate_provenance_clarity_none_values(self):
         """Test validate_provenance_clarity with None values."""
         result = validate_provenance_clarity(None, None, None)
-        assert result["rationale_present"] == False
-        assert result["evidence_present"] == False
-        assert result["change_diff_present"] == False
+        assert not result["rationale_present"]
+        assert not result["evidence_present"]
+        assert not result["change_diff_present"]
 
     def test_validate_provenance_clarity_long_inputs(self):
         """Test validate_provenance_clarity with very long inputs."""
@@ -875,9 +874,9 @@ deleted file mode 100644
         long_evidence = "Evidence " * 100
         
         result = validate_provenance_clarity(long_rationale, long_evidence, True)
-        assert result["rationale_present"] == True
-        assert result["evidence_present"] == True
-        assert result["overall_clarity"] == True
+        assert result["rationale_present"]
+        assert result["evidence_present"]
+        assert result["overall_clarity"]
 
     def test_evaluate_caws_compliance_partial_failure(self):
         """Test evaluate_caws_compliance with partial failures."""
@@ -898,7 +897,7 @@ deleted file mode 100644
         # Should still pass if only warnings (not errors)
         assert result["verdict"] == "APPROVED" or result["verdict"] == "WAIVER_REQUIRED"
 
-    @patch("subprocess.run")
+    @patch("evaluation.caws_eval.subprocess.run")
     def test_run_tests_invalid_json(self, mock_run):
         """Test _run_tests with invalid JSON output."""
         mock_process = Mock()
@@ -910,7 +909,7 @@ deleted file mode 100644
         # Should handle invalid JSON gracefully
         assert isinstance(result, dict)
 
-    @patch("subprocess.run")
+    @patch("evaluation.caws_eval.subprocess.run")
     def test_run_linter_exception(self, mock_run):
         """Test _run_linter when subprocess fails."""
         mock_run.side_effect = Exception("Subprocess error")
@@ -924,7 +923,7 @@ deleted file mode 100644
             # If exception is raised, that's also acceptable behavior
             pass
 
-    @patch("subprocess.run")
+    @patch("evaluation.caws_eval.subprocess.run")
     def test_run_coverage_no_output(self, mock_run):
         """Test _run_coverage with no stdout."""
         mock_process = Mock()
