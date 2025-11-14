@@ -184,7 +184,7 @@ def load_cache(cache_dir: Path, prompt: str) -> Optional[Dict[str, Any]]:
     if not cache_dir.exists():
         return None
 
-    prompt_hash = hashlib.md5(prompt.encode()).hexdigest()
+    prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()
     cache_file = cache_dir / f"{prompt_hash}.json"
 
     if cache_file.exists():
@@ -221,7 +221,7 @@ def save_cache(cache_dir: Path, prompt: str, result: Dict[str, Any]):
     """Save result to cache with atomic write."""
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    prompt_hash = hashlib.md5(prompt.encode()).hexdigest()
+    prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()
     cache_file = cache_dir / f"{prompt_hash}.json"
     temp_file = cache_file.with_suffix(".tmp")
 

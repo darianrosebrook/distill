@@ -31,7 +31,7 @@ def load_cache(cache_dir: Path, prompt: str) -> Optional[Dict[str, Any]]:
     # Hash prompt to filename
     import hashlib
 
-    prompt_hash = hashlib.md5(prompt.encode()).hexdigest()
+    prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()
     cache_file = cache_dir / f"{prompt_hash}.json"
 
     if cache_file.exists():
@@ -46,7 +46,7 @@ def save_cache(cache_dir: Path, prompt: str, result: Dict[str, Any]):
 
     import hashlib
 
-    prompt_hash = hashlib.md5(prompt.encode()).hexdigest()
+    prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()
     cache_file = cache_dir / f"{prompt_hash}.json"
 
     with open(cache_file, "w") as f:
