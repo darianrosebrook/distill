@@ -180,6 +180,7 @@ class TestPipelinePreservationEvalMain:
             "--coreml-model", "coreml.mlmodel",
             "--tokenizer", "tokenizer",
             "--config", "test.config",
+            "--output-dir", str(tmp_path / "output"),
         ]):
             try:
                 main()
@@ -345,6 +346,7 @@ class TestPipelinePreservationEvalMain:
                 "--tokenizer", "tokenizer",
                 "--config", "test.config",
                 "--eval-questions", str(questions_file),
+                "--output-dir", str(tmp_path / "output"),
             ]),
             patch(
                 "evaluation.pipeline_preservation_eval.evaluate_pytorch_model", return_value=[]),
@@ -531,6 +533,7 @@ class TestPipelinePreservationEvalMain:
             "--pytorch-model", "model.pt",
             "--tokenizer", "tokenizer",
             "--config", "test.config",
+            "--output-dir", str(tmp_path / "output"),
         ]):
             try:
                 main()
@@ -584,6 +587,7 @@ class TestPipelinePreservationEvalMain:
             "--coreml-model", "coreml.mlmodel",
             "--tokenizer", "tokenizer",
             "--config", "test.config",
+            "--output-dir", str(tmp_path / "output"),
         ]):
             try:
                 main()
@@ -632,6 +636,7 @@ class TestPipelinePreservationEvalMain:
             "--pytorch-model", "model.pt",
             "--tokenizer", "tokenizer",
             "--config", "test.config",
+            "--output-dir", str(tmp_path / "output"),
         ]):
             try:
                 main()
@@ -698,6 +703,7 @@ class TestPipelinePreservationEvalIntegration:
             "--coreml-model", "coreml.mlmodel",
             "--tokenizer", "tokenizer",
             "--config", "test.config",
+            "--output-dir", str(tmp_path / "output"),
         ]):
             try:
                 main()

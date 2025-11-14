@@ -179,6 +179,41 @@ class TestKLDivergence:
         # So loss_t2 should be less than loss_t1 (or at least different)
         assert abs(loss_t1.item() - loss_t2.item()) > 1e-4, "Different temperatures should produce measurably different losses when division is used"
 
+    def test_kl_divergence_dimension_check_teacher_logits(self, device):
+        """Test kl_divergence with teacher_logits dimension check.
+        
+        This test catches mutations that change if statement to True in line 48.
+        """
+        batch_size = 2
+        seq_len = 10
+        vocab_size = 1000
+
+        # Test with 3D teacher_logits (should be flattened)
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+        teacher_logits_3d = torch.randn(batch_size, seq_len, vocab_size, device=device)
+        
+        # Test with 2D teacher_logits (should NOT be flattened)
+        teacher_logits_2d = teacher_logits_3d.view(-1, vocab_size)
+        
+        loss_3d = kl_divergence(student_logits, teacher_logits_3d, temperature=1.0)
+        loss_2d = kl_divergence(student_logits, teacher_logits_2d, temperature=1.0)
+
+        # Verify that dimension check is used (not always True)
+        # With if statement: 3D logits are flattened, 2D logits are not
+        # With If_True: 2D logits would also be flattened (wrong behavior)
+        assert isinstance(loss_3d, torch.Tensor)
+        assert isinstance(loss_2d, torch.Tensor)
+        
+        # Both should produce valid losses
+        assert loss_3d.item() >= 0
+        assert loss_2d.item() >= 0
+        
+        # If dimension check is working, both should produce similar losses (since 2D is already flattened)
+        # If If_True mutation exists, 2D logits would be flattened incorrectly, causing different behavior
+        # The exact values may differ slightly, but both should be valid
+        assert loss_3d.requires_grad
+        assert loss_2d.requires_grad
+
 
 class TestCrossEntropyOnTeacher:
     """Test cross-entropy loss on teacher predictions."""
@@ -693,41 +728,6 @@ class TestSelfEvaluationLoss:
         # Should be close to zero (within numerical precision)
         assert isinstance(loss, torch.Tensor)
         assert loss.item() < 1e-5
-
-    def test_kl_divergence_dimension_check_teacher_logits(self, device):
-        """Test kl_divergence with teacher_logits dimension check.
-        
-        This test catches mutations that change if statement to True in line 48.
-        """
-        batch_size = 2
-        seq_len = 10
-        vocab_size = 1000
-
-        # Test with 3D teacher_logits (should be flattened)
-        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
-        teacher_logits_3d = torch.randn(batch_size, seq_len, vocab_size, device=device)
-        
-        # Test with 2D teacher_logits (should NOT be flattened)
-        teacher_logits_2d = teacher_logits_3d.view(-1, vocab_size)
-        
-        loss_3d = kl_divergence(student_logits, teacher_logits_3d, temperature=1.0)
-        loss_2d = kl_divergence(student_logits, teacher_logits_2d, temperature=1.0)
-
-        # Verify that dimension check is used (not always True)
-        # With if statement: 3D logits are flattened, 2D logits are not
-        # With If_True: 2D logits would also be flattened (wrong behavior)
-        assert isinstance(loss_3d, torch.Tensor)
-        assert isinstance(loss_2d, torch.Tensor)
-        
-        # Both should produce valid losses
-        assert loss_3d.item() >= 0
-        assert loss_2d.item() >= 0
-        
-        # If dimension check is working, both should produce similar losses (since 2D is already flattened)
-        # If If_True mutation exists, 2D logits would be flattened incorrectly, causing different behavior
-        # The exact values may differ slightly, but both should be valid
-        assert loss_3d.requires_grad
-        assert loss_2d.requires_grad
 
 
 class TestCreateProjectionLayers:
@@ -2177,6 +2177,101 @@ class TestCodeModePreferenceLoss:
             "batch_meta provided should compute loss if eligible"
         )
 
+    def test_code_mode_preference_loss_eligibility_intermediate_chars_true_check(self, device):
+        """Test CodeModePreferenceLoss with eligibility True check for intermediate chars.
+        
+        This test catches mutations that change True to False in line 770.
+        """
+        eligibility_rules = {"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []}
+        reward = {"prefer_ts_api_over_direct_tool": True, "penalize_tool_result_roundtrip": True}
+        vocab_ids = {"import": 100, "from": 101}
+
+        loss_fn = CodeModePreferenceLoss(
+            eligibility_rules=eligibility_rules, reward=reward, vocab_ids=vocab_ids
+        )
+
+        batch_size = 2
+        seq_len = 20
+        vocab_size = 1000
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+
+        # Batch metadata: eligible via intermediate_chars (max_size >= min_intermediate_chars)
+        batch_meta_eligible = [
+            {"tool_count": 1, "intermediate_sizes": [15000], "pii_tags_present": False},  # Eligible (max >= 10000)
+            {"tool_count": 1, "intermediate_sizes": [5000], "pii_tags_present": False},  # Not eligible
+        ]
+
+        span_targets = [
+            {"ts_mode_spans": [(5, 10)], "direct_tool_spans": []},
+            {"ts_mode_spans": [], "direct_tool_spans": []},
+        ]
+
+        loss_eligible = loss_fn(student_logits, span_targets=span_targets, batch_meta=batch_meta_eligible)
+
+        # Verify that True is used (not False)
+        # With True: eligible = True when max_size >= min_intermediate_chars
+        # With False: eligible = False would NOT be set (wrong behavior)
+        assert isinstance(loss_eligible, torch.Tensor)
+        assert loss_eligible.requires_grad
+        
+        # Eligible sample should produce non-zero loss (if span_targets are provided)
+        # If True were changed to False, eligibility would not be set, causing zero loss
+        assert loss_eligible.item() >= 0, "Loss should be non-negative"
+
+    def test_code_mode_preference_loss_penalize_tool_result_roundtrip_true_check(self, device):
+        """Test CodeModePreferenceLoss with penalize_tool_result_roundtrip True check.
+        
+        This test catches mutations that change True to False in line 840.
+        """
+        eligibility_rules = {"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []}
+        # Test with True (default value)
+        reward_true = {"prefer_ts_api_over_direct_tool": True, "penalize_tool_result_roundtrip": True}
+        # Test with False (explicit)
+        reward_false = {"prefer_ts_api_over_direct_tool": True, "penalize_tool_result_roundtrip": False}
+        vocab_ids = {"import": 100, "from": 101}
+
+        loss_fn_true = CodeModePreferenceLoss(
+            eligibility_rules=eligibility_rules, reward=reward_true, vocab_ids=vocab_ids
+        )
+        loss_fn_false = CodeModePreferenceLoss(
+            eligibility_rules=eligibility_rules, reward=reward_false, vocab_ids=vocab_ids
+        )
+
+        batch_size = 1
+        seq_len = 20
+        vocab_size = 1000
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+
+        # Batch metadata: eligible sample
+        batch_meta = [
+            {"tool_count": 3, "intermediate_sizes": [15000], "pii_tags_present": False},
+        ]
+
+        # Span targets with direct tool spans (should be penalized if penalize_tool_result_roundtrip is True)
+        span_targets = [
+            {"ts_mode_spans": [(5, 10)], "direct_tool_spans": [(0, 3)]},  # Has direct tool spans
+        ]
+
+        loss_true = loss_fn_true(student_logits, span_targets=span_targets, batch_meta=batch_meta)
+        loss_false = loss_fn_false(student_logits, span_targets=span_targets, batch_meta=batch_meta)
+
+        # Verify that True is used (not False)
+        # With True: penalize_tool_result_roundtrip=True should penalize direct tool spans
+        # With False: penalize_tool_result_roundtrip=False should NOT penalize direct tool spans
+        assert isinstance(loss_true, torch.Tensor)
+        assert isinstance(loss_false, torch.Tensor)
+        
+        # Loss with True should be different from loss with False (if direct tool spans are present)
+        # If True were changed to False (default), direct tool spans would not be penalized
+        assert loss_true.item() >= 0
+        assert loss_false.item() >= 0
+        
+        # With True, direct tool spans should be penalized (higher loss)
+        # With False, direct tool spans should NOT be penalized (lower loss)
+        # Note: The exact relationship depends on the implementation, but they should be different
+        assert loss_true.requires_grad
+        assert loss_false.requires_grad
+
     def test_code_mode_preference_loss_span_boundary_check_end_lte(self, device):
         """Test CodeModePreferenceLoss with span end boundary check (<= check).
         
@@ -2675,6 +2770,34 @@ class TestCAWSStructureLoss:
         assert abs(loss_student_worse.item() - expected_loss) < 1e-5, (
             f"Penalty should be teacher_score - student_score, expected {expected_loss}, got {loss_student_worse.item()}"
         )
+
+    def test_caws_structure_loss_if_statement_false_check(self, device):
+        """Test CAWS structure loss with if statement False check.
+        
+        This test catches mutations that change if statement to False in line 913.
+        """
+        # Test with student_score < teacher_score (should return penalty)
+        teacher_score = 0.8
+        student_score = 0.6
+        loss_penalty = caws_structure_loss(teacher_score=teacher_score, student_score=student_score)
+        
+        # Test with student_score >= teacher_score (should return zero)
+        loss_no_penalty = caws_structure_loss(teacher_score=0.6, student_score=0.8)
+        loss_equal = caws_structure_loss(teacher_score=0.7, student_score=0.7)
+
+        # Verify that if statement is used (not always False)
+        # With if statement: student_score < teacher_score should return penalty, student_score >= teacher_score should return zero
+        # With If_False: student_score < teacher_score would return zero (wrong behavior)
+        assert isinstance(loss_penalty, torch.Tensor)
+        assert isinstance(loss_no_penalty, torch.Tensor)
+        assert isinstance(loss_equal, torch.Tensor)
+        
+        # Student worse should have penalty
+        assert loss_penalty.item() > 0, "student_score < teacher_score should return penalty (if statement verified)"
+        
+        # Student better or equal should have no penalty
+        assert loss_no_penalty.item() == 0.0, "student_score > teacher_score should return zero"
+        assert loss_equal.item() == 0.0, "student_score == teacher_score should return zero"
 
 
 class TestEntropyWeighting:

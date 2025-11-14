@@ -1967,20 +1967,31 @@ def train_step(
             # Get model for gradient norm computation (unwrap DDP if needed)
             model_for_grads = model.module if isinstance(model, DDP) else model
 
+            if scaler is not None:
+                scaler.unscale_(optimizer)
+
             # Compute and log gradient norm (every 100 steps)
             if current_step % 100 == 0:
-                if scaler is not None:
-                    scaler.unscale_(optimizer)
-
                 # Compute total gradient norm before clipping
                 total_grad_norm = torch.nn.utils.clip_grad_norm_(
                     model_for_grads.parameters(),
                     float("inf"),  # Don't clip, just measure
                 )
 
-            # Check for gradient imbalance (basic check - total norm vs expected range)
-            # In a full implementation, we'd track per-component norms, but that's expensive
-            grad_norms = {"total": total_grad_norm.item()}
+                # Check for gradient imbalance (basic check - total norm vs expected range)
+                # In a full implementation, we'd track per-component norms, but that's expensive
+                grad_norms = {"total": total_grad_norm.item()}
+                # Note: Per-component gradient norm tracking would require separate backward passes
+                # which is expensive. Total norm tracking is a good start.
+
+                # Add gradient norm to loss dict for logging
+                loss_dict["grad_norm"] = torch.tensor(total_grad_norm.item(), device=device)
+            else:
+                # Still compute gradient norm for clipping, but don't log it
+                total_grad_norm = torch.nn.utils.clip_grad_norm_(
+                    model_for_grads.parameters(),
+                    float("inf"),  # Don't clip, just measure
+                )
             # Note: Per-component gradient norm tracking would require separate backward passes
             # which is expensive. Total norm tracking is a good start.
 
