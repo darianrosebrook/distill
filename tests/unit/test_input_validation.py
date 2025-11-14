@@ -273,6 +273,22 @@ class TestFileValidation:
         with pytest.raises(ValidationError, match="cannot access file"):
             validator.validate_file_path("/some/file.txt")
 
+    @patch("pathlib.Path.stat")
+    def test_validate_file_path_permission_error_on_stat(self, mock_stat, validator, tmp_path):
+        """Test validation fails on permission error when calling stat() (triggers line 495)."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test")
+        
+        # Mock stat() to raise PermissionError when called on existing file
+        def stat_side_effect(*args, **kwargs):
+            # Only raise error when stat is called (file exists check passes)
+            raise PermissionError("Permission denied")
+        
+        mock_stat.side_effect = stat_side_effect
+        
+        with pytest.raises(ValidationError, match="cannot access file"):
+            validator.validate_file_path(str(test_file), must_exist=True)
+
 
 class TestTrainingDataValidation:
     """Test training data validation functions."""
@@ -479,6 +495,13 @@ class TestInputValidatorEdgeCases:
         with pytest.raises(ValidationError, match="must be a dictionary"):
             validator.validate_tool_call(tool_call)
 
+    def test_validate_tool_call_valid(self, validator):
+        """Test validate_tool_call with valid tool call (triggers line 239)."""
+        tool_call = {"name": "test.tool", "arguments": {"param": "value"}}
+        result = validator.validate_tool_call(tool_call)
+        
+        assert result == {"name": "test.tool", "arguments": {"param": "value"}}
+
     def test_validate_tools_not_list(self, validator):
         """Test validate_tools with non-list input."""
         with pytest.raises(ValidationError, match="must be a list"):
@@ -494,6 +517,12 @@ class TestInputValidatorEdgeCases:
         """Test validate_training_example with non-dict input."""
         with pytest.raises(ValidationError, match="must be a dictionary"):
             validator.validate_training_example("not a dict")
+
+    def test_validate_training_example_missing_prompt(self, validator):
+        """Test validate_training_example with missing prompt field (triggers line 302)."""
+        example = {"response": "test"}
+        with pytest.raises(ValidationError, match="missing required field.*prompt"):
+            validator.validate_training_example(example)
 
     def test_validate_training_example_missing_response(self, validator):
         """Test validate_training_example with missing response field."""

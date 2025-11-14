@@ -360,6 +360,20 @@ class TestPostToolDataset:
         assert result["labels"].shape == (2, 20)
         assert result["target_texts"] == ["Response 1", "Response 2"]
 
+    def test_dataset_with_empty_lines(self, post_tool_data, mock_tokenizer, tmp_path):
+        """Test post-tool dataset handles empty lines in file."""
+        data_file = tmp_path / "post_tool.jsonl"
+        with open(data_file, "w") as f:
+            f.write("\n")  # Empty line
+            f.write(json.dumps(post_tool_data[0]) + "\n")
+            f.write("\n")  # Another empty line
+            f.write(json.dumps(post_tool_data[0]) + "\n")
+
+        with patch("training.dataset_post_tool.load_tokenizer", return_value=mock_tokenizer):
+            dataset = PostToolDataset(str(data_file), "dummy_path")
+            # Should skip empty lines and only load valid JSON
+            assert len(dataset) == 2
+
 
 class TestToolSelectDataset:
     """Test tool selection dataset functionality."""
@@ -566,6 +580,20 @@ class TestToolSelectDataset:
             assert tool_call["name"] == "test_tool"
             assert tool_call["arguments"]["key"] == "value"
             assert tool_call["arguments"]["number"] == 42
+
+    def test_dataset_with_empty_lines(self, tool_select_data, mock_tokenizer, tmp_path):
+        """Test tool select dataset handles empty lines in file."""
+        data_file = tmp_path / "tool_select.jsonl"
+        with open(data_file, "w") as f:
+            f.write("\n")  # Empty line
+            f.write(json.dumps(tool_select_data[0]) + "\n")
+            f.write("\n")  # Another empty line
+            f.write(json.dumps(tool_select_data[0]) + "\n")
+
+        with patch("training.dataset_tool_select.load_tokenizer", return_value=mock_tokenizer):
+            dataset = ToolSelectDataset(str(data_file), "dummy_path")
+            # Should skip empty lines and only load valid JSON
+            assert len(dataset) == 2
 
 
 class TestDatasetErrorHandling:

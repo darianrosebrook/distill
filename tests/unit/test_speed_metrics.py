@@ -141,6 +141,60 @@ class TestMeasureProxy:
         assert metrics["ttfa_tokens"] == float("inf")
         assert metrics["ttfa_ms"] == float("inf")
 
+    def test_model_without_forward_decode(self, device):
+        """Test measurement with model that doesn't have forward_decode (fallback path)."""
+        # Create a model without forward_decode method
+        class ModelWithoutDecode:
+            def eval(self):
+                pass
+
+            def __call__(self, input_ids, attention_mask=None):
+                time.sleep(0.001)
+                return torch.randn(input_ids.shape[0], input_ids.shape[1], 32000)
+
+        model = ModelWithoutDecode()
+
+        batch = {
+            "input_ids": torch.randint(0, 1000, (1, 10)),
+        }
+
+        mock_tokenizer = Mock()
+        mock_tokenizer.decode = Mock(return_value='{"name": "test_tool"}')
+
+        metrics = measure_proxy(
+            model=model,
+            batch=batch,
+            tokenizer=mock_tokenizer,
+            device=device,
+            max_new_tokens=5,
+        )
+
+        assert "ttft_ms" in metrics
+        assert "tps" in metrics
+        assert metrics["tps"] > 0.0
+
+    def test_tokenizer_decode_exception(self, mock_model, device):
+        """Test TTFA measurement when tokenizer.decode raises exception."""
+        batch = {
+            "input_ids": torch.randint(0, 1000, (1, 10)),
+        }
+
+        # Mock tokenizer that raises exception
+        mock_tokenizer = Mock()
+        mock_tokenizer.decode = Mock(side_effect=Exception("Decode error"))
+
+        metrics = measure_proxy(
+            model=mock_model,
+            batch=batch,
+            tokenizer=mock_tokenizer,
+            device=device,
+            max_new_tokens=10,
+        )
+
+        # Should handle exception gracefully, TTFA should be inf
+        assert metrics["ttfa_tokens"] == float("inf")
+        assert metrics["ttfa_ms"] == float("inf")
+
 
 class TestAggregateSpeedMetrics:
     """Tests for speed metrics aggregation."""
@@ -196,6 +250,23 @@ class TestAggregateSpeedMetrics:
         # Should only aggregate the finite value
         assert result["ttfa_tokens"]["p50"] == 10.0
         assert result["ttfa_ms"]["p50"] == 200.0
+
+    def test_aggregate_all_inf_values(self):
+        """Test aggregation when all values are inf (should return 0.0)."""
+        import numpy as np
+        metrics_list = [
+            {"ttft_ms": float("inf"), "tps": float("inf"), "ttfa_tokens": float("inf"), "ttfa_ms": float("inf")},
+            {"ttft_ms": float("inf"), "tps": float("inf"), "ttfa_tokens": float("inf"), "ttfa_ms": float("inf")},
+        ]
+
+        result = aggregate_speed_metrics(metrics_list)
+
+        # When all values are inf, pct should return 0.0
+        assert result["ttft_ms"]["p50"] == 0.0
+        assert result["tps"]["p50"] == 0.0
+        # TTFA should still be inf since they're handled separately
+        assert result["ttfa_tokens"]["p50"] == float("inf")
+        assert result["ttfa_ms"]["p50"] == float("inf")
 
 
 class TestIsValidToolJSON:
