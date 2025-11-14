@@ -215,7 +215,7 @@ class TestGreedyArgmax:
         logits = np.array([-0.5, -0.2, -0.8, -0.1])
         result = greedy_argmax(logits)
 
-        assert result == 1  # Index of least negative (highest) value
+        assert result == 3  # Index of least negative (highest) value (-0.1 at index 3)
 
 
 class TestIsValidToolJSON:

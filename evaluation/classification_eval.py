@@ -345,6 +345,25 @@ def compare_predictions(
     l2_drifts = []
     kl_divergences = []
 
+    # Calculate class distribution from candidate predictions
+    class_distribution = None
+    if config is not None and hasattr(config, 'token_ids') and len(config.token_ids) > 0:
+        # Initialize distribution with zeros for each class
+        num_classes = len(config.token_ids)
+        class_distribution = [0] * num_classes
+        
+        # Count predictions per class based on candidate predictions
+        for cand in candidate:
+            class_id = cand.predicted_class_id
+            # Find index of this class_id in config.token_ids
+            try:
+                class_index = config.token_ids.index(class_id)
+                if 0 <= class_index < num_classes:
+                    class_distribution[class_index] += 1
+            except ValueError:
+                # Class ID not in config, skip
+                pass
+
     for ref, cand in zip(reference, candidate):
         # Exact match check
         if ref.predicted_class_id == cand.predicted_class_id:
@@ -366,11 +385,14 @@ def compare_predictions(
             kl = np.sum(ref_probs * np.log(ref_probs / cand_probs))
             kl_divergences.append(kl)
 
+    exact_match_rate = exact_matches / len(reference) if len(reference) > 0 else 0.0
+
     return EvaluationMetrics(
         total_questions=len(reference),
-        exact_match_rate=exact_matches / len(reference),
+        exact_match_rate=exact_match_rate,
         mean_l2_drift=np.mean(l2_drifts) if l2_drifts else None,
         mean_kl_divergence=np.mean(kl_divergences) if kl_divergences else None,
+        class_distribution=class_distribution,
     )
 
 
