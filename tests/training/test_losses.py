@@ -1964,6 +1964,55 @@ class TestCodeModePreferenceLoss:
         assert loss_none.item() >= 0 or loss_none.item() < 0  # Can be positive or negative
         assert loss_provided.item() >= 0 or loss_provided.item() < 0  # Can be positive or negative
 
+    def test_code_mode_preference_loss_batch_meta_is_none_check(self, device):
+        """Test CodeModePreferenceLoss with batch_meta is None check.
+        
+        This test catches mutations that change is None to is not None in line 795.
+        """
+        eligibility_rules = {"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []}
+        reward = {"prefer_ts_api_over_direct_tool": True, "penalize_tool_result_roundtrip": True}
+        vocab_ids = {"import": 100, "from": 101}
+
+        loss_fn = CodeModePreferenceLoss(
+            eligibility_rules=eligibility_rules, reward=reward, vocab_ids=vocab_ids
+        )
+
+        batch_size = 1
+        seq_len = 20
+        vocab_size = 1000
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+
+        # Test with batch_meta=None (should return zero loss)
+        loss_none = loss_fn(student_logits, span_targets=None, batch_meta=None)
+        
+        # Test with batch_meta as empty list (should return zero loss)
+        loss_empty = loss_fn(student_logits, span_targets=None, batch_meta=[])
+        
+        # Test with batch_meta provided (should compute loss if eligible)
+        batch_meta = [
+            {"tool_count": 3, "intermediate_sizes": [15000], "pii_tags_present": False},
+        ]
+        span_targets = [
+            {"ts_mode_spans": [(5, 10)], "direct_tool_spans": []},
+        ]
+        loss_provided = loss_fn(student_logits, span_targets=span_targets, batch_meta=batch_meta)
+
+        # Verify that is None is used (not is not None)
+        # With is None: batch_meta is None should return zero loss
+        # With is not None: batch_meta is None would NOT return zero loss (wrong behavior)
+        assert isinstance(loss_none, torch.Tensor)
+        assert isinstance(loss_empty, torch.Tensor)
+        assert isinstance(loss_provided, torch.Tensor)
+        
+        # None and empty should return zero loss
+        assert loss_none.item() == 0.0, "batch_meta is None should return zero loss"
+        assert loss_empty.item() == 0.0, "batch_meta is [] should return zero loss"
+        
+        # Provided should return non-zero loss (if eligible)
+        assert loss_provided.item() != 0.0 or loss_provided.requires_grad, (
+            "batch_meta provided should compute loss if eligible"
+        )
+
     def test_code_mode_preference_loss_span_boundary_check_end_lte(self, device):
         """Test CodeModePreferenceLoss with span end boundary check (<= check).
         
