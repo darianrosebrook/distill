@@ -234,6 +234,7 @@ class TestPipelinePreservationEvalMain:
             "--ollama-model", "ollama_model",
             "--tokenizer", "tokenizer",
             "--config", "test.config",
+            "--output-dir", str(tmp_path / "output"),
         ]):
             try:
                 main()
@@ -293,6 +294,7 @@ class TestPipelinePreservationEvalMain:
             "--ollama-model", "ollama_model",
             "--tokenizer", "tokenizer",
             "--config", "test.config",
+            "--output-dir", str(tmp_path / "output"),
         ]):
             try:
                 main()

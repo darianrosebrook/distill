@@ -479,8 +479,10 @@ def format_caws_compact(working_spec: Dict[str, Any]) -> str:
     Returns:
         Compact JSON string with minimal CAWS metadata
     """
-    # Extract fields from CAWSContext or dict
-    if isinstance(working_spec, CAWSContext):
+    # Extract fields from CAWSContext (from caws_context.py or prompt_templates.py) or dict
+    # Use duck typing: check for attributes instead of isinstance to handle both CAWSContext classes
+    if hasattr(working_spec, "risk_tier") and hasattr(working_spec, "budget") and hasattr(working_spec, "scope"):
+        # It's a CAWSContext object (from either module)
         tier = working_spec.risk_tier
         max_files = working_spec.budget.get("max_files", 25)
         max_loc = working_spec.budget.get("max_loc", 1000)
@@ -489,6 +491,7 @@ def format_caws_compact(working_spec: Dict[str, Any]) -> str:
         scope_in = working_spec.scope.get("in", [])[:5]  # Limit to 5
         scope_out = working_spec.scope.get("out", [])[:5]
     else:
+        # It's a dict
         tier = working_spec.get("risk_tier", 2)
         budget = working_spec.get("budget", {})
         max_files = budget.get("max_files", 25)
