@@ -735,11 +735,10 @@ class TestInputValidatorAdditional:
         # Create a mock tensor-like object without isnan() method
         class MockTensor:
             shape = (2, 128)
-            def isnan(self):
-                raise AttributeError("isnan not available")
+            # Don't define isnan() - hasattr() check will return False
         
         batch = {"input_ids": MockTensor()}
-        # Should not raise error if isnan() is not available
+        # Should not raise error if isnan() is not available (hasattr check returns False)
         result = strict_validator.validate_batch(batch)
         assert "input_ids" in result
 
@@ -749,12 +748,12 @@ class TestInputValidatorAdditional:
         class MockTensor:
             shape = (2, 128)
             def isnan(self):
+                # Return a mock result object with .any() method
                 return type('MockResult', (), {'any': lambda self: False})()
-            def isinf(self):
-                raise AttributeError("isinf not available")
+            # Don't define isinf() - hasattr() check will return False
         
         batch = {"input_ids": MockTensor()}
-        # Should not raise error if isinf() is not available
+        # Should not raise error if isinf() is not available (hasattr check returns False)
         result = strict_validator.validate_batch(batch)
         assert "input_ids" in result
 
