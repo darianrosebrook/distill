@@ -633,6 +633,7 @@ Examples:
                 import pickle
 
                 with open(args.input_path, "rb") as f:
+                    # nosec B301 - pickle.load() required for ExportedProgram format (see security note above)
                     pytorch_model = pickle.load(f)
                 print(f"[convert_coreml] Loaded ExportedProgram model: {args.input_path}")
             except Exception as e:
