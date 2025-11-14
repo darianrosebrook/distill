@@ -2766,8 +2766,8 @@ class TestErrorHandling:
         from unittest.mock import patch, Mock
 
         mock_tokenizer = Mock()
-        with patch("transformers.AutoTokenizer") as mock_auto:
-            mock_auto.from_pretrained = Mock(return_value=mock_tokenizer)
+        with patch("training.safe_model_loading.safe_from_pretrained_tokenizer") as mock_safe:
+            mock_safe.return_value = mock_tokenizer
             result = load_tokenizer("dummy_path")
             assert result == mock_tokenizer
 
@@ -2801,9 +2801,8 @@ class TestErrorHandling:
         from scripts.extract_process_targets import load_tokenizer
         from unittest.mock import patch, Mock
 
-        Mock()
-        with patch("transformers.AutoTokenizer") as mock_auto:
-            mock_auto.from_pretrained = Mock(side_effect=Exception("Load failed"))
+        with patch("training.safe_model_loading.safe_from_pretrained_tokenizer") as mock_safe:
+            mock_safe.side_effect = Exception("Load failed")
             try:
                 load_tokenizer("dummy_path")
                 assert False, "Should raise RuntimeError"
