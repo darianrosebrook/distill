@@ -21,7 +21,6 @@ from evaluation.classification_eval import (
     evaluate_coreml_model,
     evaluate_ollama_model,
     compare_predictions,
-    PredictionResult,
 )
 import argparse
 
@@ -84,14 +83,16 @@ def main():
         # Try to find default questions for this config
         try:
             # Try to import the module and find a questions function
-            config_parts = args.config.split('.')
-            module_path = '.'.join(config_parts[:-1])
+            config_parts = args.config.split(".")
+            module_path = ".".join(config_parts[:-1])
             spec = __import__("importlib.util").util.find_spec(module_path)
             if spec:
                 module = __import__("importlib.util").util.module_from_spec(spec)
                 spec.loader.exec_module(module)
                 # Look for a questions function
-                questions_func = getattr(module, 'get_eight_ball_questions', None) or getattr(module, f'get_{config.name}_questions', None)
+                questions_func = getattr(module, "get_eight_ball_questions", None) or getattr(
+                    module, f"get_{config.name}_questions", None
+                )
                 if questions_func:
                     questions = questions_func()
                 else:
@@ -101,8 +102,7 @@ def main():
         except Exception:
             # Fallback: create some default questions
             questions = [
-                f"Sample question {i+1} for {config.name} classification?"
-                for i in range(5)
+                f"Sample question {i + 1} for {config.name} classification?" for i in range(5)
             ]
 
     print(f"Loaded {len(questions)} evaluation questions\n")
@@ -142,7 +142,7 @@ def main():
                 f,
                 indent=2,
             )
-        print(f"✅ Saved PyTorch predictions\n")
+        print("✅ Saved PyTorch predictions\n")
 
     # Evaluate CoreML model
     if args.coreml_model:
@@ -177,7 +177,7 @@ def main():
                 f,
                 indent=2,
             )
-        print(f"✅ Saved CoreML predictions\n")
+        print("✅ Saved CoreML predictions\n")
 
     # Evaluate Ollama model
     if args.ollama_model:
@@ -205,7 +205,7 @@ def main():
                 f,
                 indent=2,
             )
-        print(f"✅ Saved Ollama predictions\n")
+        print("✅ Saved Ollama predictions\n")
 
     # Compare results
     if "pytorch" in results:
@@ -218,7 +218,7 @@ def main():
 
         if "coreml" in results:
             metrics = compare_predictions(reference, results["coreml"])
-            print(f"\n📊 PyTorch → CoreML:")
+            print("\n📊 PyTorch → CoreML:")
             print(f"   Exact Match Rate: {metrics.exact_match_rate:.1%}")
             if metrics.mean_l2_drift is not None:
                 print(f"   Mean L2 Drift: {metrics.mean_l2_drift:.6f}")
@@ -233,7 +233,7 @@ def main():
 
         if "ollama" in results:
             metrics_ollama = compare_predictions(reference, results["ollama"])
-            print(f"\n📊 PyTorch → GGUF → Ollama:")
+            print("\n📊 PyTorch → GGUF → Ollama:")
             print(f"   Exact Match Rate: {metrics_ollama.exact_match_rate:.1%}")
             if metrics_ollama.mean_l2_drift is not None:
                 print(f"   Mean L2 Drift: {metrics_ollama.mean_l2_drift:.6f}")

@@ -13,7 +13,6 @@ import re
 from evaluation.toy.eight_ball import (
     EIGHT_BALL_ANSWERS,
     ID_TO_ANSWER,
-    ANSWER_TO_ID,
     EIGHT_BALL_TOKEN_IDS,
 )
 
@@ -41,10 +40,7 @@ BALL_TOKEN_NAMES = [
     "<BALL_VERY_DOUBTFUL>",
 ]
 
-NAME_TO_ANSWER = {
-    name: answer
-    for name, answer in zip(BALL_TOKEN_NAMES, EIGHT_BALL_ANSWERS)
-}
+NAME_TO_ANSWER = {name: answer for name, answer in zip(BALL_TOKEN_NAMES, EIGHT_BALL_ANSWERS)}
 
 
 def format_output(text: str) -> str:
@@ -83,4 +79,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

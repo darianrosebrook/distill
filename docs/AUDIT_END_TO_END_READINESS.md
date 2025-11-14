@@ -8,9 +8,20 @@
 
 ## Executive Summary
 
-This audit verifies readiness for production distillation targeting Apple Silicon M-series MacBook Pros. The pipeline includes teacher data generation, student model training, CoreML conversion, and evaluation.
+This audit verifies implementation completeness for distillation targeting Apple Silicon M-series MacBook Pros. The pipeline includes teacher data generation, student model training, CoreML conversion, and evaluation.
 
-**Overall Status**: ✅ **READY** with minor gaps identified
+**Overall Status**: ⚠️ **IMPLEMENTATION COMPLETE** - Production readiness verification pending
+
+**Critical Note**: According to production readiness criteria, "READY" requires:
+
+- ✅ All tests passing (not yet verified)
+- ✅ Test coverage ≥80% line, ≥90% branch (not yet verified)
+- ✅ Zero linting errors (not yet verified)
+- ✅ No TODOs/PLACEHOLDERs in production code (found 2 PLACEHOLDERs)
+- ✅ Security controls tested (not yet verified)
+- ✅ Actual execution on target hardware (not yet verified)
+
+**Current Status**: Implementation appears complete, but production readiness verification is required before claiming "production-ready".
 
 ---
 
@@ -21,6 +32,7 @@ This audit verifies readiness for production distillation targeting Apple Silico
 ### Implementation Evidence
 
 #### Teacher API Connection
+
 - **Location**: `models/teacher/teacher_client.py`
 - **Model**: `kimi-k2-thinking` (default, configurable)
 - **Features**:
@@ -40,6 +52,7 @@ is_thinking_model = "kimi-k2-thinking" in model_name.lower()
 **Primary Implementation**: `scripts/make_kd_mix_hardened.py`
 
 **Checkpoint System**:
+
 - **CheckpointManager** class manages progress persistence
 - Saves state every N samples (default: 50, configurable via `--checkpoint-interval`)
 - Stores:
@@ -49,6 +62,7 @@ is_thinking_model = "kimi-k2-thinking" in model_name.lower()
   - Timestamps and metadata
 
 **Resume Functionality**:
+
 ```python
 # Resume from checkpoint
 if args.resume and checkpoint_manager:
@@ -61,6 +75,7 @@ if args.resume and checkpoint_manager:
 ```
 
 **Cache System**:
+
 - **TeacherCache** class (`training/teacher_cache.py`) provides response caching
 - SHA-256 hash-based cache keys
 - Version compatibility checking
@@ -68,6 +83,7 @@ if args.resume and checkpoint_manager:
 - Atomic writes for thread safety
 
 **Usage**:
+
 ```bash
 # Generate with checkpointing enabled
 python -m scripts.make_kd_mix_hardened \
@@ -103,23 +119,24 @@ python -m scripts.make_kd_mix_hardened \
 
 ## 2. Student Model Architecture Readiness
 
-### Status: ✅ **READY** (with evidence)
+### Status: ✅ **IMPLEMENTATION COMPLETE** (Production verification pending)
 
 ### Architecture Configurations
 
 #### Available Model Sizes
 
-| Model Size | Config File | d_model | n_layers | n_heads | n_kv_heads | Params (est.) |
-|------------|-------------|---------|----------|---------|------------|---------------|
-| **7B** | `configs/student_7b_gqa.yaml` | 3584 | 32 | 28 | 8 | ~7B |
-| **8B** | `configs/student_8b_gqa.yaml` | 4096 | 32 | 32 | 8 | ~8B |
-| **9B** | `configs/student_9b_gqa.yaml` | 4096 | 36 | 32 | 8 | ~9B |
+| Model Size | Config File                   | d_model | n_layers | n_heads | n_kv_heads | Params (est.) |
+| ---------- | ----------------------------- | ------- | -------- | ------- | ---------- | ------------- |
+| **7B**     | `configs/student_7b_gqa.yaml` | 3584    | 32       | 28      | 8          | ~7B           |
+| **8B**     | `configs/student_8b_gqa.yaml` | 4096    | 32       | 32      | 8          | ~8B           |
+| **9B**     | `configs/student_9b_gqa.yaml` | 4096    | 36       | 32      | 8          | ~9B           |
 
 #### Architecture Implementation
 
 **Core Architecture**: `models/student/architectures/gqa_transformer.py`
 
 **Key Features**:
+
 - Grouped Query Attention (GQA) for KV cache efficiency
 - RMSNorm for normalization
 - SwiGLU activation
@@ -127,6 +144,7 @@ python -m scripts.make_kd_mix_hardened \
 - CoreML-friendly operations (no dynamic control flow)
 
 **Model Configuration**:
+
 ```python
 @dataclass
 class ModelCfg:
@@ -144,26 +162,28 @@ class ModelCfg:
 
 **Location**: `models/student/roles.py`
 
-| Role | Target Size | Context Lengths | Export Shapes |
-|------|-------------|-----------------|---------------|
-| **Worker** | 9B | 4096, 8192, 16384 | 4096, 8192, 16384 |
-| **Judge** | 4B | 512, 1024, 2048 | 512, 1024, 2048 |
-| **Drafter** | 4B | 2048, 4096 | 2048, 4096 |
+| Role        | Target Size | Context Lengths   | Export Shapes     |
+| ----------- | ----------- | ----------------- | ----------------- |
+| **Worker**  | 9B          | 4096, 8192, 16384 | 4096, 8192, 16384 |
+| **Judge**   | 4B          | 512, 1024, 2048   | 512, 1024, 2048   |
+| **Drafter** | 4B          | 2048, 4096        | 2048, 4096        |
 
 #### Memory Budgets
 
 **Location**: `configs/memory_budgets.yaml`
 
 Defines memory budgets for each model size on M1/M2/M3 Max (64GB):
+
 - Model weights (INT8)
 - KV cache per token (FP16)
 - Max concurrent sessions
 - Eviction policies
 
 **Example (7B on M1 Max)**:
+
 ```yaml
 student_7b:
-  model_weights_mb: 7000  # INT8 weights
+  model_weights_mb: 7000 # INT8 weights
   kv_cache_per_token_mb: 0.12
   max_context_length: 4096
   m1_max_64gb:
@@ -200,7 +220,7 @@ student_7b:
 
 ## 3. CoreML/ANE Model Output & Execution
 
-### Status: ✅ **READY** (with verification tests)
+### Status: ✅ **IMPLEMENTATION COMPLETE** (Production verification pending)
 
 ### CoreML Conversion Pipeline
 
@@ -221,6 +241,7 @@ make coreml-worker
 **Location**: `conversion/convert_coreml.py`
 
 **Key Features**:
+
 - PyTorch ExportedProgram → CoreML mlprogram
 - Enumerated shapes support (512/1024/2048/4096)
 - INT8 weights, FP16 activations
@@ -229,6 +250,7 @@ make coreml-worker
 - Output name standardization
 
 **ANE Compatibility Checks**:
+
 ```python
 # Pre-conversion checks: Int64 tensor detection
 int64_issues = detect_int64_tensors_on_attention_paths(pytorch_model)
@@ -241,6 +263,7 @@ if int64_issues:
 **Location**: `coreml/runtime/generate_coreml.py`
 
 **Features**:
+
 - Model loading from .mlpackage
 - Streaming text generation
 - Constrained JSON decoding for tool calls
@@ -248,6 +271,7 @@ if int64_issues:
 - Attention mask handling
 
 **Execution Example**:
+
 ```python
 # Load CoreML model
 model = ct.models.MLModel(mlpackage_path)
@@ -302,17 +326,19 @@ logits = outputs["logits"]
 **Location**: `configs/convert_coreml.yaml`
 
 **ANE-Specific Settings**:
+
 ```yaml
 coreml:
   precision: fp16
   mlprogram: true
-  compute_units: all  # prefer ANE, fall back GPU
-  enumerate_shapes: [512, 1024, 2048, 4096]  # M-series optimized
+  compute_units: all # prefer ANE, fall back GPU
+  enumerate_shapes: [512, 1024, 2048, 4096] # M-series optimized
   allow_low_precision: true
   weight_dequant_strategy: matmul_dequant
 ```
 
 **ANE Monitoring**: `coreml/runtime/ane_monitor.py`
+
 - ANE residency tracking
 - Performance profiling
 - Device placement verification
@@ -338,7 +364,7 @@ coreml:
 
 ## 4. Benchmark Suite Setup
 
-### Status: ✅ **READY** (comprehensive suite exists)
+### Status: ✅ **IMPLEMENTATION COMPLETE** (Production verification pending)
 
 ### Evaluation Harness
 
@@ -347,6 +373,7 @@ coreml:
 **Location**: `eval/` directory
 
 **Components**:
+
 - **Runners**: `eval/runners/` (OpenAI-compatible, HuggingFace local)
 - **Scoring**: `eval/scoring/` (verifier-parity, strict/lax F1)
 - **Tool Broker**: `eval/tool_broker/` (deterministic fixture replay)
@@ -356,12 +383,12 @@ coreml:
 
 **Location**: `eval/HARNESS.md`
 
-| Gate | Metric | Threshold | Action |
-|------|--------|-----------|--------|
-| Integration F1 (lax) | ≥ 0.90 | Pass | |
-| Privacy OK Rate | = 1.0 | Pass | |
-| Control Integration | = 0 | Hard fail | |
-| Fixture Hit-Rate | ≥ 95% | Warn / Fail | |
+| Gate                 | Metric | Threshold   | Action |
+| -------------------- | ------ | ----------- | ------ |
+| Integration F1 (lax) | ≥ 0.90 | Pass        |        |
+| Privacy OK Rate      | = 1.0  | Pass        |        |
+| Control Integration  | = 0    | Hard fail   |        |
+| Fixture Hit-Rate     | ≥ 95%  | Warn / Fail |        |
 
 #### Performance Benchmarks
 
@@ -369,13 +396,14 @@ coreml:
 
 **Targets by Role**:
 
-| Role | P50 Latency | P95 Latency | TPS | Accuracy |
-|------|-------------|-------------|-----|----------|
-| **Worker** | 2000ms | 5000ms | 50 | 85% |
-| **Judge** | 30ms | 50ms | 200 | 90% |
-| **Drafter** | 50ms | 100ms | 500 | 70% |
+| Role        | P50 Latency | P95 Latency | TPS | Accuracy |
+| ----------- | ----------- | ----------- | --- | -------- |
+| **Worker**  | 2000ms      | 5000ms      | 50  | 85%      |
+| **Judge**   | 30ms        | 50ms        | 200 | 90%      |
+| **Drafter** | 50ms        | 100ms       | 500 | 70%      |
 
 **Implementation**:
+
 ```python
 class PerformanceBenchmark:
     def evaluate_latency(self, latencies: List[float]) -> Dict[str, bool]:
@@ -399,12 +427,14 @@ class PerformanceBenchmark:
 #### Reproducibility Features
 
 **Fingerprinting**:
+
 - Dataset SHA-256
 - Tool registry SHA-256
 - Tokenizer fingerprint
 - Model SHA-256
 
 **Deterministic Execution**:
+
 - Fixture replay (no live network calls)
 - Seed control
 - Deterministic tokenization
@@ -412,6 +442,7 @@ class PerformanceBenchmark:
 ### Benchmark Execution
 
 #### Local HuggingFace Model
+
 ```bash
 make eval-runner-local \
   MODEL="/path/to/ckpt" \
@@ -421,6 +452,7 @@ make eval-runner-local \
 ```
 
 #### OpenAI-Compatible Endpoint
+
 ```bash
 make eval-runner-openai \
   MODEL="gpt-4o" \
@@ -430,6 +462,7 @@ make eval-runner-openai \
 ```
 
 #### Performance Evaluation
+
 ```bash
 # Run performance benchmarks
 python evaluation/performance_benchmarks.py \
@@ -460,13 +493,14 @@ python evaluation/performance_benchmarks.py \
 
 ## 5. Toy Model End-to-End Verification
 
-### Status: ✅ **READY** (comprehensive test suite)
+### Status: ✅ **IMPLEMENTATION COMPLETE** (Production verification pending)
 
 ### Toy Model Pipeline
 
 #### Two Toy Models
 
 1. **Toy Baseline Model**
+
    - Purpose: General pipeline validation
    - Tests: Tool span extraction, integration points
    - Command: `make toy-e2e`
@@ -481,6 +515,7 @@ python evaluation/performance_benchmarks.py \
 **Location**: `tests/e2e/test_8_ball_pipeline.py`
 
 **Complete Pipeline**:
+
 1. Dataset generation (`data/make_toy_kd.py`)
 2. Model training (`training/run_toy_distill.py`)
 3. PyTorch export (`conversion/export_pytorch.py`)
@@ -488,6 +523,7 @@ python evaluation/performance_benchmarks.py \
 5. Contract verification (`evaluation/toy_contracts.py`)
 
 **Test Implementation**:
+
 ```python
 def test_8_ball_pipeline_e2e(temp_dir):
     # Step 1: Generate 8-ball KD dataset
@@ -503,6 +539,7 @@ def test_8_ball_pipeline_e2e(temp_dir):
 **Location**: `training/run_toy_distill.py`
 
 **Features**:
+
 - Deterministic teacher logits (stub implementation)
 - Early stopping
 - Learning rate scheduling
@@ -510,6 +547,7 @@ def test_8_ball_pipeline_e2e(temp_dir):
 - 8-ball and binary classifier modes
 
 **Checkpoint Schema**:
+
 ```python
 checkpoint = {
     "model_state_dict": state_dict,
@@ -529,11 +567,13 @@ checkpoint = {
 #### Export & Conversion
 
 **Export**: `conversion/export_pytorch.py`
+
 - TorchScript export with `--toy` flag
 - Enumerated shapes (T64, T128, T256)
 - Contract.json generation
 
 **Conversion**: `conversion/convert_coreml.py`
+
 - PyTorch → CoreML conversion
 - Contract.json validation
 - Shape enumeration support
@@ -541,12 +581,14 @@ checkpoint = {
 #### Verification Tests
 
 **Test Files**:
+
 - `tests/e2e/test_toy_pipeline.py` - Basic pipeline test
 - `tests/e2e/test_8_ball_pipeline.py` - 8-ball specific test
 - `tests/e2e/test_toy_code_mode.py` - Code mode testing
 - `tests/e2e/test_toy_combined_milestones.py` - Combined features
 
 **Quality Gates**:
+
 - ✅ ≥1 enumerated shape compiles and runs end-to-end
 - ✅ No NaN/zero outputs detected
 - ✅ Tool span micro-F1 ≥ 0.20
@@ -556,10 +598,10 @@ checkpoint = {
 
 **Toy Model Performance** (from README):
 
-| Model | TTFT | TPS | Parameters | Training Cost |
-|-------|------|-----|-----------|---------------|
-| **8-ball** | 1.22ms | 1,090 tokens/sec | ~623K | $0.00003 |
-| **Toy Baseline** | ~5-10ms | ~500-800 tokens/sec | ~623K | $0.00003 |
+| Model            | TTFT    | TPS                 | Parameters | Training Cost |
+| ---------------- | ------- | ------------------- | ---------- | ------------- |
+| **8-ball**       | 1.22ms  | 1,090 tokens/sec    | ~623K      | $0.00003      |
+| **Toy Baseline** | ~5-10ms | ~500-800 tokens/sec | ~623K      | $0.00003      |
 
 ### Verification Checklist
 
@@ -581,23 +623,66 @@ checkpoint = {
 
 ---
 
-## Overall Readiness Assessment
+## Production Readiness Verification Status
 
 ### Summary by Area
 
-| Area | Status | Confidence | Notes |
-|------|--------|------------|-------|
-| **1. Teacher Connection** | ✅ READY | High | Checkpoint/resume fully implemented |
-| **2. Student Architecture** | ✅ READY | High | Configs exist, minor gaps (3B/4B) |
-| **3. CoreML/ANE** | ✅ READY | High | Conversion and execution verified |
-| **4. Benchmark Suite** | ✅ READY | High | Comprehensive suite exists |
-| **5. Toy Models** | ✅ READY | High | Full E2E tests passing |
+| Area                        | Implementation | Production Verification | Notes                                                      |
+| --------------------------- | -------------- | ----------------------- | ---------------------------------------------------------- |
+| **1. Teacher Connection**   | ✅ Complete    | ⚠️ Pending              | Checkpoint/resume implemented, tests not verified          |
+| **2. Student Architecture** | ✅ Complete    | ⚠️ Pending              | Configs exist, coverage not verified                       |
+| **3. CoreML/ANE**           | ✅ Complete    | ⚠️ Pending              | Conversion code exists, execution not verified on hardware |
+| **4. Benchmark Suite**      | ✅ Complete    | ⚠️ Pending              | Suite exists, not verified passing                         |
+| **5. Toy Models**           | ✅ Complete    | ⚠️ Pending              | Tests exist, not verified passing                          |
+
+### Production Readiness Gaps
+
+**Required Verification (Not Yet Completed)**:
+
+1. **Test Execution**:
+
+   - [ ] Run full test suite: `pytest tests/ -v`
+   - [ ] Verify all tests pass (no skipped/failed tests)
+   - [ ] Check for test failures or errors
+
+2. **Test Coverage**:
+
+   - [ ] Run coverage: `pytest --cov=. --cov-report=term-missing`
+   - [ ] Verify ≥80% line coverage
+   - [ ] Verify ≥90% branch coverage
+   - [ ] Document coverage gaps
+
+3. **Code Quality**:
+
+   - [ ] Run linters: `pylint` or `ruff check`
+   - [ ] Verify zero linting errors
+   - [ ] Check for TODOs/PLACEHOLDERs in production code
+   - **Found**: 2 PLACEHOLDERs in `training/losses.py` and `training/examples_priority3_integration.py`
+
+4. **Security**:
+
+   - [ ] Run security scans (SAST, dependency scanning)
+   - [ ] Verify no security vulnerabilities
+   - [ ] Test authentication/authorization controls
+
+5. **Hardware Verification**:
+
+   - [ ] Execute CoreML models on M1 Max hardware
+   - [ ] Verify ANE residency >90%
+   - [ ] Measure actual latency/throughput
+   - [ ] Verify memory budgets on real hardware
+
+6. **Documentation Accuracy**:
+   - [ ] Verify all documented features exist in code
+   - [ ] Verify API documentation matches implementation
+   - [ ] Verify deployment docs are accurate
 
 ### Critical Path Verification
 
 **Recommended Verification Steps**:
 
 1. **Teacher Data Generation**:
+
    ```bash
    # Test checkpoint/resume
    python -m scripts.make_kd_mix_hardened \
@@ -610,18 +695,21 @@ checkpoint = {
    ```
 
 2. **Student Model Training**:
+
    ```bash
    # Verify 9B config loads correctly
    python -c "from training.distill_kd import create_model; import yaml; cfg = yaml.safe_load(open('configs/student_9b_gqa.yaml')); print('Config valid')"
    ```
 
 3. **CoreML Conversion**:
+
    ```bash
    # Run toy E2E to verify conversion
    make toy-e2e
    ```
 
 4. **Benchmark Execution**:
+
    ```bash
    # Run evaluation harness
    make eval-runner-local MODEL=/path/to/model IN=data/test.jsonl
@@ -636,16 +724,19 @@ checkpoint = {
 ### Action Items
 
 **High Priority**:
+
 1. Create explicit 3B/4B config files if needed
 2. Add ANE residency verification test
 3. Add CI/CD integration for toy tests
 
 **Medium Priority**:
+
 1. Add checkpoint validation (checksums)
 2. Add performance regression detection
 3. Add CoreML-specific performance benchmarks
 
 **Low Priority**:
+
 1. Improve error messages for conversion failures
 2. Add troubleshooting documentation
 3. Add cache migration documentation
@@ -654,22 +745,70 @@ checkpoint = {
 
 ## Conclusion
 
-The distillation pipeline is **READY** for production use on Apple Silicon M-series hardware. All critical components are implemented and verified:
+The distillation pipeline **implementation appears complete** for Apple Silicon M-series hardware. All critical components are implemented:
 
 - ✅ Teacher API connection with robust checkpoint/resume
 - ✅ Student model architectures for all target sizes
-- ✅ CoreML conversion and execution verified
-- ✅ Comprehensive benchmark suite
-- ✅ Toy models validate end-to-end pipeline
+- ✅ CoreML conversion code implemented
+- ✅ Comprehensive benchmark suite exists
+- ✅ Toy models with end-to-end tests
 
-Minor gaps identified are non-blocking and can be addressed incrementally. The system is ready for large-scale distillation from the Kimi K2 Thinking API.
+**However, production readiness verification is required** before claiming "production-ready":
+
+### Required Before Production Claim
+
+1. **Test Verification**:
+
+   ```bash
+   # Run full test suite
+   pytest tests/ -v
+
+   # Check coverage
+   pytest --cov=. --cov-report=term-missing
+   ```
+
+2. **Code Quality Verification**:
+
+   ```bash
+   # Run linters
+   ruff check .  # or pylint
+
+   # Check for TODOs/PLACEHOLDERs
+   grep -r "TODO\|PLACEHOLDER\|MOCK_DATA" training/ scripts/ conversion/ --exclude-dir=__pycache__
+   ```
+
+3. **Hardware Verification**:
+
+   - Execute CoreML models on actual M1 Max
+   - Measure ANE residency
+   - Verify performance targets
+
+4. **Security Verification**:
+   - Run security scans
+   - Verify authentication/authorization
+
+### Current Status Assessment
+
+**Implementation**: ✅ Complete  
+**Production Readiness**: ⚠️ Pending Verification
+
+According to production readiness criteria, we cannot claim "production-ready" until:
+
+- All tests pass
+- Coverage thresholds met
+- Zero linting errors
+- No TODOs/PLACEHOLDERs in production code
+- Security controls verified
+- Actual hardware execution verified
 
 ---
 
-**Next Steps**:
-1. Run verification steps above on M1 Max hardware
-2. Generate initial dataset with checkpoint/resume testing
-3. Train first student model (start with 7B or 9B)
-4. Convert to CoreML and verify ANE execution
-5. Run benchmark suite for baseline metrics
+**Next Steps** (In Order of Priority):
 
+1. **Immediate**: Run test suite and verify all tests pass
+2. **Immediate**: Check test coverage and document gaps
+3. **Immediate**: Run linters and fix any errors
+4. **Immediate**: Address PLACEHOLDERs in production code
+5. **Before Production**: Execute on M1 Max hardware and verify performance
+6. **Before Production**: Run security scans
+7. **Before Production**: Verify documentation accuracy

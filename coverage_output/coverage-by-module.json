@@ -1,0 +1,588 @@
+{
+  "timestamp": "2025-11-13T16:26:17.397344",
+  "line_coverage_percent": 24.055360281195078,
+  "line_covered": 2190,
+  "line_total": 9104,
+  "line_missing": 6914,
+  "branch_coverage_percent": 0.0,
+  "branch_covered": 0,
+  "branch_total": 0,
+  "branch_missing": 0,
+  "module_coverage": {
+    "conversion/convert_coreml.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 315,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "conversion/export_onnx.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 70,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "conversion/export_pytorch.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 152,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "conversion/judge_export_coreml.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 36,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "conversion/judge_export_onnx.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 43,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "conversion/make_toy_block.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 74,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "conversion/make_toy_onnx.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 35,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "conversion/make_toy_torch.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 55,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "conversion/onnx_surgery.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 116,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "conversion/shape_validator.py": {
+      "line_percent": 56.666666666666664,
+      "line_covered": 34,
+      "line_total": 60,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "conversion/validators.py": {
+      "line_percent": 100.0,
+      "line_covered": 0,
+      "line_total": 0,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "evaluation/8ball_eval.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 181,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "evaluation/caws_eval.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 169,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "evaluation/claim_extraction_metrics.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 67,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "evaluation/classification_eval.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 223,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "evaluation/compare_8ball_pipelines.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 78,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "evaluation/long_ctx_eval.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 4,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "evaluation/perf_mem_eval.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 429,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "evaluation/performance_benchmarks.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 89,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "evaluation/pipeline_preservation_eval.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 100,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "evaluation/reasoning_eval.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 106,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "evaluation/tool_use_eval.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 197,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "evaluation/toy/__init__.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 1,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "evaluation/toy/binary_classifier.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 24,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "evaluation/toy/eight_ball.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 30,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "evaluation/toy/eight_ball_config.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 22,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "evaluation/toy/ternary_classifier.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 24,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "evaluation/toy_contracts.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 151,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "models/student/architectures/gqa_transformer.py": {
+      "line_percent": 94.39655172413794,
+      "line_covered": 219,
+      "line_total": 232,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "models/student/tokenizer/constants.py": {
+      "line_percent": 100.0,
+      "line_covered": 7,
+      "line_total": 7,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "models/teacher/teacher_client.py": {
+      "line_percent": 57.407407407407405,
+      "line_covered": 248,
+      "line_total": 432,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/assertions.py": {
+      "line_percent": 29.761904761904763,
+      "line_covered": 25,
+      "line_total": 84,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/caws_context.py": {
+      "line_percent": 19.11764705882353,
+      "line_covered": 26,
+      "line_total": 136,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/caws_structure.py": {
+      "line_percent": 87.8048780487805,
+      "line_covered": 36,
+      "line_total": 41,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/claim_extraction.py": {
+      "line_percent": 68.47826086956522,
+      "line_covered": 63,
+      "line_total": 92,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/config_validation.py": {
+      "line_percent": 66.66666666666667,
+      "line_covered": 54,
+      "line_total": 81,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/dataloader.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 6,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/dataset.py": {
+      "line_percent": 69.1699604743083,
+      "line_covered": 175,
+      "line_total": 253,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/dataset_answer_generation.py": {
+      "line_percent": 92.98245614035088,
+      "line_covered": 53,
+      "line_total": 57,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/dataset_post_tool.py": {
+      "line_percent": 90.9090909090909,
+      "line_covered": 50,
+      "line_total": 55,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/dataset_tool_select.py": {
+      "line_percent": 94.64285714285714,
+      "line_covered": 53,
+      "line_total": 56,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/distill_answer_generation.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 93,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/distill_intermediate.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 24,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/distill_kd.py": {
+      "line_percent": 27.897681854516385,
+      "line_covered": 349,
+      "line_total": 1251,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/distill_post_tool.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 93,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/distill_process.py": {
+      "line_percent": 11.602209944751381,
+      "line_covered": 21,
+      "line_total": 181,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/distill_tool_select.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 142,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/examples_priority3_integration.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 122,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/export_student.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 81,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/extractors.py": {
+      "line_percent": 76.0,
+      "line_covered": 95,
+      "line_total": 125,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/feature_flags.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 127,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/halt_targets.py": {
+      "line_percent": 19.565217391304348,
+      "line_covered": 9,
+      "line_total": 46,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/input_validation.py": {
+      "line_percent": 53.01204819277108,
+      "line_covered": 88,
+      "line_total": 166,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/json_repair.py": {
+      "line_percent": 81.31868131868131,
+      "line_covered": 74,
+      "line_total": 91,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/logging_utils.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 58,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/losses.py": {
+      "line_percent": 73.40425531914893,
+      "line_covered": 207,
+      "line_total": 282,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/make_toy_training.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 68,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/monitoring.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 191,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/performance_monitor.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 91,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/process_losses.py": {
+      "line_percent": 48.85057471264368,
+      "line_covered": 85,
+      "line_total": 174,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/prompt_templates.py": {
+      "line_percent": 45.45454545454545,
+      "line_covered": 55,
+      "line_total": 121,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/quality_scoring.py": {
+      "line_percent": 7.826086956521739,
+      "line_covered": 9,
+      "line_total": 115,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/quant_qat_int8.py": {
+      "line_percent": 14.624505928853756,
+      "line_covered": 37,
+      "line_total": 253,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/run_manifest.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 110,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/run_toy_distill.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 185,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/speed_metrics.py": {
+      "line_percent": 89.23076923076923,
+      "line_covered": 58,
+      "line_total": 65,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/teacher_cache.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 102,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/teacher_stub_toy.py": {
+      "line_percent": 0.0,
+      "line_covered": 0,
+      "line_total": 99,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/tokenizer_migration.py": {
+      "line_percent": 9.473684210526315,
+      "line_covered": 9,
+      "line_total": 95,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/tracing.py": {
+      "line_percent": 18.88111888111888,
+      "line_covered": 27,
+      "line_total": 143,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    },
+    "training/utils.py": {
+      "line_percent": 88.88888888888889,
+      "line_covered": 24,
+      "line_total": 27,
+      "branch_percent": 0.0,
+      "branch_covered": 0,
+      "branch_total": 0
+    }
+  },
+  "line_threshold_met": false,
+  "branch_threshold_met": false,
+  "overall_pass": false,
+  "thresholds": {
+    "line_coverage_required": 80.0,
+    "branch_coverage_required": 90.0
+  }
+}

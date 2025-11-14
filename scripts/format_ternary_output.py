@@ -17,15 +17,9 @@ from evaluation.toy.ternary_classifier import (
 )
 
 # Also map the TERNARY token names (from tokenizer)
-TERNARY_TOKEN_NAMES = [
-    f"<TERNARY_{answer}>"
-    for answer in TERNARY_ANSWERS
-]
+TERNARY_TOKEN_NAMES = [f"<TERNARY_{answer}>" for answer in TERNARY_ANSWERS]
 
-NAME_TO_ANSWER = {
-    name: answer
-    for name, answer in zip(TERNARY_TOKEN_NAMES, TERNARY_ANSWERS)
-}
+NAME_TO_ANSWER = {name: answer for name, answer in zip(TERNARY_TOKEN_NAMES, TERNARY_ANSWERS)}
 
 
 def format_output(text: str) -> str:

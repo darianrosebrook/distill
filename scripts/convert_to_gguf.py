@@ -50,8 +50,7 @@ def check_llama_cpp():
 
     for name in possible_names:
         try:
-            result = subprocess.run(
-                ["which", name], capture_output=True, text=True)
+            result = subprocess.run(["which", name], capture_output=True, text=True)
             if result.returncode == 0:
                 return result.stdout.strip()
         except Exception:
@@ -79,8 +78,7 @@ def check_llama_cpp():
 
     # Try finding via brew
     try:
-        result = subprocess.run(
-            ["brew", "--prefix", "llama.cpp"], capture_output=True, text=True)
+        result = subprocess.run(["brew", "--prefix", "llama.cpp"], capture_output=True, text=True)
         if result.returncode == 0:
             brew_prefix = result.stdout.strip()
             # Check multiple possible binary locations
@@ -321,8 +319,7 @@ def create_minimal_tokenizer(output_dir: Path, vocab_size: int):
             # Create BPE tokenizer (llama.cpp expects BPE format)
             # Use ByteLevel pre_tokenizer for better llama.cpp compatibility
             # This is more likely to be recognized by llama.cpp's hash-based checks
-            tokenizer = Tokenizer(
-                BPE(vocab=vocab, merges=[], unk_token="<unk>"))
+            tokenizer = Tokenizer(BPE(vocab=vocab, merges=[], unk_token="<unk>"))
 
             # Try ByteLevel first (more compatible with llama.cpp)
             try:
@@ -338,8 +335,7 @@ def create_minimal_tokenizer(output_dir: Path, vocab_size: int):
             print("✅ Created tokenizer.json using tokenizers library (BPE format)")
             tokenizer_created = True
         except Exception as e:
-            print(
-                f"⚠️  Failed to create tokenizer with tokenizers library: {e}")
+            print(f"⚠️  Failed to create tokenizer with tokenizers library: {e}")
             print("   Falling back to manual JSON creation...")
 
     # Fallback: Manual JSON creation if tokenizers library not available or failed
@@ -445,8 +441,7 @@ def create_minimal_tokenizer(output_dir: Path, vocab_size: int):
 
     print(f"✅ Created minimal tokenizer with {vocab_size} tokens")
     print("   Special tokens: <s>, </s>, <unk>")
-    print(
-        f"   Vocabulary: {len(vocab)} tokens (ASCII + common words + synthetic)")
+    print(f"   Vocabulary: {len(vocab)} tokens (ASCII + common words + synthetic)")
 
 
 def export_to_huggingface_format(checkpoint_path: str, output_dir: Path):
@@ -525,14 +520,14 @@ def export_to_huggingface_format(checkpoint_path: str, output_dir: Path):
     # Try to save as safetensors first (avoids torch.load vulnerability)
     try:
         from safetensors.torch import save_file
+
         save_file(renamed_state_dict, output_dir / "model.safetensors")
         print("✅ Saved model as safetensors (safe from torch.load vulnerability)")
     except ImportError:
         print("⚠️  safetensors not available, saving as PyTorch .bin (may have torch.load issues)")
         torch.save(renamed_state_dict, output_dir / "pytorch_model.bin")
     except Exception as e:
-        print(
-            f"⚠️  Failed to save as safetensors: {e}, falling back to PyTorch .bin")
+        print(f"⚠️  Failed to save as safetensors: {e}, falling back to PyTorch .bin")
         torch.save(renamed_state_dict, output_dir / "pytorch_model.bin")
 
     # Create config.json (simplified HuggingFace format)
@@ -573,8 +568,7 @@ def export_to_huggingface_format(checkpoint_path: str, output_dir: Path):
         try:
             from transformers import AutoTokenizer
 
-            original_tokenizer = AutoTokenizer.from_pretrained(
-                str(tokenizer_dir))
+            original_tokenizer = AutoTokenizer.from_pretrained(str(tokenizer_dir))
             if original_tokenizer.vocab_size == config["vocab_size"]:
                 # Vocab sizes match - use original tokenizer
                 import shutil
@@ -588,8 +582,7 @@ def export_to_huggingface_format(checkpoint_path: str, output_dir: Path):
                     src = tokenizer_dir / tokenizer_file
                     if src.exists():
                         shutil.copy2(src, output_dir / tokenizer_file)
-                print(
-                    f"✅ Using original tokenizer (vocab_size={config['vocab_size']} matches)")
+                print(f"✅ Using original tokenizer (vocab_size={config['vocab_size']} matches)")
                 use_original_tokenizer = True
         except Exception as e:
             print(f"⚠️  Could not load original tokenizer: {e}")
@@ -634,8 +627,7 @@ def convert_to_gguf_direct(hf_dir: Path, output_gguf: Path):
         gguf_writer.add_embedding_length(config.hidden_size)
         gguf_writer.add_block_count(config.num_hidden_layers)
         gguf_writer.add_feed_forward_length(config.intermediate_size)
-        gguf_writer.add_rope_dimension_count(
-            config.hidden_size // config.num_attention_heads)
+        gguf_writer.add_rope_dimension_count(config.hidden_size // config.num_attention_heads)
         gguf_writer.add_head_count(config.num_attention_heads)
         gguf_writer.add_head_count_kv(config.num_key_value_heads)
         gguf_writer.add_layer_norm_rms_eps(config.rms_norm_eps)
@@ -648,6 +640,7 @@ def convert_to_gguf_direct(hf_dir: Path, output_gguf: Path):
         if tokenizer_json_path.exists():
             # Check tokenizer.json for model type
             import json
+
             try:
                 with open(tokenizer_json_path) as f:
                     tok_json = json.load(f)
@@ -655,7 +648,7 @@ def convert_to_gguf_direct(hf_dir: Path, output_gguf: Path):
                 if model_type == "BPE":
                     # BPE tokenizer - use gpt2 format (Ollama supports BPE via gpt2)
                     tokenizer_model_type = "gpt2"
-                    print(f"   Detected BPE tokenizer, using 'gpt2' model type")
+                    print("   Detected BPE tokenizer, using 'gpt2' model type")
             except Exception as e:
                 print(f"   Warning: Could not read tokenizer.json: {e}")
 
@@ -663,7 +656,7 @@ def convert_to_gguf_direct(hf_dir: Path, output_gguf: Path):
         if tokenizer_model_type == "llama":
             if hasattr(tokenizer, "model") and hasattr(tokenizer.model, "merges"):
                 tokenizer_model_type = "gpt2"
-                print(f"   Detected BPE tokenizer (has merges), using 'gpt2' model type")
+                print("   Detected BPE tokenizer (has merges), using 'gpt2' model type")
 
         gguf_writer.add_tokenizer_model(tokenizer_model_type)
         gguf_writer.add_tokenizer_pre("default")
@@ -696,8 +689,7 @@ def convert_to_gguf_direct(hf_dir: Path, output_gguf: Path):
             for merge_tokens, rank in tokenizer.model._mergeable_ranks.items():
                 if len(merge_tokens) == 2:
                     merge_str = " ".join(
-                        tokenizer.decode(
-                            [merge_tokens[0], merge_tokens[1]]).split()
+                        tokenizer.decode([merge_tokens[0], merge_tokens[1]]).split()
                     )
                     if merge_str.count(" ") == 1:  # Ensure it's a valid merge pair
                         merges.append(merge_str)
@@ -741,8 +733,7 @@ def convert_to_gguf_direct(hf_dir: Path, output_gguf: Path):
                 # Check if characters are basic ASCII (safe assumption for toy tokenizer)
                 if ord(pair[0]) < 128 and ord(pair[1]) < 128:
                     merges.append(f"{pair[0]} {pair[1]}")
-            gguf_writer.add_token_merges(
-                merges[: min(100, len(merges))])  # Limit to 100 merges
+            gguf_writer.add_token_merges(merges[: min(100, len(merges))])  # Limit to 100 merges
 
         # Convert and add model weights
         print("   Converting model weights...")
@@ -789,15 +780,13 @@ def convert_to_gguf_direct(hf_dir: Path, output_gguf: Path):
                     gguf_name = f"blk.{layer_idx}.ffn_norm.weight"
 
             if gguf_name is None:
-                print(
-                    f"⚠️  Warning: Unknown parameter name '{pt_name}', skipping...")
+                print(f"⚠️  Warning: Unknown parameter name '{pt_name}', skipping...")
                 continue
 
             # Convert to float16 and add tensor
             tensor_f16 = tensor.to(torch.float16)
             gguf_writer.add_tensor(gguf_name, tensor_f16.numpy())
-            print(
-                f"   Added tensor: {pt_name} -> {gguf_name} ({tensor.shape})")
+            print(f"   Added tensor: {pt_name} -> {gguf_name} ({tensor.shape})")
 
         # Write the GGUF file (requires specific sequence)
         print("   Writing GGUF file...")
@@ -807,8 +796,7 @@ def convert_to_gguf_direct(hf_dir: Path, output_gguf: Path):
         gguf_writer.close()
 
         print(f"✅ GGUF conversion complete: {output_gguf}")
-        print(
-            f"   File size: {output_gguf.stat().st_size / (1024 * 1024):.2f} MB")
+        print(f"   File size: {output_gguf.stat().st_size / (1024 * 1024):.2f} MB")
         return True
 
     except Exception as e:
@@ -836,8 +824,7 @@ def convert_to_gguf(hf_dir: Path, output_gguf: Path, llama_convert_path: str = N
                 print(
                     "   Detected toy model with small vocabulary - GGUF conversion may have compatibility issues"
                 )
-                print(
-                    "   GGUF is optional for toy models - CoreML conversion is the primary goal")
+                print("   GGUF is optional for toy models - CoreML conversion is the primary goal")
         except (IOError, OSError, ValueError, json.JSONDecodeError):
             pass
 
@@ -855,8 +842,7 @@ def convert_to_gguf(hf_dir: Path, output_gguf: Path, llama_convert_path: str = N
     if llama_convert_path is None:
         if is_toy_model:
             print("⚠️  llama.cpp conversion tool not found - GGUF conversion skipped")
-            print(
-                "   This is expected for toy models. CoreML conversion is the primary goal.")
+            print("   This is expected for toy models. CoreML conversion is the primary goal.")
         else:
             print("⚠️  llama.cpp conversion tool not found!")
             print()
@@ -865,8 +851,7 @@ def convert_to_gguf(hf_dir: Path, output_gguf: Path, llama_convert_path: str = N
             print("Option 1: Install llama.cpp via Homebrew")
             print("   brew install llama.cpp")
             print("   Then run this script again, or manually:")
-            print(
-                f"   llama-convert {hf_dir} --outfile {output_gguf} --outtype f16")
+            print(f"   llama-convert {hf_dir} --outfile {output_gguf} --outtype f16")
             print()
             print("Option 2: Use Python-based conversion (if available)")
             print("   pip install llama-cpp-python")
@@ -921,12 +906,10 @@ def convert_to_gguf(hf_dir: Path, output_gguf: Path, llama_convert_path: str = N
         ]
 
     try:
-        subprocess.run(
-            cmd, capture_output=True, text=True, check=True)
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
         if output_gguf.exists():
             print(f"✅ GGUF conversion complete: {output_gguf}")
-            print(
-                f"   File size: {output_gguf.stat().st_size / (1024 * 1024):.2f} MB")
+            print(f"   File size: {output_gguf.stat().st_size / (1024 * 1024):.2f} MB")
             return True
         else:
             print("⚠️  Conversion command succeeded but output file not found")
@@ -947,13 +930,11 @@ def convert_to_gguf(hf_dir: Path, output_gguf: Path, llama_convert_path: str = N
 
         # Provide helpful context for common issues
         stderr_lower = e.stderr.lower() if e.stderr else ""
-        combined_output = stderr_lower + " " + \
-            (e.stdout.lower() if e.stdout else "")
+        combined_output = stderr_lower + " " + (e.stdout.lower() if e.stdout else "")
 
         if "merges" in combined_output and "tokenizer" in combined_output:
             print("   Issue: Custom tokenizer missing BPE merges (required for GGUF)")
-            print(
-                "   Solution: Use production tokenizers with proper merge rules for GGUF")
+            print("   Solution: Use production tokenizers with proper merge rules for GGUF")
         elif "gguf" in stderr_lower and "version" in stderr_lower:
             print("   Issue: GGUF library version mismatch")
             print("   Solution: Use compatible gguf version or system Python")
@@ -1011,12 +992,9 @@ TEMPLATE \"\"\"{{{{ .System }}}}
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        description="Convert 8-ball model to GGUF for Ollama")
-    ap.add_argument("--checkpoint", required=True,
-                    help="Input PyTorch checkpoint path")
-    ap.add_argument("--out", "--output", dest="output",
-                    required=True, help="Output GGUF file path")
+    ap = argparse.ArgumentParser(description="Convert 8-ball model to GGUF for Ollama")
+    ap.add_argument("--checkpoint", required=True, help="Input PyTorch checkpoint path")
+    ap.add_argument("--out", "--output", dest="output", required=True, help="Output GGUF file path")
     ap.add_argument("--model-name", default="8-ball", help="Ollama model name")
     ap.add_argument(
         "--llama-convert", help="Path to llama-convert binary (auto-detected if not provided)"
@@ -1024,8 +1002,7 @@ def main():
     ap.add_argument(
         "--skip-gguf", action="store_true", help="Skip GGUF conversion (just create modelfile)"
     )
-    ap.add_argument("--skip-modelfile", action="store_true",
-                    help="Skip modelfile creation")
+    ap.add_argument("--skip-modelfile", action="store_true", help="Skip modelfile creation")
     args = ap.parse_args()
 
     checkpoint_path = Path(args.checkpoint)
@@ -1075,8 +1052,7 @@ def main():
     if not args.skip_modelfile:
         modelfile_path = output_gguf.parent / f"Modelfile.{args.model_name}"
         if output_gguf.exists():
-            create_ollama_modelfile(
-                output_gguf, args.model_name, modelfile_path)
+            create_ollama_modelfile(output_gguf, args.model_name, modelfile_path)
         else:
             # Create modelfile with placeholder path (user can update after manual conversion)
             print("📝 Creating modelfile template (update path after GGUF conversion)...")

@@ -1,0 +1,31 @@
+Command: /Users/darianrosebrook/Desktop/Projects/distill/venv/bin/python -m pytest --cov=training --cov=models --cov=evaluation --cov=conversion --cov-report=json:coverage.json --cov-report=html:htmlcov --cov-report=term-missing --cov-fail-under=0 tests/
+Return code: 2
+Timestamp: 2025-11-13T16:26:17.365356
+
+================================================================================
+STDOUT:
+================================================================================
+============================= test session starts ==============================
+platform darwin -- Python 3.11.14, pytest-9.0.1, pluggy-1.6.0 -- /Users/darianrosebrook/Desktop/Projects/distill/venv/bin/python
+cachedir: .pytest_cache
+hypothesis profile 'default'
+rootdir: /Users/darianrosebrook/Desktop/Projects/distill
+configfile: pytest.ini
+plugins: anyio-4.11.0, hypothesis-6.147.0, cov-7.0.0
+collecting ... collected 1171 items / 1 error
+
+==================================== ERRORS ====================================
+_____________ ERROR collecting tests/evaluation/test_8ball_eval.py _____________
+ImportError while importing test module '/Users/darianrosebrook/Desktop/Projects/distill/tests/evaluation/test_8ball_eval.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/local/Cellar/python@3.11/3.11.14_1/Frameworks/Python.framework/Versions/3.11/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/evaluation/test_8ball_eval.py:18: in <module>
+    from evaluation import eightball_eval
+E   ImportError: cannot import name 'eightball_eval' from 'evaluation' (/Users/darianrosebrook/Desktop/Projects/distill/evaluation/__init__.py)
+=========================== short test summary info ============================
+ERROR tests/evaluation/test_8ball_eval.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+=============================== 1 error in 5.28s ===============================

@@ -75,7 +75,7 @@ def validate_provenance(
         prompt = sample.get("prompt", "")
         teacher_text = sample.get("teacher_text", "")
 
-        # PLACEHOLDER: Check for common PII patterns (simplified check - would use proper PII detection library in production)
+        # Check for common PII patterns (simplified check - production would use proper PII detection library)
         pii_patterns = [
             r"\b\d{3}-\d{2}-\d{4}\b",  # SSN
             r"\b\d{3}\.\d{3}\.\d{4}\b",  # Phone

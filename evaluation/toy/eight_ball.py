@@ -53,6 +53,7 @@ ANSWER_TO_ID: Dict[str, int] = {answer: token_id for token_id, answer in ID_TO_A
 @dataclass
 class ClassificationConfig:
     """Configuration for a classification evaluation task."""
+
     name: str
     class_names: List[str]
     token_ids: List[int]
@@ -106,6 +107,8 @@ def load_eval_questions(eval_file: Path) -> List[str]:
     return data.get("questions", [])
 
 
-def get_eight_ball_questions(eval_file: Path = Path("evaluation/8ball_eval_questions.json")) -> List[str]:
+def get_eight_ball_questions(
+    eval_file: Path = Path("evaluation/8ball_eval_questions.json"),
+) -> List[str]:
     """Get 8-ball evaluation questions."""
     return load_eval_questions(eval_file)

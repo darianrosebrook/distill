@@ -60,7 +60,9 @@ EIGHT_BALL_CONFIG = ClassificationConfig(
 )
 
 
-def load_eval_questions(eval_file: Path = Path("evaluation/8ball_eval_questions.json")) -> list[str]:
+def load_eval_questions(
+    eval_file: Path = Path("evaluation/8ball_eval_questions.json"),
+) -> list[str]:
     """Load evaluation questions from JSON file."""
     if not eval_file.exists():
         # Create a default set if file doesn't exist
@@ -96,6 +98,8 @@ def load_eval_questions(eval_file: Path = Path("evaluation/8ball_eval_questions.
     return data.get("questions", [])
 
 
-def get_eight_ball_questions(eval_file: Path = Path("evaluation/8ball_eval_questions.json")) -> list[str]:
+def get_eight_ball_questions(
+    eval_file: Path = Path("evaluation/8ball_eval_questions.json"),
+) -> list[str]:
     """Get 8-ball evaluation questions."""
     return load_eval_questions(eval_file)

@@ -10,7 +10,6 @@ Token-based ternary classifier that outputs YES/NO/UNCERTAIN decisions for
 - Token ID 402: "UNCERTAIN" (insufficient evidence)
 """
 
-from dataclasses import dataclass
 from typing import Dict, List
 from pathlib import Path
 import json
@@ -19,9 +18,9 @@ from evaluation.classification_eval import ClassificationConfig
 
 # Ternary classifier answers
 TERNARY_ANSWERS = [
-    "YES",      # Token ID 400 - should proceed
-    "NO",       # Token ID 401 - should not proceed
-    "UNCERTAIN", # Token ID 402 - insufficient evidence
+    "YES",  # Token ID 400 - should proceed
+    "NO",  # Token ID 401 - should not proceed
+    "UNCERTAIN",  # Token ID 402 - insufficient evidence
 ]
 
 # Token ID range for ternary classifier answers
@@ -85,6 +84,8 @@ def load_ternary_eval_questions(eval_file: Path) -> List[str]:
     return data.get("questions", [])
 
 
-def get_ternary_questions(eval_file: Path = Path("evaluation/ternary_eval_questions.json")) -> List[str]:
+def get_ternary_questions(
+    eval_file: Path = Path("evaluation/ternary_eval_questions.json"),
+) -> List[str]:
     """Get ternary classifier evaluation questions."""
     return load_ternary_eval_questions(eval_file)

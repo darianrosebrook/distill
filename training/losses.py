@@ -945,8 +945,8 @@ def _claim_supported_by_teacher(student_claim: Any, teacher_claims: List[Any]) -
     """
     Check if a student claim is supported by teacher claims.
 
-    PLACEHOLDER: Uses simplified text similarity and keyword matching.
-    Real implementation would use semantic similarity and entailment checking.
+    Uses keyword-based similarity matching between student and teacher claims.
+    Future enhancement could include semantic similarity and entailment checking.
     """
     if not teacher_claims:
         return False

@@ -92,12 +92,10 @@ def evaluate_8_ball_response(prompt: str, response: str) -> dict:
     response_lower = response.lower().strip()
 
     # Check if response matches any expected 8-ball answers
-    is_valid_8ball = any(
-        expected in response_lower for expected in expected_responses)
+    is_valid_8ball = any(expected in response_lower for expected in expected_responses)
 
     # Check for mystical flair
-    has_mystical_flair = any(char in response for char in [
-                             "🔮", "✨", "🌟", "🎱", "❓", "🤔"])
+    has_mystical_flair = any(char in response for char in ["🔮", "✨", "🌟", "🎱", "❓", "🤔"])
 
     # Check response length (should be brief)
     is_brief = len(response.split()) <= 15
@@ -126,12 +124,12 @@ def evaluate_8_ball_response(prompt: str, response: str) -> dict:
     )
 
     # Additional evaluation focused on core mystical responses
-    contains_mystical_phrase = any(
-        phrase in response_lower for phrase in expected_responses)
+    contains_mystical_phrase = any(phrase in response_lower for phrase in expected_responses)
     exact_mystical_match = response_lower in expected_responses
-    looks_like_fortune = not any(word in response_lower for word in [
-        "system", "latency", "processed", "requests", "production", "tests", "tool:"
-    ])
+    looks_like_fortune = not any(
+        word in response_lower
+        for word in ["system", "latency", "processed", "requests", "production", "tests", "tool:"]
+    )
 
     return {
         "prompt": prompt,
@@ -143,7 +141,8 @@ def evaluate_8_ball_response(prompt: str, response: str) -> dict:
         "is_brief": is_brief,
         "starts_well": starts_well,
         "looks_like_fortune": looks_like_fortune,
-        "score": sum([contains_mystical_phrase, has_mystical_flair, is_brief, looks_like_fortune]) / 4.0,
+        "score": sum([contains_mystical_phrase, has_mystical_flair, is_brief, looks_like_fortune])
+        / 4.0,
     }
 
 
@@ -177,7 +176,9 @@ def compare_models(model_results: List[Dict[str, Any]]) -> Dict[str, Any]:
             "baseline": baseline_score,
             "current": current_score,
             "improvement": score_improvement,
-            "improvement_pct": (score_improvement / baseline_score) * 100 if baseline_score > 0 else 0
+            "improvement_pct": (score_improvement / baseline_score) * 100
+            if baseline_score > 0
+            else 0,
         }
 
         # Latency comparison
@@ -189,7 +190,9 @@ def compare_models(model_results: List[Dict[str, Any]]) -> Dict[str, Any]:
             "baseline_ms": baseline_latency,
             "current_ms": current_latency,
             "improvement_ms": latency_improvement,
-            "improvement_pct": (latency_improvement / baseline_latency) * 100 if baseline_latency > 0 else 0
+            "improvement_pct": (latency_improvement / baseline_latency) * 100
+            if baseline_latency > 0
+            else 0,
         }
 
         # Throughput comparison
@@ -201,7 +204,9 @@ def compare_models(model_results: List[Dict[str, Any]]) -> Dict[str, Any]:
             "baseline_inf_sec": baseline_throughput,
             "current_inf_sec": current_throughput,
             "improvement_inf_sec": throughput_improvement,
-            "improvement_pct": (throughput_improvement / baseline_throughput) * 100 if baseline_throughput > 0 else 0
+            "improvement_pct": (throughput_improvement / baseline_throughput) * 100
+            if baseline_throughput > 0
+            else 0,
         }
 
     return {
@@ -210,9 +215,13 @@ def compare_models(model_results: List[Dict[str, Any]]) -> Dict[str, Any]:
         "summary": {
             "models_compared": len(model_results),
             "best_score": max(r["evaluation"]["summary"]["average_score"] for r in model_results),
-            "best_latency": min(r["benchmarks"]["inference_latency_ms"]["p50"] for r in model_results),
-            "best_throughput": max(r["benchmarks"]["throughput_inf_per_sec"] for r in model_results)
-        }
+            "best_latency": min(
+                r["benchmarks"]["inference_latency_ms"]["p50"] for r in model_results
+            ),
+            "best_throughput": max(
+                r["benchmarks"]["throughput_inf_per_sec"] for r in model_results
+            ),
+        },
     }
 
 
@@ -232,6 +241,7 @@ def run_comprehensive_evaluation(model_path: str = None, output_file: str = None
 
     if output_file is None:
         import time
+
         output_file = f"/tmp/8_ball_eval_{int(time.time())}.json"
 
     print("🔬 Running comprehensive evaluation...")
@@ -249,6 +259,7 @@ def run_comprehensive_evaluation(model_path: str = None, output_file: str = None
 
     # Load model for benchmarking
     import coremltools as ct
+
     model = ct.models.MLModel(model_path)
 
     # Benchmark inference latency
@@ -256,7 +267,7 @@ def run_comprehensive_evaluation(model_path: str = None, output_file: str = None
     for _ in range(10):
         input_ids = np.random.randint(0, 512, size=(1, 128), dtype=np.int32)
         start_time = time.time()
-        model.predict({'input_ids': input_ids})
+        model.predict({"input_ids": input_ids})
         end_time = time.time()
         latencies.append((end_time - start_time) * 1000)  # Convert to ms
 
@@ -268,11 +279,11 @@ def run_comprehensive_evaluation(model_path: str = None, output_file: str = None
             "p95": float(np.percentile(latencies, 95)),
             "p99": float(np.percentile(latencies, 99)),
             "min": float(np.min(latencies)),
-            "max": float(np.max(latencies))
+            "max": float(np.max(latencies)),
         },
         "throughput_inf_per_sec": 1000 / np.mean(latencies),  # inferences per second
         "model_size_mb": 1.24,  # Known model size
-        "platform": "Apple Silicon"
+        "platform": "Apple Silicon",
     }
 
     # Combine results
@@ -282,13 +293,14 @@ def run_comprehensive_evaluation(model_path: str = None, output_file: str = None
         "metadata": {
             "model_path": model_path,
             "evaluation_timestamp": time.time(),
-            "test_version": "1.1.0"
-        }
+            "test_version": "1.1.0",
+        },
     }
 
     # Save comprehensive results
     with open(output_file, "w") as f:
         import json
+
         json.dump(comprehensive_results, f, indent=2, default=str)
 
     print("✅ Comprehensive evaluation complete")
@@ -373,8 +385,7 @@ def main():
             # Pad to sequence length 128 (what the CoreML model expects)
             if input_ids_np.shape[1] < seq_len:
                 # Pad with zeros (assuming 0 is padding token)
-                padding = np.zeros(
-                    (1, seq_len - input_ids_np.shape[1]), dtype=np.int32)
+                padding = np.zeros((1, seq_len - input_ids_np.shape[1]), dtype=np.int32)
                 input_ids_np = np.concatenate([input_ids_np, padding], axis=1)
 
             generated_tokens = []
@@ -389,8 +400,7 @@ def main():
             print(
                 f"        Prompt tokens: {actual_prompt_tokens[:10]}{'...' if len(actual_prompt_tokens) > 10 else ''}"
             )
-            print(
-                f"        Prompt decoded: '{tokenizer.decode(actual_prompt_tokens)}'")
+            print(f"        Prompt decoded: '{tokenizer.decode(actual_prompt_tokens)}'")
             print(f"        Padded sequence shape: {input_ids_np.shape}")
             print(f"        Padding starts at position: {prompt_len}")
 
@@ -442,8 +452,7 @@ def main():
                     elif len(logits.shape) == 1:
                         next_token_logits = logits
                     else:
-                        raise ValueError(
-                            f"Unexpected logits shape: {logits.shape}")
+                        raise ValueError(f"Unexpected logits shape: {logits.shape}")
 
                 # Sample token (greedy)
                 tok_id = int(next_token_logits.argmax())
@@ -452,8 +461,7 @@ def main():
                 # Debug: Show top-5 predictions with probabilities
                 import numpy as np
 
-                probs = np.exp(next_token_logits) / \
-                    np.sum(np.exp(next_token_logits))  # Softmax
+                probs = np.exp(next_token_logits) / np.sum(np.exp(next_token_logits))  # Softmax
                 # Top 5 in descending order
                 top_5_indices = np.argsort(next_token_logits)[-5:][::-1]
                 top_5_probs = probs[top_5_indices]
@@ -463,10 +471,8 @@ def main():
                         token_text = tokenizer.decode([token_id])
                     except (UnicodeDecodeError, ValueError, KeyError):
                         token_text = f"<unk_{token_id}>"
-                    print(
-                        f"          {i + 1}. '{token_text}' (id={token_id}, prob={prob:.4f})")
-                print(
-                    f"        Selected: '{tokenizer.decode([tok_id])}' (id={tok_id})")
+                    print(f"          {i + 1}. '{token_text}' (id={token_id}, prob={prob:.4f})")
+                print(f"        Selected: '{tokenizer.decode([tok_id])}' (id={tok_id})")
 
                 # For fixed-sequence CoreML model, we can't append beyond the expected length
                 # Instead, we'll shift the window or stop generation
@@ -482,8 +488,7 @@ def main():
                 else:
                     # Still have space, append normally
                     new_token = np.array([[tok_id]], dtype=np.int32)
-                    input_ids_np = np.concatenate(
-                        [input_ids_np, new_token], axis=1)
+                    input_ids_np = np.concatenate([input_ids_np, new_token], axis=1)
 
                 # Stop on EOS token
                 if hasattr(tokenizer, "eos_token_id") and tokenizer.eos_token_id is not None:
@@ -496,12 +501,10 @@ def main():
                 print(f"        Generated tokens: {generated_tokens[:5]}...")
 
             # Decode generated tokens
-            generated_text = tokenizer.decode(
-                generated_tokens, skip_special_tokens=True)
+            generated_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
             if not generated_text and generated_tokens:
                 # If text is empty but we have tokens, try decoding without skip_special_tokens
-                generated_text = tokenizer.decode(
-                    generated_tokens, skip_special_tokens=False)
+                generated_text = tokenizer.decode(generated_tokens, skip_special_tokens=False)
                 print(f"        With special tokens: '{generated_text}'")
 
             # Clean up response (remove extra whitespace)
@@ -599,11 +602,13 @@ def main():
             "total_tests": len(results),
             "mystical_phrases": sum(1 for r in results if r.get("contains_mystical_phrase", False)),
             "exact_matches": sum(1 for r in results if r.get("exact_mystical_match", False)),
-            "average_score": sum(r.get("score", 0) for r in results) / len(results) if results else 0,
+            "average_score": sum(r.get("score", 0) for r in results) / len(results)
+            if results
+            else 0,
             "mystical_flair_count": sum(1 for r in results if r.get("has_mystical_flair", False)),
             "fortune_like": sum(1 for r in results if r.get("looks_like_fortune", False)),
         },
-        "results": results
+        "results": results,
     }
 
 
@@ -624,7 +629,7 @@ def run_regression_test(baseline_results_path: str = None) -> Dict[str, Any]:
 
     if baseline_results_path and Path(baseline_results_path).exists():
         # Load baseline
-        with open(baseline_results_path, 'r') as f:
+        with open(baseline_results_path, "r") as f:
             baseline_results = json.load(f)
 
         # Compare against baseline
@@ -650,40 +655,41 @@ def run_regression_test(baseline_results_path: str = None) -> Dict[str, Any]:
             "status": regression_status,
             "issues": issues,
             "comparison": comparison,
-            "current_results": current_results
+            "current_results": current_results,
         }
     else:
         print(f"⚠️  No baseline found at {baseline_results_path}, creating new baseline")
-        return {
-            "status": "BASELINE_CREATED",
-            "current_results": current_results
-        }
+        return {"status": "BASELINE_CREATED", "current_results": current_results}
 
 
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Test 8-ball CoreML model")
-    parser.add_argument("--comprehensive", action="store_true",
-                       help="Run comprehensive evaluation with benchmarks")
-    parser.add_argument("--regression", type=str,
-                       help="Run regression test against baseline results file")
-    parser.add_argument("--model-path", type=str, default="/tmp/8_ball_T128.mlpackage",
-                       help="Path to CoreML model")
-    parser.add_argument("--output", type=str,
-                       help="Output file for results (auto-generated if not specified)")
+    parser.add_argument(
+        "--comprehensive", action="store_true", help="Run comprehensive evaluation with benchmarks"
+    )
+    parser.add_argument(
+        "--regression", type=str, help="Run regression test against baseline results file"
+    )
+    parser.add_argument(
+        "--model-path", type=str, default="/tmp/8_ball_T128.mlpackage", help="Path to CoreML model"
+    )
+    parser.add_argument(
+        "--output", type=str, help="Output file for results (auto-generated if not specified)"
+    )
 
     args = parser.parse_args()
 
     if args.regression:
         result = run_regression_test(args.regression)
         print(f"🔍 Regression Test Result: {result['status']}")
-        if result['status'] == 'FAIL':
+        if result["status"] == "FAIL":
             print("❌ Issues found:")
-            for issue in result['issues']:
+            for issue in result["issues"]:
                 print(f"   • {issue}")
             exit(1)
-        elif result['status'] == 'PASS':
+        elif result["status"] == "PASS":
             print("✅ All regression checks passed!")
     elif args.comprehensive:
         run_comprehensive_evaluation(args.model_path, args.output)

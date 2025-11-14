@@ -8,7 +8,6 @@ Token-based binary classifier that outputs YES/NO decisions for "should we proce
 - Token ID 301: "NO" (should not proceed)
 """
 
-from dataclasses import dataclass
 from typing import Dict, List
 from pathlib import Path
 import json
@@ -18,7 +17,7 @@ from evaluation.classification_eval import ClassificationConfig
 # Binary classifier answers
 BINARY_ANSWERS = [
     "YES",  # Token ID 300 - should proceed
-    "NO",   # Token ID 301 - should not proceed
+    "NO",  # Token ID 301 - should not proceed
 ]
 
 # Token ID range for binary classifier answers
@@ -72,6 +71,8 @@ def load_binary_eval_questions(eval_file: Path) -> List[str]:
     return data.get("questions", [])
 
 
-def get_binary_questions(eval_file: Path = Path("evaluation/binary_eval_questions.json")) -> List[str]:
+def get_binary_questions(
+    eval_file: Path = Path("evaluation/binary_eval_questions.json"),
+) -> List[str]:
     """Get binary classifier evaluation questions."""
     return load_binary_eval_questions(eval_file)

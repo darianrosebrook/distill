@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+import platform
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -16,6 +17,9 @@ except Exception:
     ct = None
     MLModel = None
 
+# Make coremltools available at module level for test patching
+coremltools = ct
+
 
 @dataclass
 class HardwareInfo:
@@ -26,7 +30,6 @@ class HardwareInfo:
 
 
 def detect_hardware() -> HardwareInfo:
-    import platform
     import subprocess
 
     ver = "unknown"
@@ -125,16 +128,53 @@ class StepAdapter:
 
 
 def greedy_argmax(logits: np.ndarray) -> int:
-    # logits: [V]
+    """
+    Get index of maximum logit (greedy decoding).
+    
+    Args:
+        logits: Array of logits [V]
+    
+    Returns:
+        Index of maximum logit
+    
+    Raises:
+        ValueError: If logits array is empty
+    """
+    if logits.size == 0:
+        raise ValueError("Cannot get argmax of empty array")
     return int(np.argmax(logits))
 
 
 def is_valid_tool_json(acc_text: str) -> bool:
-    # Minimal schema check; replace with your scorer's JSON validator for parity
-    if "{" in acc_text and "}" in acc_text and ":" in acc_text:
-        # very light heuristic; plug in your canonical validator here
-        return True
-    return False
+    """Validate that text contains valid tool JSON with required fields."""
+    if not acc_text or not acc_text.strip():
+        return False
+    
+    # Try to parse as JSON
+    try:
+        data = json.loads(acc_text)
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return False
+    
+    # Must be a dictionary
+    if not isinstance(data, dict):
+        return False
+    
+    # Check for required fields: name and arguments
+    if "name" not in data:
+        return False
+    if "arguments" not in data:
+        return False
+    
+    # Name must be a string
+    if not isinstance(data["name"], str):
+        return False
+    
+    # Arguments must be a dict (object)
+    if not isinstance(data["arguments"], dict):
+        return False
+    
+    return True
 
 
 def run_coreml_speed(
@@ -950,6 +990,17 @@ def main():
     if hardware_profile_key:
         hdr["hardware_profile_key"] = hardware_profile_key
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    with args.out.open("w") as f:
-        json.dump(hdr, f, indent=2)
+    # Handle file writing - support both Path.open() and open() for test compatibility
+    if hasattr(args.out, 'open'):
+        # Path object - use context manager
+        with args.out.open("w") as f:
+            json.dump(hdr, f, indent=2)
+    elif hasattr(args.out, 'write'):
+        # Already a file-like object
+        json.dump(hdr, args.out, indent=2)
+    else:
+        # String path - use builtin open (can be mocked in tests)
+        with open(str(args.out), "w") as f:
+            json.dump(hdr, f, indent=2)
+    
     print(json.dumps(hdr, indent=2))

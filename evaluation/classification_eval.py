@@ -14,15 +14,30 @@ Author: @darianrosebrook
 import json
 import sys
 import importlib.util
+import argparse
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Optional
 import numpy as np
 from dataclasses import dataclass
+
+# Import transformers components at module level for test patching
+try:
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+except ImportError:
+    AutoModelForCausalLM = None
+    AutoTokenizer = None
+
+# Import coremltools at module level for test patching
+try:
+    import coremltools as ctk
+except ImportError:
+    ctk = None
 
 
 @dataclass
 class ClassificationConfig:
     """Configuration for a classification evaluation task."""
+
     name: str
     class_names: List[str]
     token_ids: List[int]
@@ -33,6 +48,7 @@ class ClassificationConfig:
 @dataclass
 class PredictionResult:
     """Result from a single question prediction."""
+
     question: str
     predicted_class_id: int
     predicted_class_name: str  # Generic class name instead of "predicted_answer"
@@ -42,6 +58,7 @@ class PredictionResult:
 @dataclass
 class EvaluationMetrics:
     """Aggregate metrics from evaluation."""
+
     total_questions: int
     exact_match_rate: float
     mean_l2_drift: Optional[float] = None
@@ -50,17 +67,68 @@ class EvaluationMetrics:
 
 
 def load_classification_config(config_path: str) -> ClassificationConfig:
-    """Load classification config from module path like 'evaluation.toy.eight_ball.EIGHT_BALL_CONFIG'."""
+    """Load classification config from JSON file or module path like 'evaluation.toy.eight_ball.EIGHT_BALL_CONFIG'."""
     if not config_path:
         raise ValueError("Config path is required")
 
+    config_file = Path(config_path)
+    
+    # Check if it's a file path (JSON file)
+    if config_file.exists() and config_file.suffix in ['.json', '.yaml', '.yml']:
+        # Load from JSON file
+        try:
+            with open(config_file, 'r') as f:
+                if config_file.suffix == '.json':
+                    config_data = json.load(f)
+                else:
+                    # Try YAML
+                    try:
+                        import yaml
+                        config_data = yaml.safe_load(f)
+                    except ImportError:
+                        raise ImportError("PyYAML required for YAML config files. Install with: pip install pyyaml")
+            
+            # Validate required fields
+            if "name" not in config_data:
+                raise KeyError("Missing required field: 'name'")
+            if "class_names" not in config_data:
+                raise KeyError("Missing required field: 'class_names'")
+            if "token_ids" not in config_data:
+                raise KeyError("Missing required field: 'token_ids'")
+            
+            # Create ClassificationConfig from dict
+            # Derive id_to_name and name_to_id mappings
+            id_to_name = {token_id: class_name for token_id, class_name in zip(config_data["token_ids"], config_data["class_names"])}
+            name_to_id = {class_name: token_id for token_id, class_name in zip(config_data["token_ids"], config_data["class_names"])}
+            
+            return ClassificationConfig(
+                name=config_data["name"],
+                class_names=config_data["class_names"],
+                token_ids=config_data["token_ids"],
+                id_to_name=id_to_name,
+                name_to_id=name_to_id,
+            )
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Config file not found: {config_path}")
+        except json.JSONDecodeError as e:
+            raise json.JSONDecodeError(f"Invalid JSON in config file: {e.msg}", e.doc, e.pos)
+        except KeyError as e:
+            raise KeyError(str(e))
+    
+    # Check if file doesn't exist (should raise FileNotFoundError)
+    if not config_file.exists() and ('.json' in config_path or '/' in config_path or '\\' in config_path):
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+    
+    # Otherwise, try to load from module path
     try:
         # Parse module path
-        parts = config_path.split('.')
+        parts = config_path.split(".")
         if len(parts) < 2:
-            raise ValueError(f"Invalid config path format: {config_path}. Expected 'module.attribute'")
+            raise ValueError(
+                f"Invalid config path format: {config_path}. Expected 'module.attribute' or file path"
+            )
 
-        module_path = '.'.join(parts[:-1])
+        module_path = ".".join(parts[:-1])
         attr_name = parts[-1]
 
         # Import module
@@ -77,6 +145,9 @@ def load_classification_config(config_path: str) -> ClassificationConfig:
             raise ValueError(f"Config attribute {attr_name} is not a ClassificationConfig instance")
 
         return config
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+        # Re-raise these specific exceptions
+        raise
     except Exception as e:
         raise ValueError(f"Failed to load config from {config_path}: {e}")
 
@@ -85,8 +156,14 @@ def evaluate_pytorch_model(
     model_path: Path, tokenizer_path: Path, questions: List[str], config: ClassificationConfig
 ) -> List[PredictionResult]:
     """Evaluate PyTorch model (FP32 or safetensors)."""
+    # Handle empty questions list
+    if not questions:
+        return []
+    
+    if AutoModelForCausalLM is None or AutoTokenizer is None:
+        raise ImportError("transformers library required. Install with: pip install transformers")
+    
     try:
-        from transformers import AutoModelForCausalLM, AutoTokenizer
         import torch
 
         print(f"Loading PyTorch model from {model_path}")
@@ -135,13 +212,16 @@ def evaluate_coreml_model(
     model_path: Path, tokenizer_path: Path, questions: List[str], config: ClassificationConfig
 ) -> List[PredictionResult]:
     """Evaluate CoreML model."""
+    if ctk is None:
+        raise ImportError("coremltools library required. Install with: pip install coremltools")
+    if AutoTokenizer is None:
+        raise ImportError("transformers library required. Install with: pip install transformers")
+    
     try:
-        import coremltools as ct
-        from transformers import AutoTokenizer
         import numpy as np
 
         print(f"Loading CoreML model from {model_path}")
-        model = ct.models.MLModel(str(model_path))
+        model = ctk.models.MLModel(str(model_path))
         tokenizer = AutoTokenizer.from_pretrained(str(tokenizer_path))
 
         results = []
@@ -198,9 +278,7 @@ def evaluate_ollama_model(
                 model_name,
                 question,
             ]
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=10
-            )
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
 
             # Parse output - look for token IDs in the response
             output = result.stdout.strip()
@@ -255,7 +333,7 @@ def evaluate_ollama_model(
 
 
 def compare_predictions(
-    reference: List[PredictionResult], candidate: List[PredictionResult]
+    reference: List[PredictionResult], candidate: List[PredictionResult], config=None
 ) -> EvaluationMetrics:
     """Compare candidate predictions against reference."""
     if len(reference) != len(candidate):
@@ -272,9 +350,7 @@ def compare_predictions(
 
         # Probability drift (if both have probabilities)
         if ref.class_probabilities is not None and cand.class_probabilities is not None:
-            l2_drift = np.linalg.norm(
-                ref.class_probabilities - cand.class_probabilities
-            )
+            l2_drift = np.linalg.norm(ref.class_probabilities - cand.class_probabilities)
             l2_drifts.append(l2_drift)
 
             # KL divergence
@@ -297,8 +373,6 @@ def compare_predictions(
 
 
 def main():
-    import argparse
-
     ap = argparse.ArgumentParser(description="Evaluate classification model")
     ap.add_argument(
         "--backend",
@@ -307,9 +381,7 @@ def main():
         help="Backend to evaluate",
     )
     ap.add_argument("--model", required=True, help="Model path or Ollama model name")
-    ap.add_argument(
-        "--tokenizer", help="Tokenizer path (not needed for Ollama)"
-    )
+    ap.add_argument("--tokenizer", help="Tokenizer path (not needed for Ollama)")
     ap.add_argument(
         "--config",
         required=True,
@@ -347,14 +419,16 @@ def main():
         # Try to find default questions for this config
         try:
             # Try to import the module and find a questions function
-            config_parts = args.config.split('.')
-            module_path = '.'.join(config_parts[:-1])
+            config_parts = args.config.split(".")
+            module_path = ".".join(config_parts[:-1])
             spec = importlib.util.find_spec(module_path)
             if spec:
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
                 # Look for a questions function
-                questions_func = getattr(module, 'get_eight_ball_questions', None) or getattr(module, f'get_{config.name}_questions', None)
+                questions_func = getattr(module, "get_eight_ball_questions", None) or getattr(
+                    module, f"get_{config.name}_questions", None
+                )
                 if questions_func:
                     questions = questions_func()
                 else:
@@ -364,8 +438,7 @@ def main():
         except Exception:
             # Fallback: create some default questions
             questions = [
-                f"Sample question {i+1} for {config.name} classification?"
-                for i in range(5)
+                f"Sample question {i + 1} for {config.name} classification?" for i in range(5)
             ]
 
     print(f"Loaded {len(questions)} evaluation questions")
@@ -375,16 +448,12 @@ def main():
         if not args.tokenizer:
             print("Error: --tokenizer required for PyTorch backend")
             sys.exit(1)
-        results = evaluate_pytorch_model(
-            Path(args.model), Path(args.tokenizer), questions, config
-        )
+        results = evaluate_pytorch_model(Path(args.model), Path(args.tokenizer), questions, config)
     elif args.backend == "coreml":
         if not args.tokenizer:
             print("Error: --tokenizer required for CoreML backend")
             sys.exit(1)
-        results = evaluate_coreml_model(
-            Path(args.model), Path(args.tokenizer), questions, config
-        )
+        results = evaluate_coreml_model(Path(args.model), Path(args.tokenizer), questions, config)
     elif args.backend == "ollama":
         results = evaluate_ollama_model(args.model, questions, config)
     else:
@@ -425,9 +494,7 @@ def main():
                 predicted_class_id=p["predicted_class_id"],
                 predicted_class_name=p.get("predicted_class_name", p.get("predicted_answer", "")),
                 class_probabilities=(
-                    np.array(p["class_probabilities"])
-                    if p.get("class_probabilities")
-                    else None
+                    np.array(p["class_probabilities"]) if p.get("class_probabilities") else None
                 ),
             )
             for p in ref_data["predictions"]
@@ -442,9 +509,9 @@ def main():
             print(f"Mean KL Divergence: {metrics.mean_kl_divergence:.6f}")
 
     # Print summary
-    print(f"\n=== Evaluation Summary ===")
+    print("\n=== Evaluation Summary ===")
     print(f"Total questions: {len(results)}")
-    print(f"Predictions:")
+    print("Predictions:")
     for r in results[:5]:  # Show first 5
         print(f"  Q: {r.question}")
         print(f"  A: {r.predicted_class_name} (ID: {r.predicted_class_id})")

@@ -1137,7 +1137,7 @@ def train_step(
 
             # Calculate adaptive loss weights if enabled
             # Optimized distillation weights based on toy model experiments
-            kl_weight = kd_cfg.get("kl_weight", 0.6)        # Increased for teacher alignment
+            kl_weight = kd_cfg.get("kl_weight", 0.6)  # Increased for teacher alignment
             ce_teacher_weight = kd_cfg.get("ce_teacher_weight", 0.2)  # Reduced to balance
             ce_ground_truth_weight = kd_cfg.get("ce_ground_truth_weight", 0.2)  # Keep ground truth
 
@@ -2177,7 +2177,9 @@ def main():
 
     if is_main_process:
         print(f"[distill_kd] LR Schedule: {warmup_steps} warmup steps, {total_steps} total steps")
-        print(f"[distill_kd] Gradient Clipping: {grad_clip_norm} (adaptive for {model_params:,} params)")
+        print(
+            f"[distill_kd] Gradient Clipping: {grad_clip_norm} (adaptive for {model_params:,} params)"
+        )
 
     def lr_lambda(step):
         if step < warmup_steps:
@@ -2211,6 +2213,7 @@ def main():
         # Aggressive garbage collection for large models
         if is_large_model:
             import gc
+
             gc.collect()
             if device.type == "cuda":
                 torch.cuda.empty_cache()
@@ -2322,7 +2325,9 @@ def main():
     model_size_factor = min(1.0, 100_000_000 / model_params)  # Smaller models allow larger batches
 
     effective_batch_size = int(base_batch_size * seq_len_factor * model_size_factor)
-    effective_batch_size = max(1, min(effective_batch_size, base_batch_size * 2))  # Reasonable bounds
+    effective_batch_size = max(
+        1, min(effective_batch_size, base_batch_size * 2)
+    )  # Reasonable bounds
 
     if is_main_process:
         print(f"[distill_kd] Data Loading: {num_workers} workers, prefetch={prefetch_factor}")
@@ -2468,9 +2473,11 @@ def main():
                 "device": str(device),
                 # Optimized distillation weights based on toy model experiments
                 # Higher KL weight for better teacher alignment, balanced CE weights
-                "kl_weight": dist_cfg.get("kl_weight", 0.6),        # Increased for teacher alignment
+                "kl_weight": dist_cfg.get("kl_weight", 0.6),  # Increased for teacher alignment
                 "ce_teacher_weight": dist_cfg.get("ce_teacher_weight", 0.2),  # Reduced to balance
-                "ce_ground_truth_weight": dist_cfg.get("ce_ground_truth_weight", 0.2),  # Keep ground truth
+                "ce_ground_truth_weight": dist_cfg.get(
+                    "ce_ground_truth_weight", 0.2
+                ),  # Keep ground truth
             }
         )
 
@@ -2583,7 +2590,7 @@ def main():
 
                 # Log learning rate and memory usage periodically
                 if step % 100 == 0 and is_main_process:
-                    current_lr = optimizer.param_groups[0]['lr']
+                    current_lr = optimizer.param_groups[0]["lr"]
 
                     # Memory usage tracking
                     if device.type == "cuda":
@@ -2597,9 +2604,13 @@ def main():
                     eta_hours = (total_steps - step) / 100 * 0.1  # Rough ETA based on steps/second
 
                     if is_large_model:
-                        print(f"[distill_kd] Step {step}/{total_steps} ({progress_pct:.1f}%): loss={loss_dict.get('total', 0):.4f}, lr={current_lr:.2e}{memory_info}, ETA~{eta_hours:.1f}h")
+                        print(
+                            f"[distill_kd] Step {step}/{total_steps} ({progress_pct:.1f}%): loss={loss_dict.get('total', 0):.4f}, lr={current_lr:.2e}{memory_info}, ETA~{eta_hours:.1f}h"
+                        )
                     else:
-                        print(f"[distill_kd] Step {step}/{total_steps}: loss={loss_dict.get('total', 0):.4f}, lr={current_lr:.2e}{memory_info}")
+                        print(
+                            f"[distill_kd] Step {step}/{total_steps}: loss={loss_dict.get('total', 0):.4f}, lr={current_lr:.2e}{memory_info}"
+                        )
             except Exception as e:
                 print(f"[distill_kd] ERROR: Training step {step} failed: {e}")
                 import traceback
@@ -2617,6 +2628,7 @@ def main():
                         # For very large models, also clear CPU cache
                         if is_large_model:
                             import gc
+
                             gc.collect()
                             print("[distill_kd] Performed full garbage collection for large model")
 
@@ -2624,21 +2636,25 @@ def main():
                         print(f"[distill_kd] WARN: Failed to clear GPU cache: {cache_e}")
 
                 # Track consecutive failures to prevent infinite loops
-                if not hasattr(train_step, '_consecutive_failures'):
+                if not hasattr(train_step, "_consecutive_failures"):
                     train_step._consecutive_failures = 0
 
                 train_step._consecutive_failures += 1
 
                 # If too many consecutive failures, save emergency checkpoint and exit
-                max_consecutive_failures = 10 if not is_large_model else 5  # More strict for large models
+                max_consecutive_failures = (
+                    10 if not is_large_model else 5
+                )  # More strict for large models
                 if train_step._consecutive_failures >= max_consecutive_failures:
-                    print(f"[distill_kd] CRITICAL: {train_step._consecutive_failures} consecutive failures. Saving emergency checkpoint and exiting.")
+                    print(
+                        f"[distill_kd] CRITICAL: {train_step._consecutive_failures} consecutive failures. Saving emergency checkpoint and exiting."
+                    )
                     try:
                         save_checkpoint(
                             model=model,
                             optimizer=optimizer,
                             step=step,
-                            loss=loss_dict.get("total", float('inf')),
+                            loss=loss_dict.get("total", float("inf")),
                             output_dir=output_dir,
                             config=cfg,
                             rng_states=None,  # Skip RNG states in emergency
@@ -2647,7 +2663,9 @@ def main():
                         )
                         print("[distill_kd] Emergency checkpoint saved successfully")
                     except Exception as ckpt_e:
-                        print(f"[distill_kd] CRITICAL: Failed to save emergency checkpoint: {ckpt_e}")
+                        print(
+                            f"[distill_kd] CRITICAL: Failed to save emergency checkpoint: {ckpt_e}"
+                        )
 
                     sys.exit(1)
 
@@ -2736,7 +2754,9 @@ def main():
             # Save more frequently for large models to prevent loss of progress
             checkpoint_frequency = save_every
             if is_large_model:
-                checkpoint_frequency = min(save_every, max(100, save_every // 4))  # Save 4x more frequently for large models
+                checkpoint_frequency = min(
+                    save_every, max(100, save_every // 4)
+                )  # Save 4x more frequently for large models
 
             should_save_checkpoint = step % checkpoint_frequency == 0 and is_main_process
 
@@ -2745,7 +2765,9 @@ def main():
             milestone_steps = [int(total_steps * pct) for pct in [0.1, 0.25, 0.5, 0.75, 0.9, 1.0]]
             if step in milestone_steps:
                 should_save_checkpoint = True
-                print(f"[distill_kd] Milestone checkpoint at {step}/{total_steps} steps ({step/total_steps:.1%})")
+                print(
+                    f"[distill_kd] Milestone checkpoint at {step}/{total_steps} steps ({step / total_steps:.1%})"
+                )
 
             if should_save_checkpoint:
                 # Capture RNG states for reproducibility
@@ -2795,7 +2817,9 @@ def main():
             loss_dict=loss_dict,
             rng_states=rng_states,
             data_shard_index=current_shard_index,
-            dataset_fingerprint=dataset.dataset_fingerprint if hasattr(dataset, 'dataset_fingerprint') else None,
+            dataset_fingerprint=dataset.dataset_fingerprint
+            if hasattr(dataset, "dataset_fingerprint")
+            else None,
         )
 
         # Close tracer and save summary

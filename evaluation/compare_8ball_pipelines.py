@@ -10,7 +10,6 @@ Author: @darianrosebrook
 """
 
 import json
-import sys
 from pathlib import Path
 from evaluation.eight_ball_eval import (
     evaluate_pytorch_model,
@@ -18,16 +17,12 @@ from evaluation.eight_ball_eval import (
     evaluate_ollama_model,
     compare_predictions,
     load_eval_questions,
-    PredictionResult,
-    EvaluationMetrics,
 )
 import argparse
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        description="Compare 8-ball model across conversion pipeline"
-    )
+    ap = argparse.ArgumentParser(description="Compare 8-ball model across conversion pipeline")
     ap.add_argument(
         "--pytorch-model",
         help="PyTorch model path (reference)",
@@ -98,7 +93,7 @@ def main():
                 f,
                 indent=2,
             )
-        print(f"✅ Saved PyTorch predictions\n")
+        print("✅ Saved PyTorch predictions\n")
 
     # Evaluate CoreML model
     if args.coreml_model:
@@ -132,7 +127,7 @@ def main():
                 f,
                 indent=2,
             )
-        print(f"✅ Saved CoreML predictions\n")
+        print("✅ Saved CoreML predictions\n")
 
     # Evaluate Ollama model
     if args.ollama_model:
@@ -159,7 +154,7 @@ def main():
                 f,
                 indent=2,
             )
-        print(f"✅ Saved Ollama predictions\n")
+        print("✅ Saved Ollama predictions\n")
 
     # Compare results
     if "pytorch" in results:
@@ -170,7 +165,7 @@ def main():
 
         if "coreml" in results:
             metrics = compare_predictions(reference, results["coreml"])
-            print(f"\n📊 PyTorch → CoreML:")
+            print("\n📊 PyTorch → CoreML:")
             print(f"   Exact Match Rate: {metrics.exact_match_rate:.1%}")
             if metrics.mean_l2_drift is not None:
                 print(f"   Mean L2 Drift: {metrics.mean_l2_drift:.6f}")
@@ -179,7 +174,7 @@ def main():
 
         if "ollama" in results:
             metrics = compare_predictions(reference, results["ollama"])
-            print(f"\n📊 PyTorch → GGUF → Ollama:")
+            print("\n📊 PyTorch → GGUF → Ollama:")
             print(f"   Exact Match Rate: {metrics.exact_match_rate:.1%}")
             if metrics.mean_l2_drift is not None:
                 print(f"   Mean L2 Drift: {metrics.mean_l2_drift:.6f}")
@@ -210,4 +205,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

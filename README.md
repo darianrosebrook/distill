@@ -76,7 +76,8 @@ make coreml-worker     # production path via PyTorch exporter
 ### 1 · Environment Setup
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+# Use ARM-native Python (Homebrew) for Apple Silicon compatibility
+/opt/homebrew/bin/python3.11 -m venv venv && source venv/bin/activate
 pip install -e .
 ```
 
@@ -273,7 +274,7 @@ Small deterministic slice enforcing fixture coverage and CAWS gates before merge
   <em>🎱 Our toy models enable fast pipeline testing without expensive compute! 🎱</em>
 </p>
 
-**Comprehensive lightweight testing without large language models or expensive compute** - validates the complete distillation pipeline using deterministic, optimized test doubles. Enables fast iteration during development while ensuring production-ready integration.
+**Comprehensive lightweight testing without large language models or expensive compute** - validates the complete distillation pipeline using deterministic, optimized test doubles. Enables fast iteration during development.
 
 **Two Toy Models for Different Testing Scenarios:**
 
@@ -296,11 +297,11 @@ Both models use the same architecture (~623K parameters) and training pipeline, 
 - **Fast execution**: Full pipeline in ≤4 minutes on CPU
 - **Complete coverage**: All integration points tested
 - **Deterministic**: Reproducible results across environments
-- **Production ready**: Same interfaces and validation as real models
+- **Same interfaces**: Uses same interfaces and validation as real models
 
 **Performance Benchmarks:**
 
-Our toy models deliver **production-grade inference speeds**:
+Our toy models deliver **measured inference speeds**:
 
 | Model            | TTFT       | TPS                  | Parameters | Training Data | Training Cost | Inference Cost (1M queries) |
 | ---------------- | ---------- | -------------------- | ---------- | ------------- | ------------- | --------------------------- |
@@ -511,10 +512,16 @@ training/        – Training utilities, losses, and distillation
 
 ## Summary
 
-kimi-student now forms a **self-auditing infrastructure for grounded tool-integration learning**.
+kimi-student forms a **self-auditing infrastructure for grounded tool-integration learning**.
 
 It delivers **distilled CoreML models** verified through **CAWS-compliant evaluation**, with constitutional gates enforced in CI and reproducible governance for on-device deployment.
 
+> **Current implementation:**
+>
+> • Core distillation pipeline functional
+> • Basic fixture library implemented
+> • CAWS evaluation framework working
+>
 > **Next milestones:**
 
 > • Expand fixture library (≤ 2 % miss rate)

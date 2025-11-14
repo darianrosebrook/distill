@@ -157,15 +157,15 @@ def eight_ball_teacher_logits(
         for b in range(batch_size):
             question_hash = hash(tuple(token_ids[b].cpu().numpy())) % 20
             preferred_answer_id = eight_ball_token_ids[question_hash]
-            
+
             # Strong boost for the preferred answer at final position
             logits[b, -1, preferred_answer_id] += 15.0
-            
+
             # Moderate boost for other 8-ball answers
             for token_id in eight_ball_token_ids:
                 if token_id != preferred_answer_id:
                     logits[b, -1, token_id] += 5.0
-        
+
         # Normalize to prevent overflow
         logits = logits / (logits.abs().max() + 1e-8) * 10.0
         return logits

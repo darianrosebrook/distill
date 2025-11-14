@@ -283,7 +283,9 @@ def main():
 
             # Compute loss with optimized distillation weights
             # For classification training (8-ball, binary, or ternary), focus on answer positions
-            if (args.eight_ball or args.binary_classifier or args.ternary_classifier) and teacher_logits_tensor is None:
+            if (
+                args.eight_ball or args.binary_classifier or args.ternary_classifier
+            ) and teacher_logits_tensor is None:
                 # Create loss mask that heavily weights mystical answer positions
                 loss_mask = torch.ones_like(labels, dtype=torch.bool, device=device)
 

@@ -10,10 +10,22 @@ Author: @darianrosebrook
 
 import json
 import sys
+import argparse
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional
 import numpy as np
 from dataclasses import dataclass
+
+# Add module-level imports for test patching
+try:
+    from transformers import AutoTokenizer
+except ImportError:
+    AutoTokenizer = None
+
+try:
+    import coremltools as ctk
+except ImportError:
+    ctk = None
 
 # 8-Ball answer mapping: token IDs 200-219
 EIGHT_BALL_ANSWERS = [
@@ -56,24 +68,84 @@ ANSWER_TO_ID: Dict[str, int] = {answer: token_id for token_id, answer in ID_TO_A
 @dataclass
 class PredictionResult:
     """Result from a single question prediction."""
+
     question: str
-    predicted_class_id: int
-    predicted_answer: str
+    predicted_class_id: int = None
+    predicted_answer: str = None
     class_probabilities: Optional[np.ndarray] = None  # Shape: [20] for 20 answers
+    # Compatibility fields for tests
+    predicted_token: int = None
+    confidence: float = None
+    is_correct: bool = None
+    
+    def __post_init__(self):
+        """Handle compatibility between predicted_class_id and predicted_token."""
+        # Handle both predicted_class_id and predicted_token
+        if self.predicted_class_id is None and self.predicted_token is not None:
+            self.predicted_class_id = self.predicted_token
+        elif self.predicted_class_id is None:
+            raise ValueError("Must provide either predicted_class_id or predicted_token")
+        
+        # Set predicted_token for compatibility
+        if self.predicted_token is None:
+            self.predicted_token = self.predicted_class_id
+        
+        # Handle predicted_answer
+        if self.predicted_answer is None and self.predicted_class_id in ID_TO_ANSWER:
+            self.predicted_answer = ID_TO_ANSWER[self.predicted_class_id]
+        elif self.predicted_answer is None:
+            self.predicted_answer = "Unknown"
 
 
 @dataclass
 class EvaluationMetrics:
     """Aggregate metrics from evaluation."""
-    total_questions: int
-    exact_match_rate: float
+
+    total_questions: int = None
+    exact_match_rate: float = None
     mean_l2_drift: Optional[float] = None
     mean_kl_divergence: Optional[float] = None
     per_class_accuracy: Optional[Dict[int, float]] = None
+    # Compatibility fields for tests
+    total_predictions: int = None
+    correct_predictions: int = None
+    accuracy: float = None
+    token_distribution: Optional[List[int]] = None
+    answer_distribution: Optional[Dict[str, int]] = None
+    
+    def __post_init__(self):
+        """Handle compatibility between new and legacy parameter names."""
+        # Handle both total_questions and total_predictions
+        if self.total_questions is None and self.total_predictions is not None:
+            self.total_questions = self.total_predictions
+        elif self.total_questions is None:
+            self.total_questions = 0
+        
+        # Handle both exact_match_rate and accuracy
+        if self.exact_match_rate is None and self.accuracy is not None:
+            self.exact_match_rate = self.accuracy
+        elif self.exact_match_rate is None:
+            if self.correct_predictions is not None and self.total_questions is not None and self.total_questions > 0:
+                self.exact_match_rate = self.correct_predictions / self.total_questions
+            else:
+                self.exact_match_rate = 0.0
+        
+        # Set compatibility fields
+        if self.total_predictions is None:
+            self.total_predictions = self.total_questions
+        if self.accuracy is None:
+            self.accuracy = self.exact_match_rate
+        if self.correct_predictions is None and self.total_questions is not None:
+            self.correct_predictions = int(self.exact_match_rate * self.total_questions)
 
 
-def load_eval_questions(eval_file: Path) -> List[str]:
-    """Load evaluation questions from JSON file."""
+def load_eval_questions(eval_file) -> List[str]:
+    """Load evaluation questions from JSON file or return list if already a list."""
+    # Handle list input (for test compatibility)
+    if isinstance(eval_file, list):
+        return eval_file
+    
+    eval_file = Path(eval_file)
     if not eval_file.exists():
         # Create a default set if file doesn't exist
         default_questions = [
@@ -104,6 +176,10 @@ def load_eval_questions(eval_file: Path) -> List[str]:
 
     with open(eval_file) as f:
         data = json.load(f)
+    
+    # Handle both dict and list formats
+    if isinstance(data, list):
+        return data
     return data.get("questions", [])
 
 
@@ -111,8 +187,18 @@ def evaluate_pytorch_model(
     model_path: Path, tokenizer_path: Path, questions: List[str]
 ) -> List[PredictionResult]:
     """Evaluate PyTorch model (FP32 or safetensors)."""
+    # Handle empty questions list
+    if not questions:
+        return []
+    
+    if AutoTokenizer is None:
+        try:
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+        except ImportError:
+            raise ImportError("transformers library required. Install with: pip install transformers")
+    
     try:
-        from transformers import AutoModelForCausalLM, AutoTokenizer
+        from transformers import AutoModelForCausalLM
         import torch
 
         print(f"Loading PyTorch model from {model_path}")
@@ -161,9 +247,22 @@ def evaluate_coreml_model(
     model_path: Path, tokenizer_path: Path, questions: List[str]
 ) -> List[PredictionResult]:
     """Evaluate CoreML model."""
+    # Handle empty questions list
+    if not questions:
+        return []
+    
+    # Use module-level ctk if available, otherwise import
+    if ctk is None:
+        try:
+            import coremltools as ct
+        except ImportError:
+            raise ImportError("coremltools library required. Install with: pip install coremltools")
+    else:
+        ct = ctk
+    
     try:
-        import coremltools as ct
-        from transformers import AutoTokenizer
+        if AutoTokenizer is None:
+            from transformers import AutoTokenizer
         import numpy as np
 
         print(f"Loading CoreML model from {model_path}")
@@ -208,12 +307,13 @@ def evaluate_coreml_model(
         return []
 
 
-def evaluate_ollama_model(
-    model_name: str, questions: List[str]
-) -> List[PredictionResult]:
+def evaluate_ollama_model(model_name: str, questions: List[str]) -> List[PredictionResult]:
     """Evaluate Ollama model via API."""
+    # Handle empty questions list
+    if not questions:
+        return []
+    
     import subprocess
-    import json as json_lib
 
     results = []
     for question in questions:
@@ -225,12 +325,24 @@ def evaluate_ollama_model(
                 model_name,
                 question,
             ]
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=10
-            )
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            
+            # Check for subprocess failure
+            if result.returncode != 0:
+                raise RuntimeError(f"Ollama command failed with return code {result.returncode}: {result.stderr}")
 
             # Parse output - look for token IDs in the response
             output = result.stdout.strip()
+            
+            # Try to parse JSON first
+            try:
+                import json
+                parsed_output = json.loads(output)
+                if isinstance(parsed_output, dict) and "response" in parsed_output:
+                    output = parsed_output["response"]
+            except (json.JSONDecodeError, KeyError, TypeError):
+                # Not JSON, continue with raw output
+                pass
 
             # Try to extract token ID from output
             # This is a simplified parser - may need refinement
@@ -260,25 +372,34 @@ def evaluate_ollama_model(
                     class_probabilities=None,  # Ollama doesn't give us probabilities easily
                 )
             )
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError, RuntimeError) as e:
+            # Re-raise subprocess and runtime errors as Exception for test compatibility
+            raise Exception(f"Error evaluating question '{question}': {e}")
+        except json.JSONDecodeError as e:
+            # Re-raise JSON decode errors as Exception for test compatibility
+            raise Exception(f"Invalid JSON in Ollama output for question '{question}': {e}")
         except Exception as e:
-            print(f"Error evaluating question '{question}': {e}")
-            results.append(
-                PredictionResult(
-                    question=question,
-                    predicted_class_id=EIGHT_BALL_TOKEN_START,
-                    predicted_answer=ID_TO_ANSWER[EIGHT_BALL_TOKEN_START],
-                )
-            )
+            # For other exceptions, re-raise as generic Exception for test compatibility
+            raise Exception(f"Error evaluating question '{question}': {e}")
 
     return results
 
 
 def compare_predictions(
-    reference: List[PredictionResult], candidate: List[PredictionResult]
+    reference: List[PredictionResult], candidate: List[PredictionResult], config=None
 ) -> EvaluationMetrics:
     """Compare candidate predictions against reference."""
     if len(reference) != len(candidate):
         raise ValueError("Reference and candidate must have same length")
+    
+    # Handle empty lists
+    if len(reference) == 0:
+        return EvaluationMetrics(
+            total_questions=0,
+            exact_match_rate=0.0,
+            mean_l2_drift=None,
+            mean_kl_divergence=None,
+        )
 
     exact_matches = 0
     l2_drifts = []
@@ -291,9 +412,7 @@ def compare_predictions(
 
         # Probability drift (if both have probabilities)
         if ref.class_probabilities is not None and cand.class_probabilities is not None:
-            l2_drift = np.linalg.norm(
-                ref.class_probabilities - cand.class_probabilities
-            )
+            l2_drift = np.linalg.norm(ref.class_probabilities - cand.class_probabilities)
             l2_drifts.append(l2_drift)
 
             # KL divergence
@@ -307,17 +426,16 @@ def compare_predictions(
             kl = np.sum(ref_probs * np.log(ref_probs / cand_probs))
             kl_divergences.append(kl)
 
+    exact_match_rate = exact_matches / len(reference) if len(reference) > 0 else 0.0
     return EvaluationMetrics(
         total_questions=len(reference),
-        exact_match_rate=exact_matches / len(reference),
+        exact_match_rate=exact_match_rate,
         mean_l2_drift=np.mean(l2_drifts) if l2_drifts else None,
         mean_kl_divergence=np.mean(kl_divergences) if kl_divergences else None,
     )
 
 
 def main():
-    import argparse
-
     ap = argparse.ArgumentParser(description="Evaluate 8-ball model as classifier")
     ap.add_argument(
         "--backend",
@@ -326,9 +444,7 @@ def main():
         help="Backend to evaluate",
     )
     ap.add_argument("--model", required=True, help="Model path or Ollama model name")
-    ap.add_argument(
-        "--tokenizer", help="Tokenizer path (not needed for Ollama)"
-    )
+    ap.add_argument("--tokenizer", help="Tokenizer path (not needed for Ollama)")
     ap.add_argument(
         "--eval-questions",
         default="evaluation/8ball_eval_questions.json",
@@ -354,16 +470,12 @@ def main():
         if not args.tokenizer:
             print("Error: --tokenizer required for PyTorch backend")
             sys.exit(1)
-        results = evaluate_pytorch_model(
-            Path(args.model), Path(args.tokenizer), questions
-        )
+        results = evaluate_pytorch_model(Path(args.model), Path(args.tokenizer), questions)
     elif args.backend == "coreml":
         if not args.tokenizer:
             print("Error: --tokenizer required for CoreML backend")
             sys.exit(1)
-        results = evaluate_coreml_model(
-            Path(args.model), Path(args.tokenizer), questions
-        )
+        results = evaluate_coreml_model(Path(args.model), Path(args.tokenizer), questions)
     elif args.backend == "ollama":
         results = evaluate_ollama_model(args.model, questions)
     else:
@@ -403,9 +515,7 @@ def main():
                 predicted_class_id=p["predicted_class_id"],
                 predicted_answer=p["predicted_answer"],
                 class_probabilities=(
-                    np.array(p["class_probabilities"])
-                    if p.get("class_probabilities")
-                    else None
+                    np.array(p["class_probabilities"]) if p.get("class_probabilities") else None
                 ),
             )
             for p in ref_data["predictions"]
@@ -420,9 +530,9 @@ def main():
             print(f"Mean KL Divergence: {metrics.mean_kl_divergence:.6f}")
 
     # Print summary
-    print(f"\n=== Evaluation Summary ===")
+    print("\n=== Evaluation Summary ===")
     print(f"Total questions: {len(results)}")
-    print(f"Predictions:")
+    print("Predictions:")
     for r in results[:5]:  # Show first 5
         print(f"  Q: {r.question}")
         print(f"  A: {r.predicted_answer} (ID: {r.predicted_class_id})")
@@ -430,4 +540,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

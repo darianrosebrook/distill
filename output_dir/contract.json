@@ -1,0 +1,35 @@
+{
+  "inputs": [
+    {
+      "name": "input_ids",
+      "dtype": "int32",
+      "shape": [
+        "B",
+        "T"
+      ]
+    }
+  ],
+  "outputs": [
+    {
+      "name": "logits",
+      "dtype": "float16",
+      "shape": [
+        "B",
+        "T",
+        "V"
+      ]
+    }
+  ],
+  "kv_precision": "fp16",
+  "enumerated_T": [
+    64,
+    128,
+    256
+  ],
+  "n_heads": 32,
+  "n_kv_heads": 8,
+  "d_head": 128,
+  "d_model": 4096,
+  "n_layers": 32,
+  "vocab_size": 32000
+}

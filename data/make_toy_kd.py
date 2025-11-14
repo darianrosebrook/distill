@@ -22,7 +22,13 @@ import sys
 from pathlib import Path
 
 
-def mk_item(i: int, vocab_size: int = 512, eight_ball: bool = False, binary_classifier: bool = False, ternary_classifier: bool = False) -> dict:
+def mk_item(
+    i: int,
+    vocab_size: int = 512,
+    eight_ball: bool = False,
+    binary_classifier: bool = False,
+    ternary_classifier: bool = False,
+) -> dict:
     """Create a single KD sample."""
     if eight_ball:
         return mk_eight_ball_item(i, vocab_size)
@@ -175,10 +181,20 @@ def mk_binary_classifier_item(i: int, vocab_size: int = 512) -> dict:
     hash_int = int(evidence_hash[:8], 16)  # Use first 8 hex chars as int
 
     # Classify based on evidence content (deterministic but varied)
-    if "vulnerability" in evidence or "blocked" in evidence or "failing" in evidence or "broken" in evidence:
+    if (
+        "vulnerability" in evidence
+        or "blocked" in evidence
+        or "failing" in evidence
+        or "broken" in evidence
+    ):
         # Clear NO cases
         label = "NO"
-    elif "100% coverage" in evidence or "successful" in evidence or "verified" in evidence or "passed" in evidence:
+    elif (
+        "100% coverage" in evidence
+        or "successful" in evidence
+        or "verified" in evidence
+        or "passed" in evidence
+    ):
         # Clear YES cases
         label = "YES"
     elif "improvement" in evidence or "optimized" in evidence or "met" in evidence:
@@ -253,10 +269,20 @@ def mk_ternary_classifier_item(i: int, vocab_size: int = 512) -> dict:
     hash_int = int(evidence_hash[:8], 16)  # Use first 8 hex chars as int
 
     # Classify based on evidence content (deterministic but varied)
-    if "vulnerability" in evidence or "blocked" in evidence or "failing" in evidence or "broken" in evidence:
+    if (
+        "vulnerability" in evidence
+        or "blocked" in evidence
+        or "failing" in evidence
+        or "broken" in evidence
+    ):
         # Clear NO cases
         label = "NO"
-    elif "100% coverage" in evidence or "successful" in evidence or "verified" in evidence or "passed" in evidence:
+    elif (
+        "100% coverage" in evidence
+        or "successful" in evidence
+        or "verified" in evidence
+        or "passed" in evidence
+    ):
         # Clear YES cases
         label = "YES"
     elif "improvement" in evidence or "optimized" in evidence or "met" in evidence:
@@ -271,7 +297,12 @@ def mk_ternary_classifier_item(i: int, vocab_size: int = 512) -> dict:
             label = "UNCERTAIN"
         else:
             label = "NO"
-    elif "pending" in evidence or "unclear" in evidence or "unknown" in evidence or "limited" in evidence:
+    elif (
+        "pending" in evidence
+        or "unclear" in evidence
+        or "unknown" in evidence
+        or "limited" in evidence
+    ):
         # Borderline/uncertain cases
         if hash_int % 3 == 0:
             label = "YES"
@@ -353,7 +384,9 @@ def main():
     # Generate samples
     samples = []
     for i in range(args.n):
-        samples.append(mk_item(i, args.vocab, args.eight_ball, args.binary_classifier, args.ternary_classifier))
+        samples.append(
+            mk_item(i, args.vocab, args.eight_ball, args.binary_classifier, args.ternary_classifier)
+        )
 
     # Write JSONL
     with open(output_path, "w", encoding="utf-8") as f:
@@ -373,7 +406,9 @@ def main():
         print(f"  Samples: {len(samples)}")
         print(f"  YES labels: {yes_count} ({100 * yes_count / len(samples):.1f}%)")
         print(f"  NO labels: {no_count} ({100 * no_count / len(samples):.1f}%)")
-        print(f"  UNCERTAIN labels: {uncertain_count} ({100 * uncertain_count / len(samples):.1f}%)")
+        print(
+            f"  UNCERTAIN labels: {uncertain_count} ({100 * uncertain_count / len(samples):.1f}%)"
+        )
     elif args.binary_classifier:
         dataset_type = "binary-classifier"
         yes_count = sum(1 for s in samples if s["metadata"]["label"] == "YES")

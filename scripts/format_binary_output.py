@@ -17,15 +17,9 @@ from evaluation.toy.binary_classifier import (
 )
 
 # Also map the DECISION token names (from tokenizer)
-DECISION_TOKEN_NAMES = [
-    f"<DECISION_{answer}>"
-    for answer in BINARY_ANSWERS
-]
+DECISION_TOKEN_NAMES = [f"<DECISION_{answer}>" for answer in BINARY_ANSWERS]
 
-NAME_TO_ANSWER = {
-    name: answer
-    for name, answer in zip(DECISION_TOKEN_NAMES, BINARY_ANSWERS)
-}
+NAME_TO_ANSWER = {name: answer for name, answer in zip(DECISION_TOKEN_NAMES, BINARY_ANSWERS)}
 
 
 def format_output(text: str) -> str:

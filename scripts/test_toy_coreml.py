@@ -44,8 +44,7 @@ def generate_test_prompts(num_prompts: int = 20) -> List[str]:
     ]
 
     # Add some variety
-    prefixes = ["", "Let me tell you that ",
-                "I know that ", "It's clear that "]
+    prefixes = ["", "Let me tell you that ", "I know that ", "It's clear that "]
     suffixes = ["", ".", "!", " and that's it."]
 
     prompts = []
@@ -94,8 +93,7 @@ def evaluate_toy_response(prompt: str, response: str, generated_tokens: list) ->
         "has_variety": has_variety,
         "ends_with_punct": ends_with_punct,
         "score": sum(
-            [has_content, is_reasonable_length,
-                not_repeating_prompt, has_variety, ends_with_punct]
+            [has_content, is_reasonable_length, not_repeating_prompt, has_variety, ends_with_punct]
         )
         / 5.0,
     }
@@ -172,23 +170,20 @@ def main():
 
             # Pad to sequence length
             if input_ids_np.shape[1] < seq_len:
-                padding = np.zeros(
-                    (1, seq_len - input_ids_np.shape[1]), dtype=np.int32)
+                padding = np.zeros((1, seq_len - input_ids_np.shape[1]), dtype=np.int32)
                 input_ids_np = np.concatenate([input_ids_np, padding], axis=1)
 
             generated_tokens = []
             # Generate up to 15 tokens
             max_new_tokens = min(15, seq_len - prompt_len)
-            print(
-                f"        Max new tokens: {max_new_tokens}, prompt len: {prompt_len}")
+            print(f"        Max new tokens: {max_new_tokens}, prompt len: {prompt_len}")
 
             # Debug: Show prompt token details
             actual_prompt_tokens = input_ids_np[0][:prompt_len]
             print(
                 f"        Prompt tokens: {actual_prompt_tokens[:10]}{'...' if len(actual_prompt_tokens) > 10 else ''}"
             )
-            print(
-                f"        Prompt decoded: '{tokenizer.decode(actual_prompt_tokens)}'")
+            print(f"        Prompt decoded: '{tokenizer.decode(actual_prompt_tokens)}'")
             print(f"        Padded sequence shape: {input_ids_np.shape}")
             print(f"        Padding starts at position: {prompt_len}")
 
@@ -229,8 +224,7 @@ def main():
                     elif len(logits.shape) == 1:
                         next_token_logits = logits
                     else:
-                        raise ValueError(
-                            f"Unexpected logits shape: {logits.shape}")
+                        raise ValueError(f"Unexpected logits shape: {logits.shape}")
 
                 # Sample token (greedy)
                 tok_id = int(next_token_logits.argmax())
@@ -239,8 +233,7 @@ def main():
                 # Debug: Show top-5 predictions with probabilities
                 import numpy as np
 
-                probs = np.exp(next_token_logits) / \
-                    np.sum(np.exp(next_token_logits))  # Softmax
+                probs = np.exp(next_token_logits) / np.sum(np.exp(next_token_logits))  # Softmax
                 # Top 5 in descending order
                 top_5_indices = np.argsort(next_token_logits)[-5:][::-1]
                 top_5_probs = probs[top_5_indices]
@@ -250,10 +243,8 @@ def main():
                         token_text = tokenizer.decode([token_id])
                     except (UnicodeDecodeError, ValueError, KeyError):
                         token_text = f"<unk_{token_id}>"
-                    print(
-                        f"          {i + 1}. '{token_text}' (id={token_id}, prob={prob:.4f})")
-                print(
-                    f"        Selected: '{tokenizer.decode([tok_id])}' (id={tok_id})")
+                    print(f"          {i + 1}. '{token_text}' (id={token_id}, prob={prob:.4f})")
+                print(f"        Selected: '{tokenizer.decode([tok_id])}' (id={tok_id})")
 
                 # Stop if we hit sequence limit
                 if input_ids_np.shape[1] >= seq_len:
@@ -272,17 +263,14 @@ def main():
             print(f"        Generated tokens: {generated_tokens[:10]}...")
 
             # Decode generated tokens
-            generated_text = tokenizer.decode(
-                generated_tokens, skip_special_tokens=True)
+            generated_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
             if not generated_text and generated_tokens:
-                generated_text = tokenizer.decode(
-                    generated_tokens, skip_special_tokens=False)
+                generated_text = tokenizer.decode(generated_tokens, skip_special_tokens=False)
                 print(f"        With special tokens: '{generated_text}'")
             response = generated_text.strip()
 
             # Evaluate response
-            evaluation = evaluate_toy_response(
-                prompt, response, generated_tokens)
+            evaluation = evaluate_toy_response(prompt, response, generated_tokens)
 
             results.append(evaluation)
 
