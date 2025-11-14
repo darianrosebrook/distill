@@ -44,15 +44,21 @@ def load_config(config_path: str) -> Dict[str, Any]:
 
 
 def merge_configs(configs: list) -> Dict[str, Any]:
-    """Merge multiple config files."""
+    """Merge multiple config files with deep merging for nested dictionaries."""
+    def deep_merge(base: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
+        """Recursively merge two dictionaries."""
+        result = base.copy()
+        for key, value in update.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = deep_merge(result[key], value)
+            else:
+                result[key] = value
+        return result
+    
     merged = {}
     for config_path in configs:
         config = load_config(config_path)
-        for key, value in config.items():
-            if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
-                merged[key].update(value)
-            else:
-                merged[key] = value
+        merged = deep_merge(merged, config)
     return merged
 
 

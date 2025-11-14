@@ -2552,6 +2552,21 @@ class TestTrainingStepExpanded:
 class TestMainFunction:
     """Test main function initialization and critical paths."""
 
+    @pytest.fixture
+    def simple_optimizer(self, small_model):
+        """Create a simple optimizer for testing."""
+        return AdamW(small_model.parameters(), lr=1e-4)
+
+    @pytest.fixture
+    def training_config(self):
+        """Create a basic training configuration."""
+        return {
+            "arch": {"vocab_size": 1000, "d_model": 128, "n_layers": 2, "n_heads": 4},
+            "train": {"steps": 100, "micro_batch_size": 2},
+            "distillation": {"w_tool": 0.0, "w_args": 0.0},
+            "optimizer": {"lr": 1e-4},
+        }
+
     @patch("training.distill_kd.check_training_versions")
     @patch("training.distill_kd.merge_configs")
     @patch("training.distill_kd.validate_config")
