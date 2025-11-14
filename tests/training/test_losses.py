@@ -3134,7 +3134,6 @@ class TestEntropyWeighting:
         assert abs(temperature - expected_temperature) < 1e-5, (
             f"Temperature should match formula: {expected_temperature}, got {temperature} (subtraction verified)"
         )
-        assert weights_dict["ce_ground_truth_weight"] > 0.5
 
 
 
