@@ -193,6 +193,48 @@ class TestLogLossComponents:
         log_loss_components(loss_dict, step=100, log_every=100)
         captured = capsys.readouterr()
         assert "Step 100" in captured.out
+        assert "total=1.5000" in captured.out
+        assert "kl=0.5000" in captured.out
+
+    def test_log_loss_components_mixed_types(self, capsys):
+        """Test logging loss components with mixed tensor and float types."""
+        loss_dict = {"total": torch.tensor(1.5), "kl": 0.5, "ce": torch.tensor(0.3)}
+        log_loss_components(loss_dict, step=300, log_every=100)
+
+        captured = capsys.readouterr()
+        assert "Step 300" in captured.out
+        assert "total=1.5000" in captured.out
+        assert "ce=0.3000" in captured.out
+        assert "kl=0.5000" in captured.out
+
+    def test_log_loss_components_empty_dict(self, capsys):
+        """Test logging empty loss dictionary."""
+        loss_dict = {}
+        log_loss_components(loss_dict, step=100, log_every=100)
+
+        captured = capsys.readouterr()
+        assert "Step 100" in captured.out
+        # Should handle empty dict gracefully
+
+    def test_log_loss_components_single_component(self, capsys):
+        """Test logging single loss component."""
+        loss_dict = {"total": torch.tensor(1.0)}
+        log_loss_components(loss_dict, step=500, log_every=100)
+
+        captured = capsys.readouterr()
+        assert "Step 500" in captured.out
+        assert "total=1.0000" in captured.out
+
+    def test_log_loss_components_sorted_output(self, capsys):
+        """Test that components are logged in sorted order."""
+        loss_dict = {"z_component": torch.tensor(0.1), "a_component": torch.tensor(0.2), "m_component": torch.tensor(0.3)}
+        log_loss_components(loss_dict, step=600, log_every=100)
+
+        captured = capsys.readouterr()
+        output = captured.out
+        # Components should be sorted alphabetically
+        assert output.index("a_component") < output.index("m_component")
+        assert output.index("m_component") < output.index("z_component")
 
 
 class TestComputeGradientNorms:
