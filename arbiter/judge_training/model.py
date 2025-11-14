@@ -3,7 +3,7 @@
 # @author: @darianrosebrook
 
 import torch.nn as nn
-from transformers import AutoModel
+from .model_loading import safe_from_pretrained_model
 
 
 class MeanPooler(nn.Module):
@@ -22,7 +22,7 @@ class MultiTaskJudge(nn.Module):
 
     def __init__(self, hf_name: str, num_clauses: int):
         super().__init__()
-        self.backbone = AutoModel.from_pretrained(hf_name)
+        self.backbone = safe_from_pretrained_model(hf_name)
         hidden = self.backbone.config.hidden_size
         self.pool = MeanPooler()
         self.score_head = nn.Linear(hidden, 1)

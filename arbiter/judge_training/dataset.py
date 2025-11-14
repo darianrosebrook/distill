@@ -7,7 +7,7 @@ from typing import List, Dict
 import json
 import torch
 from torch.utils.data import Dataset
-from transformers import AutoTokenizer
+from .model_loading import safe_from_pretrained_tokenizer
 
 
 @dataclass
@@ -35,7 +35,7 @@ class PairwiseJudgeDataset(Dataset):
             if line.strip()
         ]
         self.cfg = cfg
-        self.tok = AutoTokenizer.from_pretrained(cfg.hf_name, use_fast=True)
+        self.tok = safe_from_pretrained_tokenizer(cfg.hf_name, use_fast=True)
         self.clause2id = {c: i for i, c in enumerate(cfg.clauses)}
 
     def __len__(self):

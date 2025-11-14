@@ -293,8 +293,9 @@ def create_inference_orchestrator_from_checkpoint(
     Returns:
         Configured InferenceOrchestrator
     """
-    # Load checkpoint
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    # Load checkpoint safely with structure validation
+    from training.safe_checkpoint_loading import safe_load_checkpoint
+    checkpoint = safe_load_checkpoint(checkpoint_path, map_location="cpu")
 
     # Load model config
     config_data = checkpoint.get("config", {})
@@ -339,3 +340,4 @@ def create_inference_orchestrator_from_checkpoint(
     )
 
     return InferenceOrchestrator(model, tokenizer, inference_config)
+

@@ -4,14 +4,14 @@
 
 import numpy as np
 from typing import List, Dict
-from transformers import AutoTokenizer
 import coremltools as ct
+from .model_loading import safe_from_pretrained_tokenizer
 
 
 class CoreMLJudge:
     def __init__(self, mlpackage_path: str, hf_name: str, clauses: List[str]):
         self.model = ct.models.MLModel(mlpackage_path)
-        self.tok = AutoTokenizer.from_pretrained(hf_name, use_fast=True)
+        self.tok = safe_from_pretrained_tokenizer(hf_name, use_fast=True)
         self.clauses = clauses
 
     def score(self, prompt: str, candidate: str) -> Dict:

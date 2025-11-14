@@ -23,7 +23,8 @@ async def stream_upstream(req: Request, path: str) -> StreamingResponse:
     upstream_base = CONFIG["upstream"].rstrip("/")
     upstream_path = f"/{path}" if path else ""
     query_string = str(req.url.query)
-    url = f"{upstream_base}{upstream_path}" + (f"?{query_string}" if query_string else "")
+    url = f"{upstream_base}{upstream_path}" + \
+        (f"?{query_string}" if query_string else "")
 
     method = req.method
     headers = dict(req.headers)
@@ -36,7 +37,15 @@ async def stream_upstream(req: Request, path: str) -> StreamingResponse:
     os.makedirs(CONFIG["out_dir"], exist_ok=True)
     raw_path = os.path.join(CONFIG["out_dir"], f"{trace_id}.jsonl")
 
-    async with httpx.AsyncClient(timeout=None) as client:
+    # Configure timeouts for streaming requests
+    # Connection timeout: 10s, Read timeout: 5 minutes (for streaming), Write timeout: 10s
+    timeout = httpx.Timeout(
+        connect=10.0,  # Connection timeout
+        read=300.0,    # Read timeout (5 minutes for streaming responses)
+        write=10.0,    # Write timeout
+        pool=10.0      # Pool timeout
+    )
+    async with httpx.AsyncClient(timeout=timeout) as client:
         upstream = await client.stream(method, url, headers=headers, content=body)
 
         async def agen() -> AsyncIterator[bytes]:

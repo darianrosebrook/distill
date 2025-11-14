@@ -52,8 +52,9 @@ def load_model_and_tokenizer(
 
     # Check if it's a checkpoint or exported model
     if model_path.suffix == ".pt":
-        # Load checkpoint
-        checkpoint = torch.load(model_path, map_location="cpu")
+        # Load checkpoint safely with structure validation
+        from training.safe_checkpoint_loading import safe_load_checkpoint
+        checkpoint = safe_load_checkpoint(model_path, map_location="cpu")
 
         # Load model config
         config_data = checkpoint.get("config", {})
@@ -330,3 +331,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -53,7 +53,8 @@ def merge_configs(configs: list) -> Dict[str, Any]:
 
 def load_model(checkpoint_path: str, device: torch.device) -> nn.Module:
     """Load model from checkpoint."""
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    from training.safe_checkpoint_loading import safe_load_checkpoint
+    checkpoint = safe_load_checkpoint(checkpoint_path, map_location="cpu")
 
     # Load config from checkpoint
     cfg = None
