@@ -23,6 +23,11 @@ class TestSafetyEdgeCases:
         model.forward_hidden = Mock(return_value=torch.randn(1, 5, 128))
         model.cfg = Mock()
         model.cfg.n_layers = 2
+        # Mock forward_decode to return (logits, kv_caches) tuple
+        model.forward_decode = Mock(return_value=(
+            torch.randn(1, 1, 1000),  # logits
+            None  # kv_caches
+        ))
         return model
 
     @pytest.fixture

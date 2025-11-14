@@ -83,7 +83,7 @@ class TestTokenReductionE2E:
         )
 
         assert baseline_tokens > 0
-        return baseline_metrics
+        # Don't return - tests should not return values
 
     def test_latent_mode_token_reduction(self, mock_model, mock_tokenizer, long_chain_task):
         """Test latent mode achieves token reduction."""
@@ -112,7 +112,7 @@ class TestTokenReductionE2E:
         )
 
         assert latent_tokens > 0
-        return latent_metrics
+        # Don't return - tests should not return values
 
     def test_token_reduction_at_equal_accuracy(self, mock_model, mock_tokenizer, long_chain_task):
         """Test that latent mode achieves ≥25% token reduction at equal accuracy."""

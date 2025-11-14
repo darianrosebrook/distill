@@ -176,19 +176,21 @@ class TestLatencyAwareLossesIntegration:
 
         # Tool should be used
         tool_should_be_used = torch.tensor([True, False], device=device)
-        teacher_prefix_ids = torch.full((b, 25), fill_value=-100, device=device)
+        # teacher_prefix_ids should match sequence length (t=20), not exceed it
+        teacher_prefix_ids = torch.full((b, t), fill_value=-100, device=device)
         teacher_prefix_ids[0, :5] = torch.tensor(
             [5, 7, 110, 101, 98], device=device
         )  # Mock JSON start
 
         # Compute early tool loss
+        # N should not exceed sequence length
         loss, diags = early_tool_call_loss(
             logits=logits,
             input_ids=input_ids,
             tool_should_be_used=tool_should_be_used,
             tokenizer=mock_tokenizer,
             teacher_prefix_ids=teacher_prefix_ids,
-            N=25,
+            N=t,  # Use sequence length, not 25
             ce_weight=0.2,
             ramp_t=1.0,
         )

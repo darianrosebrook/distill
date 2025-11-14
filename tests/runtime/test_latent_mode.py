@@ -130,6 +130,11 @@ class TestLatentModeEngine:
 
         # Enter latent mode multiple times
         for i in range(5):
+            # Exit latent mode before each attempt (except first)
+            if i > 0 and engine.current_mode == "latent":
+                # Exit latent mode by processing EOT
+                engine.process_token(EOT_TOKEN_ID, hidden_state, None, i * 2 - 1)
+            
             token_id, updated_hidden, kv_caches, metadata = engine.process_token(
                 BOT_TOKEN_ID, hidden_state, None, i * 2
             )

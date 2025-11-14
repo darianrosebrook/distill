@@ -48,8 +48,10 @@ class HFLocalRunner(Runner):
             self._wrapper_sha256 = hashlib.sha256(
                 content.encode("utf-8")).hexdigest()
             if jinja2:
+                # Use autoescape=True for security (prevents XSS in templates)
+                # Templates are system-controlled, but autoescape is a defense-in-depth measure
                 self._wrapper_tpl = jinja2.Environment(
-                    autoescape=False, undefined=jinja2.StrictUndefined
+                    autoescape=True, undefined=jinja2.StrictUndefined
                 ).from_string(content)
             else:
                 self._wrapper_tpl = Template(content)

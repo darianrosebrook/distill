@@ -497,12 +497,14 @@ def test_toy_code_mode_weight_scheduler_integration():
         weights={"pos": 1.0, "neg": 1.0},
     ).to(device)
 
-    # Create eligible batch metadata
-    batch_meta = {
-        "tool_count": 2,
-        "intermediate_sizes": [15000],
-        "pii_tags_present": False,
-    }
+    # Create eligible batch metadata (must be a list of dicts, one per sample)
+    batch_meta = [
+        {
+            "tool_count": 2,
+            "intermediate_sizes": [15000],
+            "pii_tags_present": False,
+        }
+    ]
 
     # Weight scheduler parameters (from config)
     warmup_steps = 5000

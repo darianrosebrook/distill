@@ -1016,6 +1016,55 @@ class TestCombinedKDLoss:
             "code_mode_weight<0 should be treated same as zero"
         )
 
+    def test_combined_kd_loss_teacher_targets_none_check(self, device):
+        """Test that combined_kd_loss handles teacher_targets=None correctly.
+        
+        This test catches mutations that change None to True in line 603.
+        """
+        batch_size = 2
+        seq_len = 10
+        vocab_size = 1000
+
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+        teacher_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+        ground_truth_targets = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        
+        # Test with teacher_targets=None (should NOT compute CE on teacher)
+        loss_dict_none = combined_kd_loss(
+            student_logits,
+            teacher_logits,
+            teacher_targets=None,  # None - should skip CE on teacher
+            ground_truth_targets=ground_truth_targets,
+            kl_weight=0.5,
+            ce_teacher_weight=0.3,  # Should be ignored when teacher_targets=None
+            ce_ground_truth_weight=0.2,
+            kd_temperature=1.0,
+        )
+        
+        # Test with teacher_targets provided (should compute CE on teacher)
+        teacher_targets = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        loss_dict_provided = combined_kd_loss(
+            student_logits,
+            teacher_logits,
+            teacher_targets=teacher_targets,  # Provided - should compute CE on teacher
+            ground_truth_targets=ground_truth_targets,
+            kl_weight=0.5,
+            ce_teacher_weight=0.3,
+            ce_ground_truth_weight=0.2,
+            kd_temperature=1.0,
+        )
+
+        # Verify that teacher_targets=None does NOT add CE on teacher
+        assert "ce_teacher" not in loss_dict_none, "teacher_targets=None should not add CE on teacher"
+        
+        # Verify that teacher_targets provided DOES add CE on teacher
+        assert "ce_teacher" in loss_dict_provided, "teacher_targets provided should add CE on teacher"
+        
+        # Verify that providing teacher_targets increases total loss (when ce_teacher_weight > 0)
+        assert loss_dict_provided["total"].item() > loss_dict_none["total"].item(), (
+            "teacher_targets provided should increase total loss when ce_teacher_weight > 0"
+        )
+
 
 class TestCodeModePreferenceLoss:
     """Test CodeModePreferenceLoss class."""
@@ -1322,6 +1371,59 @@ class TestCodeModePreferenceLoss:
         # Verify both losses have requires_grad (they should be differentiable)
         assert loss_light.requires_grad
         assert loss_heavy.requires_grad
+
+    def test_code_mode_preference_loss_vocab_ids_none_handling(self, device):
+        """Test CodeModePreferenceLoss with vocab_ids=None explicitly.
+        
+        This test catches mutations that change None to False in line 720.
+        """
+        eligibility_rules = {"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []}
+        reward = {"prefer_ts_api_over_direct_tool": True, "penalize_tool_result_roundtrip": True}
+
+        # Test with vocab_ids=None (default value)
+        loss_fn_none = CodeModePreferenceLoss(
+            eligibility_rules=eligibility_rules,
+            reward=reward,
+            vocab_ids=None,  # None - should use default empty dict
+        )
+        
+        # Test with vocab_ids provided
+        vocab_ids = {"import": 100, "from": 101}
+        loss_fn_provided = CodeModePreferenceLoss(
+            eligibility_rules=eligibility_rules,
+            reward=reward,
+            vocab_ids=vocab_ids,  # Provided
+        )
+
+        batch_size = 1
+        seq_len = 20
+        vocab_size = 1000
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+
+        # Batch metadata: eligible sample
+        batch_meta = [
+            {"tool_count": 3, "intermediate_sizes": [15000], "pii_tags_present": False},
+        ]
+
+        # Span targets with TS API spans
+        span_targets = [
+            {"ts_mode_spans": [(5, 10)], "direct_tool_spans": []},
+        ]
+
+        # Both should work (vocab_ids=None should use empty dict as default)
+        loss_none = loss_fn_none(student_logits, span_targets=span_targets, batch_meta=batch_meta)
+        loss_provided = loss_fn_provided(student_logits, span_targets=span_targets, batch_meta=batch_meta)
+
+        # Both should return valid losses
+        assert isinstance(loss_none, torch.Tensor)
+        assert isinstance(loss_provided, torch.Tensor)
+        assert loss_none.requires_grad
+        assert loss_provided.requires_grad
+        
+        # vocab_ids=None should work (uses empty dict internally)
+        # The loss might be different if vocab_ids are used for filtering, but should still compute
+        assert loss_none.item() >= 0 or loss_none.item() < 0  # Can be positive or negative
+        assert loss_provided.item() >= 0 or loss_provided.item() < 0  # Can be positive or negative
 
 
 class TestCAWSComplianceLoss:

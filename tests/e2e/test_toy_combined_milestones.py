@@ -164,7 +164,7 @@ class TestCombinedMilestones:
         code_mode_loss = code_mode_loss_module(
             student_logits=student_logits,
             span_targets=None,  # No span targets for toy test
-            batch_meta=batch_meta[0],  # Use first sample's metadata
+            batch_meta=batch_meta,  # Pass full list of metadata dicts
         )
 
         # Verify code-mode loss is computed
@@ -336,12 +336,14 @@ class TestCombinedMilestones:
         ]
 
         # Compute code-mode loss for each sample
+        # CodeModePreferenceLoss expects batch_meta as a list, so pass the full list
+        # For per-sample testing, we can pass a single-item list
         code_mode_losses = []
         for meta in batch_meta_list:
             loss = code_mode_loss_module(
                 student_logits=student_logits,
                 span_targets=None,
-                batch_meta=meta,
+                batch_meta=[meta],  # Wrap in list as expected by the loss module
             )
             code_mode_losses.append(loss)
 
@@ -427,10 +429,12 @@ class TestCombinedMilestones:
         loss_mask[:, :4] = False  # Mask latent slots
 
         # Compute code-mode loss for eligible sample
+        # Extract metadata from processed examples and pass as list
+        batch_meta = [ex["metadata"] for ex in processed_examples]
         code_mode_loss = code_mode_loss_module(
             student_logits=student_logits,
             span_targets=None,
-            batch_meta=processed_examples[0]["metadata"],
+            batch_meta=batch_meta,  # Pass as list of metadata dicts
         )
 
         # Compute combined loss

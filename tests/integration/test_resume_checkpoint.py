@@ -279,7 +279,8 @@ class TestCacheIntegration:
 
             import hashlib
 
-            prompt_hash = hashlib.md5("test".encode()).hexdigest()
+            # Use SHA256 instead of MD5 (more secure, avoids security warnings)
+            prompt_hash = hashlib.sha256("test".encode()).hexdigest()
             cache_file = cache_dir / f"{prompt_hash}.json"
 
             # Write invalid JSON

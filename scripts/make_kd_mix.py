@@ -31,6 +31,7 @@ def load_cache(cache_dir: Path, prompt: str) -> Optional[Dict[str, Any]]:
     # Hash prompt to filename
     import hashlib
 
+    # Use SHA256 for cache hashing (secure and consistent)
     prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()
     cache_file = cache_dir / f"{prompt_hash}.json"
 
@@ -46,6 +47,7 @@ def save_cache(cache_dir: Path, prompt: str, result: Dict[str, Any]):
 
     import hashlib
 
+    # Use SHA256 for cache hashing (secure and consistent)
     prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()
     cache_file = cache_dir / f"{prompt_hash}.json"
 

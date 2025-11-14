@@ -64,7 +64,7 @@ class TestInputValidator:
     def test_validate_text_input_too_long(self, strict_validator):
         """Test validating text that exceeds max length."""
         long_text = "x" * (strict_validator.MAX_PROMPT_LENGTH + 1)
-        with pytest.raises(ValidationError, match="too long"):
+        with pytest.raises(ValidationError, match="exceeds maximum length"):
             strict_validator.validate_text_input(long_text, "prompt")
 
     def test_validate_text_input_too_long_lenient(self, lenient_validator):
@@ -446,8 +446,9 @@ class TestInputValidator:
         test_file = tmp_path / "test.txt"
         test_file.write_text("test content")
         result = strict_validator.validate_file_path(test_file, must_exist=True)
-        assert isinstance(result, Path)
-        assert result.exists()
+        # Function returns str, not Path (line 497)
+        assert isinstance(result, str)
+        assert Path(result).exists()
 
     def test_validate_file_path_not_exist(self, strict_validator, tmp_path):
         """Test validating file path that doesn't exist."""
@@ -637,5 +638,44 @@ class TestGlobalValidator:
     def test_global_validator_strict_mode(self):
         """Test that global validator is in strict mode."""
         assert validator.strict_mode
+
+    def test_validate_training_example_missing_response_after_check(self, strict_validator):
+        """Test validate_training_example when response/answer check fails (line 322)."""
+        # This tests the else branch when neither response nor answer is present
+        # after the initial check
+        example = {"prompt": "Test prompt"}
+        # Remove both response and answer to trigger line 322
+        with pytest.raises(ValidationError, match="missing required field: response"):
+            strict_validator.validate_training_example(example)
+
+    def test_validate_file_path_stat_permission_error_handling(self, strict_validator, tmp_path, monkeypatch):
+        """Test validate_file_path with stat permission error (line 495)."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+
+        # Mock stat() to raise PermissionError when called on the file
+        def mock_stat(self):
+            if self == test_file:
+                raise PermissionError("Permission denied")
+            # For other paths, use original stat
+            return Path.stat(self)
+
+        monkeypatch.setattr(Path, "stat", mock_stat)
+        
+        with pytest.raises(ValidationError, match="cannot access file"):
+            strict_validator.validate_file_path(test_file, must_exist=True)
+
+    def test_validate_training_example_with_both_response_and_answer(self, strict_validator):
+        """Test validate_training_example when both response and answer are present (line 340-342)."""
+        example = {
+            "prompt": "Test prompt",
+            "response": "Test response",
+            "answer": "Test answer",  # Both present
+        }
+        result = strict_validator.validate_training_example(example)
+        assert "response" in result
+        assert "answer" in result
+        assert result["response"] == "Test response"
+        assert result["answer"] == "Test answer"
 
 

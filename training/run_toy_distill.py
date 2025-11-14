@@ -95,9 +95,11 @@ def main():
     else:
         toy_type = "pipeline"
 
-    # If output path doesn't already include toys/, prepend it
+    # If output path doesn't already include toys/, prepend it (but respect absolute paths)
     output_path_str = args.output_path
-    if not output_path_str.startswith("toys/"):
+    output_path_obj = Path(output_path_str)
+    # Only prepend toys/ if path is relative and doesn't already start with toys/
+    if not output_path_obj.is_absolute() and not output_path_str.startswith("toys/"):
         output_path_str = f"toys/{toy_type}/{output_path_str}"
     args.output_path = output_path_str
 
