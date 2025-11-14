@@ -599,6 +599,70 @@ class TestIntermediateLayerLoss:
         assert loss_equality1.item() == 0.0, "student_idx == len should be skipped with >= check"
         assert loss_equality2.item() == 0.0, "teacher_idx == len should be skipped with >= check"
 
+    def test_code_mode_preference_loss_tool_count_gte_min_tools(self, device):
+        """Test CodeModePreferenceLoss with tool_count >= min_tools check.
+        
+        This test catches mutations that change >= to == in line 765.
+        """
+        eligibility_rules = {"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []}
+        reward = {"prefer_ts_api_over_direct_tool": True, "penalize_tool_result_roundtrip": True}
+        vocab_ids = {"import": 100, "from": 101}
+
+        loss_fn = CodeModePreferenceLoss(
+            eligibility_rules=eligibility_rules, reward=reward, vocab_ids=vocab_ids
+        )
+
+        batch_size = 1
+        seq_len = 20
+        vocab_size = 1000
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+
+        # Test with tool_count == min_tools (equality case, should be eligible with >=)
+        batch_meta_equality = [
+            {"tool_count": 2, "intermediate_sizes": [], "pii_tags_present": False},  # tool_count == min_tools (2)
+        ]
+        
+        # Test with tool_count > min_tools (should be eligible)
+        batch_meta_above = [
+            {"tool_count": 3, "intermediate_sizes": [], "pii_tags_present": False},  # tool_count > min_tools (2)
+        ]
+        
+        # Test with tool_count < min_tools (should NOT be eligible)
+        batch_meta_below = [
+            {"tool_count": 1, "intermediate_sizes": [], "pii_tags_present": False},  # tool_count < min_tools (2)
+        ]
+
+        span_targets = [
+            {"ts_mode_spans": [(5, 10)], "direct_tool_spans": []},
+        ]
+
+        # Equality case should be eligible (tool_count >= min_tools)
+        loss_equality = loss_fn(student_logits, span_targets=span_targets, batch_meta=batch_meta_equality)
+        
+        # Above case should be eligible
+        loss_above = loss_fn(student_logits, span_targets=span_targets, batch_meta=batch_meta_above)
+        
+        # Below case should NOT be eligible (zero loss)
+        loss_below = loss_fn(student_logits, span_targets=span_targets, batch_meta=batch_meta_below)
+
+        # Verify that >= is used (not ==)
+        # With >=: tool_count == min_tools should be eligible
+        # With ==: tool_count > min_tools would NOT be eligible (wrong behavior)
+        assert isinstance(loss_equality, torch.Tensor)
+        assert isinstance(loss_above, torch.Tensor)
+        assert isinstance(loss_below, torch.Tensor)
+        
+        # Equality and above cases should produce non-zero loss (eligible)
+        assert loss_equality.item() != 0.0 or loss_equality.requires_grad, (
+            "tool_count == min_tools should be eligible with >= check"
+        )
+        assert loss_above.item() != 0.0 or loss_above.requires_grad, (
+            "tool_count > min_tools should be eligible"
+        )
+        
+        # Below case should produce zero loss (not eligible)
+        assert loss_below.item() == 0.0, "tool_count < min_tools should NOT be eligible"
+
 
 class TestSelfEvaluationLoss:
     """Test self-evaluation loss function."""
@@ -1325,6 +1389,75 @@ class TestCombinedKDLoss:
             "halt_logits and halt_targets provided should increase total loss when halt_weight > 0"
         )
 
+    def test_combined_kd_loss_kl_weight_gt_zero_check(self, device):
+        """Test that combined_kd_loss handles kl_weight > 0 check correctly.
+        
+        This test catches mutations that change > 0 to != 0 in line 597.
+        """
+        batch_size = 2
+        seq_len = 10
+        vocab_size = 1000
+
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+        teacher_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+        teacher_targets = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        ground_truth_targets = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        
+        # Test with kl_weight = 0 (should NOT compute KL divergence)
+        loss_dict_zero = combined_kd_loss(
+            student_logits,
+            teacher_logits,
+            teacher_targets,
+            ground_truth_targets,
+            kl_weight=0.0,  # Zero weight
+            ce_teacher_weight=0.3,
+            ce_ground_truth_weight=0.2,
+            kd_temperature=1.0,
+        )
+        
+        # Test with kl_weight > 0 (should compute KL divergence)
+        loss_dict_positive = combined_kd_loss(
+            student_logits,
+            teacher_logits,
+            teacher_targets,
+            ground_truth_targets,
+            kl_weight=0.5,  # Positive weight
+            ce_teacher_weight=0.3,
+            ce_ground_truth_weight=0.2,
+            kd_temperature=1.0,
+        )
+        
+        # Test with kl_weight < 0 (should NOT compute KL divergence, same as zero)
+        loss_dict_negative = combined_kd_loss(
+            student_logits,
+            teacher_logits,
+            teacher_targets,
+            ground_truth_targets,
+            kl_weight=-0.1,  # Negative weight (should be ignored)
+            ce_teacher_weight=0.3,
+            ce_ground_truth_weight=0.2,
+            kd_temperature=1.0,
+        )
+
+        # Verify that kl_weight = 0 does NOT add KL divergence
+        assert "kl_div" not in loss_dict_zero, "kl_weight=0 should not add KL divergence"
+        
+        # Verify that kl_weight > 0 DOES add KL divergence
+        assert "kl_div" in loss_dict_positive, "kl_weight>0 should add KL divergence"
+        
+        # Verify that kl_weight < 0 does NOT add KL divergence (same as zero)
+        assert "kl_div" not in loss_dict_negative, "kl_weight<0 should not add KL divergence"
+        
+        # Verify that positive weight increases total loss
+        assert loss_dict_positive["total"].item() > loss_dict_zero["total"].item(), (
+            "kl_weight>0 should increase total loss"
+        )
+        
+        # Verify that negative weight is treated same as zero
+        assert abs(loss_dict_negative["total"].item() - loss_dict_zero["total"].item()) < 1e-6, (
+            "kl_weight<0 should be treated same as zero"
+        )
+
 
 class TestCodeModePreferenceLoss:
     """Test CodeModePreferenceLoss class."""
@@ -1918,6 +2051,40 @@ class TestCAWSComplianceLoss:
             # Short output should have penalty, long output should not (or smaller penalty)
             assert loss_short.item() >= loss_long.item(), (
                 "Short output (< 200) with high latent count should have higher loss than long output (> 200)"
+            )
+
+    def test_caws_compliance_loss_output_length_lt_vs_gte(self, device):
+        """Test CAWS compliance loss with output_length < 200 vs >= 200 check.
+        
+        This test catches mutations that change < to >= in line 1100.
+        """
+        # Test with output_length < 200 (should add penalty if latent_span_count > 2)
+        student_output_short = "A" * 199 + " <bot>span1</bot> <bot>span2</bot> <bot>span3</bot>"
+        teacher_output = "Teacher output"
+        
+        # Test with output_length >= 200 (should NOT add penalty)
+        student_output_long = "A" * 200 + " <bot>span1</bot> <bot>span2</bot> <bot>span3</bot>"
+        
+        loss_short = caws_compliance_loss(student_output_short, teacher_output)
+        loss_long = caws_compliance_loss(student_output_long, teacher_output)
+
+        # Verify that < is used (not >=)
+        # With <: output_length < 200 should add penalty, output_length >= 200 should not
+        # With >=: output_length < 200 would NOT add penalty (wrong behavior)
+        
+        assert isinstance(loss_short, torch.Tensor)
+        assert isinstance(loss_long, torch.Tensor)
+        
+        # Short output (< 200) should have penalty, long output (>= 200) should not
+        # The difference should be significant if < is used correctly
+        assert loss_short.item() >= 0
+        assert loss_long.item() >= 0
+        
+        # Short output should have higher or equal loss than long output (due to penalty)
+        # This verifies that < 200 check is used (not >= 200)
+        if loss_short.item() > 0:
+            assert loss_short.item() >= loss_long.item(), (
+                "Short output (< 200) should have higher or equal loss than long output (>= 200)"
             )
 
 

@@ -177,16 +177,19 @@ class TestModelCreation:
         assert model.cfg.vocab_size == 1000
 
     def test_create_model_with_quantization(self, basic_config, device):
-        """Test model creation with quantization config."""
+        """Test model creation with quantization config.
+        
+        Note: QAT is not applied in create_model, but during training.
+        This test verifies the model can be created with QAT config present.
+        """
         config_with_quant = basic_config.copy()
         config_with_quant["quant"] = {"enabled": True, "qat": {"enabled": True}}
 
-        with patch("training.distill_kd.quantize_model") as mock_quantize:
-            mock_quantize.return_value = Mock(spec=nn.Module)
-            create_model(config_with_quant, device)
-
-            # Should call quantization if available
-            mock_quantize.assert_called_once()
+        # create_model doesn't apply QAT - that happens during training
+        # Just verify model creation works with QAT config present
+        model = create_model(config_with_quant, device)
+        assert model is not None
+        assert hasattr(model, "cfg")
 
     def test_create_model_invalid_config(self, device):
         """Test model creation with invalid config raises error."""
@@ -207,9 +210,10 @@ class TestOptimizerCreation:
 
     def test_create_optimizer_adamw(self, simple_model):
         """Test AdamW optimizer creation."""
+        # create_optimizer expects config["optimizer"] not config["train"]["optimizer"]
         config = {
-            "train": {
-                "optimizer": "adamw",
+            "optimizer": {
+                "name": "adamw",
                 "lr": 1e-4,
                 "weight_decay": 0.01,
                 "betas": [0.9, 0.999],
@@ -225,17 +229,17 @@ class TestOptimizerCreation:
 
     def test_create_optimizer_default_config(self, simple_model):
         """Test optimizer creation with minimal config."""
-        config = {"train": {}}
+        config = {"optimizer": {}}
 
         optimizer = create_optimizer(simple_model, config)
 
         assert isinstance(optimizer, AdamW)
-        # Should use default values
-        assert optimizer.defaults["lr"] == 1e-3  # Default LR
+        # Should use default values from create_optimizer (lr=2e-4)
+        assert optimizer.defaults["lr"] == 2e-4
 
     def test_create_optimizer_invalid_type(self, simple_model):
         """Test invalid optimizer type raises error."""
-        config = {"train": {"optimizer": "invalid_optimizer"}}
+        config = {"optimizer": {"name": "invalid_optimizer"}}
 
         with pytest.raises(ValueError):
             create_optimizer(simple_model, config)
@@ -264,20 +268,63 @@ class TestSequenceLength:
 
     def test_sample_enumerated_shape(self):
         """Test enumerated shape sampling."""
-        shapes = [
-            {"seq_len": 512, "d_model": 768},
-            {"seq_len": 1024, "d_model": 1536},
-        ]
+        # sample_enumerated_shape takes seq_lengths (list of ints), not shapes dict
+        seq_lengths = [512, 1024, 2048, 4096]
 
-        config = {"arch": {"enumerated_shapes": shapes}}
+        # Mock random.choices to return first length
+        with patch("training.distill_kd.random.choices", return_value=[512]):
+            result = sample_enumerated_shape(seq_lengths)
+            assert result == 512
 
-        # Mock random to return first shape
-        with patch("training.distill_kd.random.choices", return_value=[shapes[0]]):
-            shape = sample_enumerated_shape(config)
+    def test_sample_enumerated_shape_with_probs(self):
+        """Test enumerated shape sampling with custom probabilities."""
+        seq_lengths = [512, 1024, 2048]
+        shape_probs = [0.5, 0.3, 0.2]
 
-            assert shape == shapes[0]
-            assert "seq_len" in shape
-            assert "d_model" in shape
+        with patch("training.distill_kd.random.choices", return_value=[2048]):
+            result = sample_enumerated_shape(seq_lengths, shape_probs=shape_probs)
+            assert result == 2048
+
+    def test_sample_enumerated_shape_periodic_upweight(self):
+        """Test enumerated shape sampling with periodic upweighting."""
+        seq_lengths = [512, 1024, 2048, 4096]
+        step = 100  # Step divisible by 100, should trigger upweighting
+
+        with patch("training.distill_kd.random.choices", return_value=[512]):
+            result = sample_enumerated_shape(seq_lengths, step=step, periodic_upweight_rare=True)
+            assert result == 512
+
+    def test_sample_enumerated_shape_default_probs_4(self):
+        """Test default probabilities for 4 shapes."""
+        seq_lengths = [512, 1024, 2048, 4096]
+
+        with patch("training.distill_kd.random.choices", return_value=[4096]):
+            result = sample_enumerated_shape(seq_lengths)
+            assert result == 4096
+
+    def test_sample_enumerated_shape_default_probs_3(self):
+        """Test default probabilities for 3 shapes."""
+        seq_lengths = [512, 1024, 2048]
+
+        with patch("training.distill_kd.random.choices", return_value=[2048]):
+            result = sample_enumerated_shape(seq_lengths)
+            assert result == 2048
+
+    def test_sample_enumerated_shape_default_probs_2(self):
+        """Test default probabilities for 2 shapes."""
+        seq_lengths = [512, 1024]
+
+        with patch("training.distill_kd.random.choices", return_value=[1024]):
+            result = sample_enumerated_shape(seq_lengths)
+            assert result == 1024
+
+    def test_sample_enumerated_shape_uniform_fallback(self):
+        """Test uniform fallback for non-standard number of shapes."""
+        seq_lengths = [512, 1024, 2048, 4096, 8192]  # 5 shapes
+
+        with patch("training.distill_kd.random.choices", return_value=[512]):
+            result = sample_enumerated_shape(seq_lengths)
+            assert result == 512
 
 
 class TestQATOperations:
@@ -304,11 +351,13 @@ class TestQATOperations:
     def test_apply_qat_to_model(self, device):
         """Test QAT application to model."""
         simple_model = nn.Linear(10, 5)
-        qat_cfg = {"qat": {"enabled": True}}
+        # apply_qat_to_model expects qat_cfg directly, not nested
+        qat_cfg = {"enabled": True, "weight_bits": 8, "act_bits": 8}
 
-        # This will fail if QAT_AVAILABLE is False, which is expected in test environment
-        with pytest.raises(RuntimeError, match="QAT not available"):
-            apply_qat_to_model(simple_model, qat_cfg, device)
+        # Patch QAT_AVAILABLE to False to test the error path
+        with patch("training.distill_kd.QAT_AVAILABLE", False):
+            with pytest.raises(RuntimeError, match="QAT not available"):
+                apply_qat_to_model(simple_model, qat_cfg, device)
 
     def test_check_qat_stability_valid(self, sample_batch, device):
         """Test QAT stability check with valid model."""
@@ -705,6 +754,54 @@ class TestConfigValidation:
 
         with pytest.raises(ValueError, match="training.steps must be positive"):
             validate_config(config)
+
+    def test_validate_config_invalid_n_heads(self):
+        """Test validation fails with invalid n_heads (line 2048)."""
+        config = {
+            "model": {"vocab_size": 1000, "n_heads": -1},
+            "training": {"steps": 100},
+        }
+
+        with pytest.raises(ValueError, match="model.n_heads must be positive"):
+            validate_config(config)
+
+    def test_validate_config_invalid_batch_size(self):
+        """Test validation fails with invalid batch_size (line 2059)."""
+        config = {
+            "model": {"vocab_size": 1000},
+            "training": {"steps": 100, "batch_size": 0},
+        }
+
+        with pytest.raises(ValueError, match="training.batch_size must be positive"):
+            validate_config(config)
+
+    def test_validate_config_distillation_and_code_mode_warning(self, capsys):
+        """Test warning when both distillation and code_mode enabled (line 2072)."""
+        config = {
+            "model": {"vocab_size": 1000},
+            "training": {"steps": 100},
+            "distillation": {"enabled": True},
+            "distill": {"code_mode": {"enabled": True}},
+        }
+
+        # Should not raise, but should print warning
+        validate_config(config)
+        captured = capsys.readouterr()
+        assert "Both distillation and code_mode enabled" in captured.out
+
+    def test_validate_config_latent_and_code_mode_warning(self, capsys):
+        """Test warning when both latent and code_mode enabled (line 2076)."""
+        config = {
+            "model": {"vocab_size": 1000},
+            "training": {"steps": 100},
+            "latent": {"enabled": True},
+            "distill": {"code_mode": {"enabled": True}},
+        }
+
+        # Should not raise, but should print warning
+        validate_config(config)
+        captured = capsys.readouterr()
+        assert "Both latent reasoning and code_mode enabled" in captured.out
 
 
 class TestComputeRequiredFieldsPresent:
