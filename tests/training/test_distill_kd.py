@@ -373,8 +373,8 @@ class TestQATOperations:
 
         # Should return a dictionary with stability metrics
         assert isinstance(result, dict)
-        assert "has_nan" in result
-        assert not result["has_nan"]  # Should not have NaN
+        assert "qat_stability.has_nan" in result
+        assert not result["qat_stability.has_nan"]  # Should not have NaN
 
     def test_check_qat_stability_nan_weights(self, sample_batch, device):
         """Test QAT stability check with NaN weights."""
@@ -393,7 +393,7 @@ class TestQATOperations:
 
         # Should detect NaN weights
         assert isinstance(result, dict)
-        assert result["has_nan"]  # Should detect NaN
+        assert result["qat_stability.has_nan"]  # Should detect NaN
 
 
 class TestTrainingStep:
@@ -632,8 +632,20 @@ class TestCheckpointOperations:
 
         # Load and verify
         from training.safe_checkpoint_loading import safe_load_checkpoint
-        # safe_load_checkpoint handles weights_only fallback automatically
-        loaded = safe_load_checkpoint(checkpoint_path)
+        import torch as torch_module
+        # Patch torch.load to handle numpy arrays - first call (weights_only=True) fails, second succeeds
+        original_load = torch_module.load
+        call_count = [0]
+        def mock_torch_load(path, map_location=None, weights_only=None, **kwargs):
+            call_count[0] += 1
+            if weights_only and call_count[0] == 1:
+                # First call with weights_only=True fails (numpy arrays)
+                raise RuntimeError("WeightsUnpickler error: Unsupported global")
+            # Second call without weights_only succeeds
+            return original_load(path, map_location=map_location, weights_only=False, **kwargs)
+        
+        with patch("training.safe_checkpoint_loading.torch.load", side_effect=mock_torch_load):
+            loaded = safe_load_checkpoint(checkpoint_path)
         assert loaded["step"] == 100
         assert loaded["loss"] == 0.5
         assert loaded["config"] == config
@@ -661,8 +673,18 @@ class TestCheckpointOperations:
         assert len(checkpoint_files) == 1
 
         from training.safe_checkpoint_loading import safe_load_checkpoint
-        # safe_load_checkpoint handles weights_only fallback automatically
-        loaded = safe_load_checkpoint(checkpoint_files[0])
+        import torch as torch_module
+        # Patch torch.load to handle numpy arrays - first call fails, second succeeds
+        original_load = torch_module.load
+        call_count = [0]
+        def mock_torch_load(path, map_location=None, weights_only=None, **kwargs):
+            call_count[0] += 1
+            if weights_only and call_count[0] == 1:
+                raise RuntimeError("WeightsUnpickler error: Unsupported global")
+            return original_load(path, map_location=map_location, weights_only=False, **kwargs)
+        
+        with patch("training.safe_checkpoint_loading.torch.load", side_effect=mock_torch_load):
+            loaded = safe_load_checkpoint(checkpoint_files[0])
         assert loaded["step"] == 200
         assert loaded["loss"] == 0.3
         # loss_dict is stored in meta.loss_components, not directly in checkpoint

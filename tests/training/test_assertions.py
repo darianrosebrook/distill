@@ -237,7 +237,8 @@ class TestComputePerComponentGradientNorms:
         y = torch.randn(2, 5)
 
         loss1 = nn.MSELoss()(model(x), y)
-        loss1.backward()
+        # Use retain_graph=True to preserve computation graph for per-component computation
+        loss1.backward(retain_graph=True)
 
         loss_dict = {"kl": loss1}
         loss_weights = {"kl": 1.0}
@@ -254,7 +255,8 @@ class TestComputePerComponentGradientNorms:
 
         # Compute gradients for first component
         loss1 = nn.MSELoss()(model(x), y)
-        loss1.backward()
+        # Use retain_graph=True to preserve computation graph for per-component computation
+        loss1.backward(retain_graph=True)
 
         loss_dict = {"kl": loss1, "ce": loss1 * 0.5}
         loss_weights = {"kl": 1.0, "ce": 0.5}
@@ -270,7 +272,8 @@ class TestComputePerComponentGradientNorms:
         y = torch.randn(2, 5)
 
         loss1 = nn.MSELoss()(model(x), y)
-        loss1.backward()
+        # Use retain_graph=True to preserve computation graph for per-component computation
+        loss1.backward(retain_graph=True)
 
         loss_dict = {"kl": loss1, "ce": loss1}
         loss_weights = {"kl": 1.0, "ce": 0.0}  # ce has zero weight
@@ -286,7 +289,8 @@ class TestComputePerComponentGradientNorms:
         y = torch.randn(2, 5)
 
         loss1 = nn.MSELoss()(model(x), y)
-        loss1.backward()
+        # Use retain_graph=True to preserve computation graph for per-component computation
+        loss1.backward(retain_graph=True)
 
         # Store original gradients
         original_grads = {}
@@ -312,7 +316,8 @@ class TestComputePerComponentGradientNorms:
         y = torch.randn(2, 5)
 
         loss1 = nn.MSELoss()(model(x), y)
-        loss1.backward()
+        # Use retain_graph=True to preserve computation graph for per-component computation
+        loss1.backward(retain_graph=True)
 
         loss_dict = {"total": loss1, "kl": loss1}
         loss_weights = {"kl": 1.0}

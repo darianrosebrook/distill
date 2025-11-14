@@ -70,7 +70,8 @@ class TestLatentReasoningE2E:
             latent_mode_enabled=True,
         )
 
-        input_ids = torch.tensor([[1, 3, 100, 101, 4, 200]])  # With sentinels
+        # Use correct token IDs: BOT_TOKEN_ID (32000) and EOT_TOKEN_ID (32001)
+        input_ids = torch.tensor([[1, BOT_TOKEN_ID, 100, 101, EOT_TOKEN_ID, 200]])
 
         result = engine.generate_with_latent_mode(
             input_ids,
@@ -79,7 +80,10 @@ class TestLatentReasoningE2E:
 
         assert "tokens" in result
         assert "mode_transitions" in result
-        assert len(result["mode_transitions"]) >= 2
+        # Should have at least 2 transitions: language->latent (at BOT) and latent->language (at EOT)
+        assert len(result["mode_transitions"]) >= 2, (
+            f"Expected at least 2 mode transitions, got {len(result['mode_transitions'])}: {result['mode_transitions']}"
+        )
 
     def test_caws_budget_enforcement(self):
         """Test that CAWS budget limits are enforced."""
