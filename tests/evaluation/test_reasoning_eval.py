@@ -421,10 +421,10 @@ class TestMainFunction:
     @patch("builtins.print")
     @patch("json.dump")
     @patch("builtins.open", create=True)
-    @patch("transformers.AutoTokenizer")
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_main_success(
         self,
-        mock_tokenizer_class,
+        mock_safe_from_pretrained,
         mock_open,
         mock_json_dump,
         mock_print,
@@ -448,7 +448,7 @@ class TestMainFunction:
         mock_load.return_value = mock_model
         
         mock_tokenizer = Mock()
-        mock_tokenizer_class.from_pretrained.return_value = mock_tokenizer
+        mock_safe_from_pretrained.return_value = mock_tokenizer
         
         mock_prompts = [{"prompt": "Test?", "category": "mathematical"}]
         mock_get_prompts.return_value = mock_prompts
@@ -478,8 +478,8 @@ class TestMainFunction:
     @patch("evaluation.reasoning_eval.get_reasoning_prompts")
     @patch("evaluation.reasoning_eval.argparse.ArgumentParser")
     @patch("builtins.print")
-    @patch("transformers.AutoTokenizer")
-    def test_main_with_test_data(self, mock_tokenizer_class, mock_print, mock_parser_class, mock_get_prompts, mock_load):
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_main_with_test_data(self, mock_safe_from_pretrained, mock_print, mock_parser_class, mock_get_prompts, mock_load):
         """Test main function with test data file."""
         mock_parser = Mock()
         mock_args = Mock()
@@ -495,7 +495,7 @@ class TestMainFunction:
         mock_load.return_value = mock_model
         
         mock_tokenizer = Mock()
-        mock_tokenizer_class.from_pretrained.return_value = mock_tokenizer
+        mock_safe_from_pretrained.return_value = mock_tokenizer
         
         with (
             patch("builtins.open", create=True) as mock_open,
@@ -542,10 +542,10 @@ class TestMainFunction:
     @patch("builtins.print")
     @patch("json.dump")
     @patch("builtins.open", create=True)
-    @patch("transformers.AutoTokenizer")
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_main_output_file_creation(
         self,
-        mock_tokenizer_class,
+        mock_safe_from_pretrained,
         mock_open,
         mock_json_dump,
         mock_print,
@@ -567,7 +567,7 @@ class TestMainFunction:
         mock_load.return_value = mock_model
         
         mock_tokenizer = Mock()
-        mock_tokenizer_class.from_pretrained.return_value = mock_tokenizer
+        mock_safe_from_pretrained.return_value = mock_tokenizer
         
         mock_prompts = [{"prompt": "Test?", "category": "mathematical"}]
         mock_get_prompts.return_value = mock_prompts
