@@ -1,0 +1,48 @@
+# configs/model_revisions.yaml
+# Model revision pinning configuration for supply chain security
+# @author: @darianrosebrook
+#
+# This file maps Hugging Face model identifiers to specific revisions (commit SHAs, tags, or branches).
+# For production models, pin to specific commit SHAs for maximum security.
+# For development, can use tags or branch names.
+#
+# Usage:
+#   - Production: Use commit SHA (e.g., "abc123def456...")
+#   - Development: Use tag (e.g., "v1.0.0") or branch (e.g., "main")
+#   - Default: If model not listed, defaults to "main" branch with warning
+
+model_revisions:
+  # Production models - pin to specific commit SHA
+  # Example (uncomment and update with actual commit SHA):
+  # "microsoft/deberta-v3-small":
+  #   revision: "abc123def4567890abcdef1234567890abcdef12"
+  #   trust_remote_code: false
+  #   notes: "Production judge model - pinned for security"
+
+  # Development models - can use tags or branches
+  # Example:
+  # "bert-base-uncased":
+  #   revision: "v1.0.0"
+  #   trust_remote_code: false
+  #   notes: "Development model - using tag"
+
+  # Default fallback configuration
+  default:
+    revision: "main"
+    trust_remote_code: false
+    notes: "Default fallback - models not in this config will use 'main' branch"
+
+# Instructions for adding new models:
+#
+# 1. Find the model on Hugging Face Hub
+# 2. Navigate to the model's commit history
+# 3. Copy the commit SHA of the version you want to pin
+# 4. Add entry to model_revisions section above
+# 5. Update training/safe_model_loading.py to load from this config
+#
+# Example:
+#   "organization/model-name":
+#     revision: "commit_sha_here"
+#     trust_remote_code: false
+#     notes: "Description of model usage"
+

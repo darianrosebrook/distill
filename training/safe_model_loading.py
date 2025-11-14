@@ -9,7 +9,7 @@ import warnings
 
 def get_model_revision(model_name: str) -> Optional[str]:
     """
-    Get pinned revision for a model name.
+    Get pinned revision for a model name from configuration file.
     
     For production models, this should return a specific commit SHA.
     For development, can return a tag or branch name.
@@ -20,15 +20,31 @@ def get_model_revision(model_name: str) -> Optional[str]:
     Returns:
         Revision (commit SHA, tag, or branch) or None if not configured
     """
-    # Model revision mapping - pin to specific commits for security
-    # TODO: Move to config file for easier management
-    revision_map: Dict[str, str] = {
-        # Add model revisions here as they are identified
-        # Example:
-        # "microsoft/deberta-v3-small": "abc123def456...",
-    }
+    # Try to load from config file
+    try:
+        from pathlib import Path
+        import yaml
+        
+        config_path = Path(__file__).parent.parent / "configs" / "model_revisions.yaml"
+        if config_path.exists():
+            with open(config_path, "r") as f:
+                config = yaml.safe_load(f) or {}
+                model_revisions = config.get("model_revisions", {})
+                
+                # Check if model is in config
+                if model_name in model_revisions:
+                    model_config = model_revisions[model_name]
+                    if isinstance(model_config, dict):
+                        return model_config.get("revision")
+                    elif isinstance(model_config, str):
+                        # Legacy format: just revision string
+                        return model_config
+    except Exception:
+        # If config loading fails, fall back to empty dict (will use default)
+        pass
     
-    return revision_map.get(model_name)
+    # Fallback: return None (will use 'main' branch default)
+    return None
 
 
 def safe_from_pretrained_tokenizer(
