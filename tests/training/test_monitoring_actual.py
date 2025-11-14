@@ -9,13 +9,11 @@ from the methods tested in test_monitoring.py.
 import json
 import time
 import threading
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
 
 from training.monitoring import (
-    MetricPoint,
     HealthStatus,
     MetricsCollector,
     HealthChecker,
@@ -84,7 +82,7 @@ class TestMetricsCollectorActual:
 
     def test_get_metrics_by_time_range(self, collector):
         """Test getting metrics filtered by time range."""
-        base_time = time.time()
+        time.time()
         collector.record_metric("metric1", 1.0)
         time.sleep(0.01)
         mid_time = time.time()

@@ -15,11 +15,16 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 try:
-    import torch
-
-    TORCH_AVAILABLE = True
-except ImportError:
-    TORCH_AVAILABLE = False
+    import importlib.util
+    spec = importlib.util.find_spec("torch")
+    TORCH_AVAILABLE = spec is not None
+except (ValueError, AttributeError, ImportError):
+    # Module might already be imported or not available
+    try:
+        import torch  # noqa: F401
+        TORCH_AVAILABLE = True
+    except ImportError:
+        TORCH_AVAILABLE = False
 
 
 def load_checkpoint(checkpoint_path: Path) -> Dict[str, Any]:
@@ -128,7 +133,8 @@ def generate_deployment_manifest(
                 manifest["capabilities"]["latent_reasoning"] = config_dict.get(
                     "latent_mode_enabled", False
                 )
-                manifest["capabilities"]["halt_head"] = config_dict.get("halt_head_enabled", False)
+                manifest["capabilities"]["halt_head"] = config_dict.get(
+                    "halt_head_enabled", False)
 
     with open(output_path, "w") as f:
         json.dump(manifest, f, indent=2)
@@ -136,11 +142,16 @@ def generate_deployment_manifest(
 
 
 def main():
-    ap = argparse.ArgumentParser("Deploy Model - Generate deployment artifacts")
-    ap.add_argument("--checkpoint", required=True, help="Model checkpoint path (.pt)")
-    ap.add_argument("--out-dir", required=True, help="Output directory for artifacts")
-    ap.add_argument("--export-pytorch", action="store_true", help="Export PyTorch model")
-    ap.add_argument("--export-coreml", action="store_true", help="Export CoreML model")
+    ap = argparse.ArgumentParser(
+        "Deploy Model - Generate deployment artifacts")
+    ap.add_argument("--checkpoint", required=True,
+                    help="Model checkpoint path (.pt)")
+    ap.add_argument("--out-dir", required=True,
+                    help="Output directory for artifacts")
+    ap.add_argument("--export-pytorch", action="store_true",
+                    help="Export PyTorch model")
+    ap.add_argument("--export-coreml", action="store_true",
+                    help="Export CoreML model")
     ap.add_argument(
         "--latent-mode", action="store_true", help="Enable latent mode in runtime config"
     )
@@ -153,7 +164,8 @@ def main():
         choices=["tier_1", "tier_2", "tier_3"],
         help="CAWS budget tier",
     )
-    ap.add_argument("--seq", type=int, default=2048, help="Sequence length for export")
+    ap.add_argument("--seq", type=int, default=2048,
+                    help="Sequence length for export")
     args = ap.parse_args()
 
     checkpoint_path = Path(args.checkpoint)
@@ -195,13 +207,16 @@ def main():
                 dropout=arch_cfg.get("dropout", 0.0),
             )
 
-            use_halt_head = checkpoint_info["model_arch"].get("use_halt_head", False)
+            use_halt_head = checkpoint_info["model_arch"].get(
+                "use_halt_head", False)
             model = StudentLM(model_cfg, use_halt_head=use_halt_head)
-            model.load_state_dict(checkpoint_info["checkpoint"]["model_state_dict"], strict=False)
+            model.load_state_dict(
+                checkpoint_info["checkpoint"]["model_state_dict"], strict=False)
             model.eval()
 
             if not TORCH_AVAILABLE:
-                raise RuntimeError("PyTorch is required for model export but not available")
+                raise RuntimeError(
+                    "PyTorch is required for model export but not available")
 
             # Import torch locally to avoid reference before assignment
             import torch
@@ -239,13 +254,15 @@ def main():
             pytorch_model = torch.jit.load(str(pytorch_export_path))
 
             # Find contract file
-            contract_path = pytorch_export_path.parent / f"{pytorch_export_path.stem}_contract.json"
+            contract_path = pytorch_export_path.parent / \
+                f"{pytorch_export_path.stem}_contract.json"
 
             coreml_path = out_dir / "model.mlpackage"
             convert_pytorch_to_coreml(
                 pytorch_model=pytorch_model,
                 output_path=str(coreml_path),
-                contract_path=str(contract_path) if contract_path.exists() else None,
+                contract_path=str(
+                    contract_path) if contract_path.exists() else None,
             )
 
             coreml_export_path = coreml_path

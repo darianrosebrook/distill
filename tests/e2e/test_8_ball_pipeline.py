@@ -13,7 +13,6 @@ import subprocess
 import sys
 import tempfile
 import json
-import torch
 from pathlib import Path
 import os
 

@@ -109,6 +109,10 @@ class HealthChecker:
         self.health_history = []
         self._shutdown_handlers: list[Callable] = []
 
+        # CPU monitoring state (for non-blocking cpu_percent)
+        # Lazy initialization: only initialize on first use to avoid blocking during __init__
+        self._cpu_percent_initialized = False
+
         # Setup signal handlers for graceful shutdown
         self._setup_signal_handlers()
 
@@ -146,7 +150,22 @@ class HealthChecker:
     def get_system_metrics(self) -> SystemMetrics:
         """Get current system resource metrics."""
         if HAS_PSUTIL:
-            cpu_percent = psutil.cpu_percent(interval=1.0)
+            # Use non-blocking cpu_percent to avoid blocking watchdog daemon
+            # interval=None returns immediately with last measured value
+            # This prevents blocking the system for 1 second which could starve watchdogd
+            if self._cpu_percent_initialized:
+                # Non-blocking: returns immediately with last measured value
+                cpu_percent = psutil.cpu_percent(interval=None)
+            else:
+                # First call: initialize with minimal blocking (50ms instead of 1000ms)
+                # This is a one-time cost and much better than blocking for 1 second
+                try:
+                    cpu_percent = psutil.cpu_percent(interval=0.05)  # 50ms init
+                    self._cpu_percent_initialized = True
+                except Exception:
+                    cpu_percent = 0.0  # Fallback if measurement fails
+                    self._cpu_percent_initialized = False
+
             memory = psutil.virtual_memory()
             memory_percent = memory.percent
             memory_used_gb = memory.used / (1024**3)

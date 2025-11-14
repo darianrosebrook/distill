@@ -601,13 +601,29 @@ class TestMainFunction:
         # Note: main() uses print() for output, not typer.echo(), so echo may not be called
 
     @patch("evaluation.caws_eval._load_working_spec")
+    @patch("evaluation.caws_eval._run_tests")
+    @patch("evaluation.caws_eval._run_linter")
+    @patch("evaluation.caws_eval._run_coverage")
+    @patch("evaluation.caws_eval.evaluate_caws_compliance")
     @patch("typer.echo")
-    def test_main_missing_spec(self, mock_echo, mock_load_spec):
+    def test_main_missing_spec(self, mock_echo, mock_evaluate, mock_coverage, mock_linter, mock_tests, mock_load_spec):
         """Test main function with missing working spec."""
         mock_load_spec.return_value = {}
+        mock_tests.return_value = {"passed": 0, "failed": 0}
+        mock_linter.return_value = {"errors": 0}
+        mock_coverage.return_value = {"line_percent": 0.0}
+        mock_evaluate.return_value = {
+            "verdict": "FAIL",
+            "budget_adherence": {"within_budget": False},
+            "gate_integrity": {"overall_integrity": False},
+            "provenance_clarity": {"overall_clarity": False},
+        }
 
-        with pytest.raises(SystemExit):
-            main(change_diff="dummy diff", rationale="Test rationale", evidence="Test evidence")
+        with pytest.raises(SystemExit) as exc_info:
+            main(working_spec="test.yaml", change_diff="", rationale="", evidence="")
+        
+        # Should exit with error code
+        assert exc_info.value.code != 0
 
     @patch("evaluation.caws_eval._load_working_spec")
     @patch("evaluation.caws_eval._run_tests")

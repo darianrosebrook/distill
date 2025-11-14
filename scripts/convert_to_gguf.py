@@ -567,7 +567,6 @@ def export_to_huggingface_format(checkpoint_path: str, output_dir: Path):
 
     if tokenizer_dir.exists():
         try:
-            from transformers import AutoTokenizer
             from training.safe_model_loading import safe_from_pretrained_tokenizer
 
             original_tokenizer = safe_from_pretrained_tokenizer(str(tokenizer_dir))
@@ -604,7 +603,6 @@ def convert_to_gguf_direct(hf_dir: Path, output_gguf: Path):
     try:
         from gguf import GGUFWriter
         import torch
-        from transformers import AutoModelForCausalLM, AutoTokenizer
 
         # Load the model and tokenizer safely with revision pinning
         print("   Loading model and tokenizer...")

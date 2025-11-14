@@ -1,0 +1,28 @@
+{
+  "checkpoint": "model.pt",
+  "metrics": {
+    "json_validity_rate": 0.0,
+    "tool_selection_rate": 0.0,
+    "repair_rate": 0.0,
+    "tool_success_rate": 0.0,
+    "json_valid_count": 0,
+    "tool_correct_count": 0,
+    "needs_repair_count": 0,
+    "tool_success_count": 0,
+    "total": 1
+  },
+  "results": [
+    {
+      "prompt": "use_tool",
+      "generated": "",
+      "json_valid": false,
+      "valid_json": false,
+      "needs_repair": false,
+      "tool_call": null,
+      "expected_tool": null,
+      "tool_correct": false,
+      "args_correct": false,
+      "tool_success": false
+    }
+  ]
+}

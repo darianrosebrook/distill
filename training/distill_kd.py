@@ -348,6 +348,16 @@ def merge_configs(configs: list, env_overrides: Optional[Dict[str, Any]] = None)
 def create_model(cfg: Dict[str, Any], device: torch.device) -> nn.Module:
     """Create student model from config."""
     arch_cfg = cfg.get("arch", {})
+    
+    # Validate that arch config exists and has minimum required fields
+    # This prevents hanging on invalid configs during model initialization
+    if not arch_cfg:
+        raise KeyError("Missing required 'arch' configuration section")
+    
+    # Check for critical fields that would cause issues if missing
+    # Note: We allow defaults for most fields, but validate structure
+    if not isinstance(arch_cfg, dict):
+        raise TypeError(f"Expected 'arch' to be a dict, got {type(arch_cfg)}")
 
     model_cfg = ModelCfg(
         d_model=arch_cfg.get("d_model", 4096),

@@ -304,10 +304,6 @@ class TestEvaluateCoreMLModel:
         questions = ["First?", "Second?"]
 
         # Mock CoreML prediction results
-        mock_predictions = [
-            {"output": [0.3, 0.7]},  # Probabilities favoring class Y (600)
-            {"output": [0.8, 0.2]},  # Probabilities favoring class X (500)
-        ]
 
         with (
             patch("coremltools.models.MLModel") as mock_mlmodel_class,

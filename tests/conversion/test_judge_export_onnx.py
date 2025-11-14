@@ -6,18 +6,17 @@ Tests judge model ONNX export, config loading, and enumerated shape handling.
 # @author: @darianrosebrook
 
 import json
-import os
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 import pytest
-import torch
 import typer.testing
 import yaml
 
 # Import the module
 import importlib
-judge_export_onnx_module = importlib.import_module("conversion.judge_export_onnx")
+judge_export_onnx_module = importlib.import_module(
+    "conversion.judge_export_onnx")
 load_judge_config = judge_export_onnx_module.load_judge_config
 main = judge_export_onnx_module.main
 app = judge_export_onnx_module.app
@@ -171,7 +170,7 @@ class TestJudgeExportONNX:
         try:
             with patch("conversion.judge_export_onnx.StudentLM") as mock_student_lm, patch(
                 "conversion.judge_export_onnx.torch.onnx.export"
-            ) as mock_export, patch("conversion.judge_export_onnx.load_judge_config") as mock_load:
+            ), patch("conversion.judge_export_onnx.load_judge_config") as mock_load:
                 from models.student.architectures.gqa_transformer import ModelCfg
 
                 mock_cfg = ModelCfg(
@@ -184,7 +183,8 @@ class TestJudgeExportONNX:
                 mock_student_lm.return_value = mock_model
 
                 runner = typer.testing.CliRunner()
-                result = runner.invoke(app, ["--judge-config", judge_config_file])
+                result = runner.invoke(
+                    app, ["--judge-config", judge_config_file])
 
                 # Should use default shape_sets.json
                 assert result.exit_code == 0
@@ -200,8 +200,10 @@ class TestJudgeExportONNX:
 
         with patch("conversion.judge_export_onnx.StudentLM") as mock_student_lm, patch(
             "conversion.judge_export_onnx.torch.onnx.export"
-        ) as mock_export, patch("conversion.judge_export_onnx.open") as mock_open:
-            mock_open.side_effect = Exception("File not found")
+        ) as mock_export, patch("conversion.judge_export_onnx.json.load") as mock_json_load:
+            # Mock json.load to raise FileNotFoundError when trying to load the config file
+            # This simulates the file not being found
+            mock_json_load.side_effect = FileNotFoundError("File not found")
 
             mock_model = Mock()
             mock_model.eval = Mock()
@@ -218,7 +220,8 @@ class TestJudgeExportONNX:
                 ],
             )
 
-            # Should use fallback sequences [512, 1024, 2048]
+            # Should use fallback sequences [512, 1024, 2048] when file not found
+            # The code has a try/except that catches the exception and uses defaults
             assert result.exit_code == 0
             assert mock_export.call_count == 3
 
@@ -246,7 +249,7 @@ class TestJudgeExportONNX:
 
         with patch("conversion.judge_export_onnx.StudentLM") as mock_student_lm, patch(
             "conversion.judge_export_onnx.torch.onnx.export"
-        ) as mock_export:
+        ):
             mock_model = Mock()
             mock_model.eval = Mock()
             mock_student_lm.return_value = mock_model
@@ -297,8 +300,8 @@ class TestJudgeExportONNX:
             assert len(export_calls) == 3
 
             # Check paths contain sequence lengths
-            paths = [call[0][2] for call in export_calls]  # Third arg is output path
+            paths = [call[0][2]
+                     for call in export_calls]  # Third arg is output path
             assert any("T64" in path for path in paths)
             assert any("T128" in path for path in paths)
             assert any("T256" in path for path in paths)
-

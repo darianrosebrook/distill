@@ -8,7 +8,6 @@ for creating toy PyTorch models for CoreML conversion testing.
 
 import torch
 import torch.nn as nn
-from pathlib import Path
 from unittest.mock import patch, Mock
 
 import pytest
@@ -292,7 +291,7 @@ class TestIntegration:
 
     def test_full_model_creation(self, tmp_path):
         """Test creating a full toy transformer and tracing it."""
-        output_path = tmp_path / "test_torch.pt"
+        tmp_path / "test_torch.pt"
 
         model = ToyTransformer(vocab_size=256, d_model=64)
         model.eval()

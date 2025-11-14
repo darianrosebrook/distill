@@ -8,7 +8,6 @@ enumerated shape validation, and tool span micro-F1 computation.
 
 import json
 from unittest.mock import Mock, patch, MagicMock
-from pathlib import Path
 
 import pytest
 import numpy as np

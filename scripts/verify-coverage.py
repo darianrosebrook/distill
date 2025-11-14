@@ -216,7 +216,7 @@ def generate_summary(output_dir: Path, results: Optional[Dict[str, Any]]) -> Non
             )
 
             # Threshold assessment
-            thresholds = results["thresholds"]
+            results["thresholds"]
             f.write("Threshold Assessment:\n")
             f.write(".1f")
             if results["line_threshold_met"]:

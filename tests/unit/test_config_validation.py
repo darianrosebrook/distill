@@ -387,7 +387,6 @@ class TestConfigFileValidationEdgeCases:
 
     def test_validate_config_file_json_parse_error(self, tmp_path):
         """Test validate_config_file with invalid JSON."""
-        import json
         config_file = tmp_path / "invalid.json"
         with open(config_file, "w") as f:
             f.write('{"invalid": json}')

@@ -6,31 +6,24 @@ class distribution is preserved through conversion and deployment.
 """
 # @author: @darianrosebrook
 
+import importlib
 import json
 from unittest.mock import Mock, patch, MagicMock
-from pathlib import Path
 
 import pytest
 import torch
 
-# Import the module using importlib
-import importlib
-
-pipeline_preservation_eval_module = importlib.import_module("evaluation.pipeline_preservation_eval")
-
-# Import main function
-main = pipeline_preservation_eval_module.main
-
-# Import classification_eval functions for patching
 from evaluation.classification_eval import (
-    load_classification_config,
-    evaluate_pytorch_model,
-    evaluate_coreml_model,
-    evaluate_ollama_model,
-    compare_predictions,
     ClassificationConfig,
     PredictionResult,
 )
+
+# Import the module using importlib
+pipeline_preservation_eval_module = importlib.import_module(
+    "evaluation.pipeline_preservation_eval")
+
+# Import main function
+main = pipeline_preservation_eval_module.main
 
 
 class TestPipelinePreservationEvalMain:
@@ -345,13 +338,15 @@ class TestPipelinePreservationEvalMain:
                 "--config", "test.config",
                 "--eval-questions", str(questions_file),
             ]),
-            patch("evaluation.pipeline_preservation_eval.evaluate_pytorch_model", return_value=[]),
+            patch(
+                "evaluation.pipeline_preservation_eval.evaluate_pytorch_model", return_value=[]),
         ):
             mock_file_handle = MagicMock()
             mock_file_handle.__enter__ = Mock(return_value=mock_file_handle)
             mock_file_handle.__exit__ = Mock(return_value=None)
             mock_file_handle.write = Mock()
-            mock_file_handle.read = Mock(return_value=json.dumps(questions_data))
+            mock_file_handle.read = Mock(
+                return_value=json.dumps(questions_data))
             mock_open.return_value = mock_file_handle
 
             try:
@@ -386,7 +381,8 @@ class TestPipelinePreservationEvalMain:
         mock_find_spec.return_value = mock_spec
 
         mock_module = Mock()
-        mock_module.get_eight_ball_questions = Mock(return_value=["Question 1?", "Question 2?"])
+        mock_module.get_eight_ball_questions = Mock(
+            return_value=["Question 1?", "Question 2?"])
         mock_module_from_spec.return_value = mock_module
 
         with (
@@ -396,7 +392,8 @@ class TestPipelinePreservationEvalMain:
                 "--tokenizer", "tokenizer",
                 "--config", "evaluation.toy.eight_ball.EIGHT_BALL_CONFIG",
             ]),
-            patch("evaluation.pipeline_preservation_eval.evaluate_pytorch_model", return_value=[]),
+            patch(
+                "evaluation.pipeline_preservation_eval.evaluate_pytorch_model", return_value=[]),
         ):
             mock_file_handle = MagicMock()
             mock_file_handle.__enter__ = Mock(return_value=mock_file_handle)
@@ -433,7 +430,8 @@ class TestPipelinePreservationEvalMain:
                 "--tokenizer", "tokenizer",
                 "--config", "test.config",
             ]),
-            patch("evaluation.pipeline_preservation_eval.evaluate_pytorch_model", return_value=[]),
+            patch(
+                "evaluation.pipeline_preservation_eval.evaluate_pytorch_model", return_value=[]),
             patch("importlib.util.find_spec", return_value=None),
         ):
             mock_file_handle = MagicMock()
@@ -663,10 +661,12 @@ class TestPipelinePreservationEvalIntegration:
         mock_load_config.return_value = mock_config
 
         pytorch_results = [
-            PredictionResult(question="Q1?", predicted_class_id=0, predicted_class_name="A"),
+            PredictionResult(question="Q1?", predicted_class_id=0,
+                             predicted_class_name="A"),
         ]
         coreml_results = [
-            PredictionResult(question="Q1?", predicted_class_id=0, predicted_class_name="A"),
+            PredictionResult(question="Q1?", predicted_class_id=0,
+                             predicted_class_name="A"),
         ]
 
         mock_eval_pytorch.return_value = pytorch_results

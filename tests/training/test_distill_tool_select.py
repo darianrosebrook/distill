@@ -7,7 +7,7 @@ Tests model creation, training step, configuration loading, and constrained deco
 
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 import pytest
 import torch
@@ -390,4 +390,10 @@ class TestTrainStep:
         # Should handle invalid JSON gracefully
         assert isinstance(result, dict)
         assert "total" in result
+
+
+
+
+
+
 

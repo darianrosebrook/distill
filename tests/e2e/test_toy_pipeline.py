@@ -13,7 +13,6 @@ import subprocess
 import sys
 import tempfile
 import json
-import torch
 from pathlib import Path
 
 
@@ -439,7 +438,6 @@ def test_toy_pipeline_with_latent_mode(temp_dir):
 def test_toy_pipeline_with_both_features(temp_dir):
     """Test full toy pipeline with both code-mode and latent mode enabled."""
     import os
-    import torch
 
     # Paths
     dataset_path = temp_dir / "toy_kd.jsonl"

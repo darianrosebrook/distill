@@ -179,7 +179,7 @@ def load_eval_questions(eval_file) -> List[str]:
         if isinstance(data, list):
             return data
         return data.get("questions", [])
-    except json.JSONDecodeError as e:
+    except json.JSONDecodeError:
         # If JSON parsing fails with JSONDecodeError, check if file is .json
         # If it's a .json file, raise the error (don't try text parsing)
         if eval_file.suffix.lower() == '.json':
@@ -830,12 +830,12 @@ def main():
     try:
         model_path_obj = Path(model_path) if model_path and not isinstance(
             model_path, Path) else model_path
-        tokenizer_path_obj = Path(tokenizer_path) if tokenizer_path and not isinstance(
+        Path(tokenizer_path) if tokenizer_path and not isinstance(
             tokenizer_path, Path) else tokenizer_path
     except (TypeError, AttributeError):
         # Handle Mock objects - use as-is (functions should handle string paths)
         model_path_obj = str(model_path) if model_path else None
-        tokenizer_path_obj = str(tokenizer_path) if tokenizer_path else None
+        str(tokenizer_path) if tokenizer_path else None
 
     # Initialize results to avoid UnboundLocalError
     results = None
@@ -927,7 +927,7 @@ def main():
             class_id = getattr(r, 'predicted_class_id', 'N/A')
             print(f"  Q: {question}")
             print(f"  A: {answer} (ID: {class_id})")
-    except (AttributeError, TypeError, IndexError) as e:
+    except (AttributeError, TypeError, IndexError):
         # In test scenarios with Mock objects, this might fail
         # Just print a generic message
         print(f"Summary: {len(results) if results else 0} predictions")

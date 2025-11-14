@@ -6,9 +6,7 @@ evaluation capabilities.
 """
 # @author: @darianrosebrook
 
-import json
 from unittest.mock import Mock, patch
-from pathlib import Path
 
 import pytest
 import torch
@@ -126,7 +124,7 @@ class TestLoadModel:
         mock_student_lm.return_value = mock_model
         
         device = torch.device("cpu")
-        result = load_model(checkpoint_path, device)
+        load_model(checkpoint_path, device)
         
         # Should load state dict directly (not from "model_state_dict" key)
         mock_model.load_state_dict.assert_called_once_with(mock_checkpoint, strict=False)
@@ -180,7 +178,7 @@ class TestGenerateText:
         mock_model.__call__ = Mock(return_value=logits)
         
         device = torch.device("cpu")
-        result = generate_text(mock_model, mock_tokenizer, prompt, max_new_tokens=10, device=device)
+        generate_text(mock_model, mock_tokenizer, prompt, max_new_tokens=10, device=device)
         
         mock_tokenizer.decode.assert_called()
 
@@ -410,7 +408,7 @@ class TestEvaluateReasoning:
         assert "category" in result_item
         assert "generated" in result_item
         assert "valid" in result_item
-        assert result_item["valid"] == True
+        assert result_item["valid"]
 
 
 class TestMainFunction:

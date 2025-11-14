@@ -7,8 +7,6 @@ and main function for creating toy transformer blocks.
 # @author: @darianrosebrook
 
 import torch
-import torch.nn as nn
-from pathlib import Path
 from unittest.mock import patch, Mock
 
 import pytest
@@ -286,7 +284,7 @@ class TestIntegration:
 
     def test_full_block_creation(self, tmp_path):
         """Test creating a full transformer block and tracing it."""
-        output_path = tmp_path / "test_block.pt"
+        tmp_path / "test_block.pt"
 
         block = TransformerBlock(d_model=64, n_heads=4)
         block.eval()

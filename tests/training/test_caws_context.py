@@ -5,9 +5,7 @@ Tests CAWS context extraction, formatting, and budget derivation.
 """
 # @author: @darianrosebrook
 
-import pytest
 import yaml
-from pathlib import Path
 from training.caws_context import (
     CAWSContext,
     extract_caws_context,
@@ -584,4 +582,10 @@ class TestCAWSContextIntegration:
         # Derive budget
         budget = derive_budget(spec, str(tmp_path))
         assert budget["baseline"]["max_files"] == 30
+
+
+
+
+
+
 

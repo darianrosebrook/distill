@@ -5,10 +5,8 @@ Tests manifest creation, serialization, gate status, and metrics.
 """
 # @author: @darianrosebrook
 
-import pytest
 import json
 import yaml
-from pathlib import Path
 from training.run_manifest import (
     GateStatus,
     PhaseGateStatus,
@@ -68,13 +66,13 @@ class TestMetricThreshold:
         assert metric.value == 85.0
         assert metric.threshold == 80.0
         assert metric.unit == "%"
-        assert metric.passed == True
+        assert metric.passed
 
     def test_metric_threshold_defaults(self):
         """Test MetricThreshold with defaults."""
         metric = MetricThreshold(name="coverage", value=85.0, threshold=80.0)
         assert metric.unit == ""
-        assert metric.passed == True
+        assert metric.passed
 
 
 class TestRunManifest:
@@ -241,14 +239,14 @@ class TestRunManifest:
         assert manifest.key_metrics[0].name == "coverage"
         assert manifest.key_metrics[0].value == 85.0
         assert manifest.key_metrics[0].threshold == 80.0
-        assert manifest.key_metrics[0].passed == True
+        assert manifest.key_metrics[0].passed
 
     def test_add_metric_failed(self):
         """Test adding metric that failed threshold."""
         manifest = RunManifest()
         manifest.add_metric("coverage", 75.0, 80.0, unit="%")
 
-        assert manifest.key_metrics[0].passed == False
+        assert not manifest.key_metrics[0].passed
 
     def test_round_trip_json(self, tmp_path):
         """Test round-trip JSON serialization."""
@@ -361,7 +359,7 @@ class TestRunManifestMethods:
                 PhaseGateStatus(phase="phase1", status=GateStatus.PASS),
             ]
         )
-        assert manifest.all_phases_passed() == True
+        assert manifest.all_phases_passed()
 
     def test_all_phases_passed_one_fails(self):
         """Test all_phases_passed when one phase fails."""
@@ -371,7 +369,7 @@ class TestRunManifestMethods:
                 PhaseGateStatus(phase="phase1", status=GateStatus.FAIL),
             ]
         )
-        assert manifest.all_phases_passed() == False
+        assert not manifest.all_phases_passed()
 
     def test_all_phases_passed_pending(self):
         """Test all_phases_passed with pending status."""
@@ -381,12 +379,12 @@ class TestRunManifestMethods:
                 PhaseGateStatus(phase="phase1", status=GateStatus.PENDING),
             ]
         )
-        assert manifest.all_phases_passed() == False
+        assert not manifest.all_phases_passed()
 
     def test_all_phases_passed_empty(self):
         """Test all_phases_passed with no phases."""
         manifest = RunManifest()
-        assert manifest.all_phases_passed() == True
+        assert manifest.all_phases_passed()
 
     def test_get_failed_gates_no_failures(self):
         """Test get_failed_gates with no failures."""

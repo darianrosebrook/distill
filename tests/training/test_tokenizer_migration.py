@@ -6,8 +6,7 @@ Tests token ID verification, embedding resizing, and special token handling.
 # @author: @darianrosebrook
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
-import torch
+from unittest.mock import Mock, patch
 import torch.nn as nn
 from training.tokenizer_migration import (
     verify_token_ids,
@@ -32,7 +31,7 @@ class TestVerifyTokenIDs:
              patch("training.tokenizer_migration.EOT_TOKEN_ID", 2):
             result = verify_token_ids(mock_tokenizer)
 
-            assert result["ids_match"] == True
+            assert result["ids_match"]
             assert len(result["errors"]) == 0
             assert result["bot_token_id"] == 1
             assert result["eot_token_id"] == 2
@@ -44,7 +43,7 @@ class TestVerifyTokenIDs:
              patch("training.tokenizer_migration.EOT_TOKEN_ID", 20):
             result = verify_token_ids(mock_tokenizer)
 
-            assert result["ids_match"] == False
+            assert not result["ids_match"]
             assert len(result["errors"]) == 2
             assert "BOT token ID mismatch" in result["errors"][0]
             assert "EOT token ID mismatch" in result["errors"][1]
@@ -58,7 +57,7 @@ class TestVerifyTokenIDs:
 
         assert result["bot_token_id"] is None
         assert result["eot_token_id"] is None
-        assert result["ids_match"] == False
+        assert not result["ids_match"]
 
 
 class TestResizeModelEmbeddings:
@@ -88,7 +87,7 @@ class TestResizeModelEmbeddings:
 
         assert metadata["new_vocab_size"] == 2000
         assert metadata["original_vocab_size"] == 1000
-        assert metadata["embedding_resized"] == True
+        assert metadata["embedding_resized"]
 
     def test_resize_model_embeddings_with_new_vocab_size(self, mock_model, mock_tokenizer):
         """Test resizing with explicit new vocab size."""

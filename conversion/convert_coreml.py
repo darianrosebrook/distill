@@ -528,7 +528,7 @@ def create_placeholder(output_path: str, onnx_path: str, error_msg: str):
     manifest.write_text('{"version": "1.0", "author": "smoke_test_placeholder"}')
 
     print(f"[convert_coreml] Placeholder created: {output_path}")
-    return None
+    return str(output_path)
 
 
 def main():

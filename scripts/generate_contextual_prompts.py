@@ -1055,7 +1055,6 @@ def main():
     tokenizer = None
     if args.tokenizer:
         try:
-            from transformers import AutoTokenizer
             from training.safe_model_loading import safe_from_pretrained_tokenizer
 
             tokenizer = safe_from_pretrained_tokenizer(args.tokenizer, use_fast=True)

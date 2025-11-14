@@ -1155,7 +1155,6 @@ def main():
     tok = None
     if args.tokenizer:
         try:
-            from transformers import AutoTokenizer
 
             from training.safe_model_loading import safe_from_pretrained_tokenizer
             tok = safe_from_pretrained_tokenizer(args.tokenizer, use_fast=True)
@@ -1166,7 +1165,6 @@ def main():
     secondary_tok = None
     if args.secondary_tokenizer:
         try:
-            from transformers import AutoTokenizer
 
             from training.safe_model_loading import safe_from_pretrained_tokenizer
             secondary_tok = safe_from_pretrained_tokenizer(

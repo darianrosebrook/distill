@@ -58,7 +58,7 @@ class TestFeatureConfig:
             conflicts={FeatureFlag.CODE_MODE},
         )
 
-        assert config.enabled == True
+        assert config.enabled
         assert config.env_var == "TEST_FEATURE"
         assert config.description == "Test feature"
         assert FeatureFlag.DISTILLATION in config.dependencies
@@ -114,7 +114,7 @@ class TestFeatureManager:
 
         # Should be able to enable
         manager.enable_feature(flag)
-        assert manager.is_enabled(flag) == True
+        assert manager.is_enabled(flag)
 
     def test_feature_manager_disable_feature(self, manager):
         """Test disabling a feature."""
@@ -122,11 +122,11 @@ class TestFeatureManager:
 
         # First enable it
         manager.enable_feature(flag)
-        assert manager.is_enabled(flag) == True
+        assert manager.is_enabled(flag)
 
         # Then disable it
         manager.disable_feature(flag)
-        assert manager.is_enabled(flag) == False
+        assert not manager.is_enabled(flag)
 
     def test_feature_manager_enable_with_dependencies(self, manager):
         """Test enabling a feature with dependencies requires enabling deps first."""
@@ -142,7 +142,7 @@ class TestFeatureManager:
 
         # Now should work
         manager.enable_feature(flag_with_deps)
-        assert manager.is_enabled(flag_with_deps) == True
+        assert manager.is_enabled(flag_with_deps)
 
     def test_feature_manager_enable_with_conflicts(self, manager):
         """Test that enabling conflicting features raises error."""
@@ -163,7 +163,7 @@ class TestFeatureManager:
 
             # Enable first feature
             manager.enable_feature(flag1)
-            assert manager.is_enabled(flag1) == True
+            assert manager.is_enabled(flag1)
 
             # Try to enable conflicting feature - should disable first
             manager.enable_feature(flag2)
@@ -205,8 +205,8 @@ class TestFeatureManager:
             manager.load_from_environment()
 
             # Check that environment variables were respected
-            assert manager.is_enabled(FeatureFlag.DISTILLATION) == True
-            assert manager.is_enabled(FeatureFlag.CODE_MODE) == False
+            assert manager.is_enabled(FeatureFlag.DISTILLATION)
+            assert not manager.is_enabled(FeatureFlag.CODE_MODE)
 
     def test_feature_manager_load_from_config(self, manager):
         """Test loading feature states from config dictionary."""
@@ -220,12 +220,12 @@ class TestFeatureManager:
 
         manager.load_from_config(config)
 
-        assert manager.is_enabled(FeatureFlag.DISTILLATION) == True
-        assert manager.is_enabled(FeatureFlag.CODE_MODE) == False
-        assert manager.is_enabled(FeatureFlag.LATENT_REASONING) == True
+        assert manager.is_enabled(FeatureFlag.DISTILLATION)
+        assert not manager.is_enabled(FeatureFlag.CODE_MODE)
+        assert manager.is_enabled(FeatureFlag.LATENT_REASONING)
 
-    def test_feature_manager_validate_configuration(self, manager):
-        """Test configuration validation."""
+    def test_feature_manager_validate_configuration_returns_list(self, manager):
+        """Test that validate_configuration returns a list of errors."""
         errors = manager.validate_configuration()
 
         assert isinstance(errors, list)
@@ -241,7 +241,7 @@ class TestFeatureManager:
         updated_config = manager.apply_to_config(base_config)
 
         assert "distillation" in updated_config
-        assert updated_config["distillation"]["enabled"] == True
+        assert updated_config["distillation"]["enabled"]
         assert updated_config["model"]["name"] == "test"  # Original preserved
 
     def test_feature_manager_apply_to_config_code_mode(self, manager):
@@ -253,7 +253,7 @@ class TestFeatureManager:
 
         assert "distill" in updated_config
         assert "code_mode" in updated_config["distill"]
-        assert updated_config["distill"]["code_mode"]["enabled"] == True
+        assert updated_config["distill"]["code_mode"]["enabled"]
 
     def test_feature_manager_apply_to_config_latent_reasoning(self, manager):
         """Test applying LATENT_REASONING feature to configuration."""
@@ -263,7 +263,7 @@ class TestFeatureManager:
         updated_config = manager.apply_to_config(base_config)
 
         assert "latent" in updated_config
-        assert updated_config["latent"]["enabled"] == True
+        assert updated_config["latent"]["enabled"]
 
     def test_feature_manager_apply_to_config_quantization(self, manager):
         """Test applying QUANTIZATION feature to configuration."""
@@ -273,7 +273,7 @@ class TestFeatureManager:
         updated_config = manager.apply_to_config(base_config)
 
         assert "quant" in updated_config
-        assert updated_config["quant"]["enabled"] == True
+        assert updated_config["quant"]["enabled"]
 
     def test_feature_manager_apply_to_config_halt_head(self, manager, capsys):
         """Test applying HALT_HEAD feature to configuration."""
@@ -282,7 +282,7 @@ class TestFeatureManager:
         manager.enable_feature(FeatureFlag.LATENT_REASONING)
         manager.enable_feature(FeatureFlag.HALT_HEAD)
 
-        updated_config = manager.apply_to_config(base_config)
+        manager.apply_to_config(base_config)
 
         # Should print warning
         captured = capsys.readouterr()
@@ -293,14 +293,14 @@ class TestFeatureManager:
         # Enable CAWS_COMPLIANCE and SELF_EVALUATION (which depends on it)
         manager.enable_feature(FeatureFlag.CAWS_COMPLIANCE)
         manager.enable_feature(FeatureFlag.SELF_EVALUATION)
-        assert manager.is_enabled(FeatureFlag.SELF_EVALUATION) == True
+        assert manager.is_enabled(FeatureFlag.SELF_EVALUATION)
 
         # Disable CAWS_COMPLIANCE
         manager.disable_feature(FeatureFlag.CAWS_COMPLIANCE)
 
         # Should disable SELF_EVALUATION and print warning
-        assert manager.is_enabled(FeatureFlag.CAWS_COMPLIANCE) == False
-        assert manager.is_enabled(FeatureFlag.SELF_EVALUATION) == False
+        assert not manager.is_enabled(FeatureFlag.CAWS_COMPLIANCE)
+        assert not manager.is_enabled(FeatureFlag.SELF_EVALUATION)
         captured = capsys.readouterr()
         assert "WARNING: Disabling" in captured.out
         assert "self_evaluation" in captured.out.lower()
@@ -313,7 +313,8 @@ class TestFeatureManager:
 
         errors = manager.validate_configuration()
         assert len(errors) > 0
-        assert any("self_evaluation" in error.lower() and "caws_compliance" in error.lower() for error in errors)
+        assert any("self_evaluation" in error.lower()
+                   and "caws_compliance" in error.lower() for error in errors)
 
     def test_feature_manager_validate_with_conflicts(self, manager):
         """Test validation with conflict errors."""
@@ -399,29 +400,31 @@ class TestFeatureInteractions:
         # Cycle through enable/disable several times
         for i in range(5):
             manager.enable_feature(flag)
-            assert manager.is_enabled(flag) == True
+            assert manager.is_enabled(flag)
 
             manager.disable_feature(flag)
-            assert manager.is_enabled(flag) == False
+            assert not manager.is_enabled(flag)
 
     def test_multiple_features_enable_disable(self, manager):
         """Test enabling/disabling multiple features simultaneously."""
-        flags = [FeatureFlag.DISTILLATION, FeatureFlag.CODE_MODE, FeatureFlag.QUANTIZATION]
+        flags = [FeatureFlag.DISTILLATION,
+                 FeatureFlag.CODE_MODE, FeatureFlag.QUANTIZATION]
 
         # Enable all
         for flag in flags:
             manager.enable_feature(flag)
-            assert manager.is_enabled(flag) == True
+            assert manager.is_enabled(flag)
 
         # Disable all
         for flag in flags:
             manager.disable_feature(flag)
-            assert manager.is_enabled(flag) == False
+            assert not manager.is_enabled(flag)
 
     def test_feature_manager_not_thread_safe(self, manager):
         """Test that feature manager is not thread-safe (expected behavior)."""
         import threading
         import time
+        from tests.utils.thread_safety import safe_thread_join, safe_thread_join_all
 
         results = []
         errors = []
@@ -430,7 +433,8 @@ class TestFeatureInteractions:
             try:
                 # Perform operations that might conflict
                 manager.enable_feature(FeatureFlag.DISTILLATION)
-                time.sleep(0.001)  # Very small delay to encourage race conditions
+                # Very small delay to encourage race conditions
+                time.sleep(0.001)
                 enabled = manager.is_enabled(FeatureFlag.DISTILLATION)
                 manager.disable_feature(FeatureFlag.DISTILLATION)
                 disabled = not manager.is_enabled(FeatureFlag.DISTILLATION)
@@ -446,12 +450,20 @@ class TestFeatureInteractions:
             threads.append(thread)
             thread.start()
 
-        # Wait for all threads to complete
-        for thread in threads:
-            thread.join()
+        # Wait for all threads to complete with timeout to prevent watchdog timeout
+        all_succeeded, join_results = safe_thread_join_all(threads, timeout=5.0, per_thread=True)
 
         # Check that all threads completed (no exceptions)
-        assert len(results) == 3, f"Not all threads completed: {len(results)} results, {len(errors)} errors"
+        if not all_succeeded:
+            # Log timeout information
+            for i, result in enumerate(join_results):
+                if result.timeout:
+                    print(
+                        f"[WARNING] Thread {i} did not complete within timeout: {result.message}"
+                    )
+
+        assert len(
+            results) == 3, f"Not all threads completed: {len(results)} results, {len(errors)} errors. Join results: {[r.message for r in join_results]}"
 
         # Since it's not thread-safe, we don't assert consistent results
         # Just verify the operations didn't crash
@@ -475,11 +487,11 @@ class TestEnvironmentIntegration:
         # Set environment variable
         with patch.dict(os.environ, {env_var: "true"}):
             manager.load_from_environment()
-            assert manager.is_enabled(flag) == True
+            assert manager.is_enabled(flag)
 
         with patch.dict(os.environ, {env_var: "false"}):
             manager.load_from_environment()
-            assert manager.is_enabled(flag) == False
+            assert not manager.is_enabled(flag)
 
     def test_environment_variable_case_insensitive(self, manager):
         """Test environment variable parsing is case insensitive."""
@@ -492,7 +504,7 @@ class TestEnvironmentIntegration:
         for value in test_cases:
             with patch.dict(os.environ, {env_var: value}):
                 manager.load_from_environment()
-                assert manager.is_enabled(flag) == True, f"Failed for value: {value}"
+                assert manager.is_enabled(flag), f"Failed for value: {value}"
 
     def test_environment_variable_invalid_values(self, manager):
         """Test handling of invalid environment variable values."""
@@ -516,9 +528,9 @@ class TestEnvironmentIntegration:
 
         # Set programmatically
         manager.enable_feature(flag)
-        assert manager.is_enabled(flag) == True
+        assert manager.is_enabled(flag)
 
         # Override with environment variable
         with patch.dict(os.environ, {env_var: "false"}):
             manager.load_from_environment()
-            assert manager.is_enabled(flag) == False
+            assert not manager.is_enabled(flag)

@@ -42,7 +42,7 @@ class TestInputValidator:
 
     def test_validator_initialization(self, strict_validator):
         """Test validator initialization."""
-        assert strict_validator.strict_mode == True
+        assert strict_validator.strict_mode
         assert len(strict_validator.compiled_patterns) > 0
 
     def test_validate_text_input_valid(self, strict_validator):
@@ -115,17 +115,17 @@ class TestInputValidator:
     def test_contains_suspicious_patterns_non_string(self, strict_validator):
         """Test _contains_suspicious_patterns with non-string input (line 59-60)."""
         result = strict_validator._contains_suspicious_patterns(123)
-        assert result == False
+        assert not result
 
     def test_contains_suspicious_patterns_matches(self, strict_validator):
         """Test _contains_suspicious_patterns with matching pattern (line 62-65)."""
         result = strict_validator._contains_suspicious_patterns('<script>alert("xss")</script>')
-        assert result == True
+        assert result
 
     def test_contains_suspicious_patterns_no_match(self, strict_validator):
         """Test _contains_suspicious_patterns with no matching pattern (line 65)."""
         result = strict_validator._contains_suspicious_patterns("Clean text with no suspicious content")
-        assert result == False
+        assert not result
 
     def test_validate_numeric_input_valid(self, strict_validator):
         """Test validating valid numeric input."""
@@ -272,7 +272,7 @@ class TestInputValidator:
         result = strict_validator.validate_structured_data(data)
         assert result["count"] == 42
         assert result["score"] == 0.95
-        assert result["active"] == True
+        assert result["active"]
         assert result["tags"] is None
         assert result["items"] == [1, 2, 3]
 
@@ -351,7 +351,7 @@ class TestInputValidator:
         result = strict_validator.validate_metadata(metadata)
         assert result["tool_count"] == 5
         assert result["intermediate_sizes"] == [10, 20, 30]
-        assert result["pii_tags_present"] == False
+        assert not result["pii_tags_present"]
 
     def test_validate_metadata_not_dict(self, strict_validator):
         """Test validating metadata that is not a dictionary."""
@@ -478,7 +478,6 @@ class TestInputValidator:
         test_file = tmp_path / "test.txt"
         test_file.write_text("test")
 
-        original_stat = Path.stat
         def mock_stat(self):
             raise PermissionError("Permission denied")
 
@@ -637,6 +636,6 @@ class TestGlobalValidator:
 
     def test_global_validator_strict_mode(self):
         """Test that global validator is in strict mode."""
-        assert validator.strict_mode == True
+        assert validator.strict_mode
 
 

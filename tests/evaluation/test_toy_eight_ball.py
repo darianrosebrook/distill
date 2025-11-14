@@ -6,10 +6,8 @@ Tests 8-ball answer mappings, configuration, and question loading.
 # @author: @darianrosebrook
 
 import json
-import tempfile
 from pathlib import Path
 
-import pytest
 
 from evaluation.toy.eight_ball import (
     EIGHT_BALL_ANSWERS,
@@ -144,7 +142,7 @@ class TestGetEightBallQuestions:
 
     def test_get_eight_ball_questions_default(self, tmp_path):
         """Test getting questions with default path."""
-        default_path = Path("evaluation/8ball_eval_questions.json")
+        Path("evaluation/8ball_eval_questions.json")
         # This will try to load from default location or create it
         # We'll test with a custom path instead
         pass  # Skip default path test as it may create files in project root
@@ -202,4 +200,9 @@ class TestEightBallIntegration:
         """Test that token IDs are sequential."""
         expected_ids = list(range(EIGHT_BALL_TOKEN_START, EIGHT_BALL_TOKEN_END + 1))
         assert EIGHT_BALL_TOKEN_IDS == expected_ids
+
+
+
+
+
 

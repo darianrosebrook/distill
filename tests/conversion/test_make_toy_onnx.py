@@ -5,12 +5,9 @@ Tests ONNX graph creation with Gather, MatMul, Add, and Reshape operations.
 """
 # @author: @darianrosebrook
 
-import numpy as np
 import onnx
-from pathlib import Path
-from unittest.mock import patch, Mock
+from unittest.mock import patch
 
-import pytest
 
 # Import the module
 import importlib
@@ -204,5 +201,10 @@ class TestMakeToyONNX:
         assert len(model.graph.input) > 0
         assert len(model.graph.output) > 0
         assert len(model.graph.node) > 0
+
+
+
+
+
 
 

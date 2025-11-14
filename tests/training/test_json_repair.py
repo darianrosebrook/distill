@@ -5,8 +5,7 @@ Tests JSON validation, extraction, repair, and batch processing.
 """
 # @author: @darianrosebrook
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from training.json_repair import (
     validate_json,
     extract_json_from_text,
@@ -14,7 +13,6 @@ from training.json_repair import (
     repair_json,
     check_json_repair_needed,
     batch_check_json_repair,
-    JSONREPAIR_AVAILABLE,
 )
 
 
@@ -24,46 +22,46 @@ class TestValidateJSON:
     def test_validate_json_valid_object(self):
         """Test validating valid JSON object."""
         text = '{"name": "test", "value": 42}'
-        assert validate_json(text) == True
+        assert validate_json(text)
 
     def test_validate_json_valid_array(self):
         """Test validating valid JSON array."""
         text = '[1, 2, 3, {"key": "value"}]'
-        assert validate_json(text) == True
+        assert validate_json(text)
 
     def test_validate_json_invalid_missing_brace(self):
         """Test validating invalid JSON with missing brace."""
         text = '{"name": "test", "value": 42'
-        assert validate_json(text) == False
+        assert not validate_json(text)
 
     def test_validate_json_invalid_trailing_comma(self):
         """Test validating invalid JSON with trailing comma."""
         text = '{"name": "test", "value": 42,}'
-        assert validate_json(text) == False
+        assert not validate_json(text)
 
     def test_validate_json_text_with_json(self):
         """Test validating text containing JSON."""
         text = 'Here is the result: {"answer": 42}'
-        assert validate_json(text) == True
+        assert validate_json(text)
 
     def test_validate_json_plain_text(self):
         """Test validating plain text without JSON."""
         text = "This is just plain text with no JSON"
-        assert validate_json(text) == False
+        assert not validate_json(text)
 
     def test_validate_json_empty_string(self):
         """Test validating empty string."""
-        assert validate_json("") == False
+        assert not validate_json("")
 
     def test_validate_json_nested_object(self):
         """Test validating nested JSON object."""
         text = '{"outer": {"inner": {"deep": "value"}}}'
-        assert validate_json(text) == True
+        assert validate_json(text)
 
     def test_validate_json_array_with_objects(self):
         """Test validating JSON array containing objects."""
         text = '[{"id": 1}, {"id": 2}, {"id": 3}]'
-        assert validate_json(text) == True
+        assert validate_json(text)
 
 
 class TestExtractJSONFromText:
@@ -162,17 +160,17 @@ class TestRepairJSON:
         """Test repairing already valid JSON."""
         valid_json = '{"name": "test", "value": 42}'
         success, result, was_repaired = repair_json(valid_json)
-        assert success == True
+        assert success
         assert result is not None
-        assert was_repaired == False
+        assert not was_repaired
 
     def test_repair_json_simple_repair(self):
         """Test repairing JSON with simple issues."""
         invalid_json = '{"name": "test", "value": 42,}'
         success, result, was_repaired = repair_json(invalid_json, use_jsonrepair=False)
-        assert success == True
+        assert success
         assert result is not None
-        assert was_repaired == True
+        assert was_repaired
 
     @patch("training.json_repair.JSONREPAIR_AVAILABLE", True)
     @patch("training.json_repair.jsonrepair")
@@ -182,18 +180,18 @@ class TestRepairJSON:
         mock_jsonrepair.repair_json.return_value = '{"name": "test", "invalid": null}'
 
         success, result, was_repaired = repair_json(invalid_json, use_jsonrepair=True)
-        assert success == True
+        assert success
         assert result is not None
-        assert was_repaired == True
+        assert was_repaired
         mock_jsonrepair.repair_json.assert_called_once()
 
     def test_repair_json_unrepairable(self):
         """Test repairing unrepairable JSON."""
         invalid_json = "This is not JSON at all"
         success, result, was_repaired = repair_json(invalid_json, use_jsonrepair=False)
-        assert success == False
+        assert not success
         assert result is None
-        assert was_repaired == True
+        assert was_repaired
 
     def test_repair_json_without_jsonrepair(self):
         """Test repairing JSON without jsonrepair library."""
@@ -206,7 +204,7 @@ class TestRepairJSON:
     def test_repair_json_empty_string(self):
         """Test repairing empty string."""
         success, result, was_repaired = repair_json("", use_jsonrepair=False)
-        assert success == False
+        assert not success
         assert result is None
 
 
@@ -217,36 +215,36 @@ class TestCheckJSONRepairNeeded:
         """Test checking text with valid JSON."""
         text = 'Here is valid JSON: {"name": "test", "value": 42}'
         has_json, needs_repair = check_json_repair_needed(text)
-        assert has_json == True
-        assert needs_repair == False
+        assert has_json
+        assert not needs_repair
 
     def test_check_json_repair_needed_invalid_json(self):
         """Test checking text with invalid JSON."""
         text = 'Here is invalid JSON: {"name": "test"'
         has_json, needs_repair = check_json_repair_needed(text)
-        assert has_json == True
-        assert needs_repair == True
+        assert has_json
+        assert needs_repair
 
     def test_check_json_repair_needed_no_json(self):
         """Test checking text with no JSON."""
         text = "This is just plain text"
         has_json, needs_repair = check_json_repair_needed(text)
-        assert has_json == False
-        assert needs_repair == False
+        assert not has_json
+        assert not needs_repair
 
     def test_check_json_repair_needed_repairable_json(self):
         """Test checking text with repairable JSON."""
         text = 'Here is repairable JSON: {"name": "test", "value": 42,}'
         has_json, needs_repair = check_json_repair_needed(text, use_jsonrepair=False)
-        assert has_json == True
+        assert has_json
         # May or may not need repair depending on simple repair success
         assert isinstance(needs_repair, bool)
 
     def test_check_json_repair_needed_empty_string(self):
         """Test checking empty string."""
         has_json, needs_repair = check_json_repair_needed("")
-        assert has_json == False
-        assert needs_repair == False
+        assert not has_json
+        assert not needs_repair
 
 
 class TestBatchCheckJSONRepair:
@@ -343,13 +341,13 @@ class TestJSONRepairIntegration:
 
         # Check if repair needed
         has_json, needs_repair = check_json_repair_needed(invalid_json, use_jsonrepair=False)
-        assert has_json == True
+        assert has_json
 
         # Repair
         success, result, was_repaired = repair_json(invalid_json, use_jsonrepair=False)
         if success:
             assert result is not None
-            assert was_repaired == True
+            assert was_repaired
 
     def test_batch_workflow(self):
         """Test batch repair workflow."""
@@ -370,4 +368,10 @@ class TestJSONRepairIntegration:
                 success, result, _ = repair_json(text, use_jsonrepair=False)
                 # Should handle gracefully
                 assert isinstance(success, bool)
+
+
+
+
+
+
 

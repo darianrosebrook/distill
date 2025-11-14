@@ -173,3 +173,8 @@ def test_code_mode_loss_vectorized_eligibility():
     assert eligibility_mask[2].item(), "Third sample should be eligible"
     assert eligibility_mask[3].item(), "Fourth sample should be eligible (large payload)"
 
+
+
+
+
+

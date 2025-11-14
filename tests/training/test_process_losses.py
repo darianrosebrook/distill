@@ -10,7 +10,6 @@ from unittest.mock import Mock
 
 import pytest
 import torch
-import torch.nn.functional as F
 
 from training.process_losses import (
     validate_json,

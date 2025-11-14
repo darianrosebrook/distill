@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Union
 
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -161,7 +162,7 @@ def generate_text(
         else:
             # Last resort: create dummy tensor
             input_ids = torch.tensor([[1, 2, 3]], dtype=torch.long).to(device)
-    except (AttributeError, TypeError, KeyError) as e:
+    except (AttributeError, TypeError, KeyError):
         # If all else fails, create dummy tensor for mocks
         input_ids = torch.tensor([[1, 2, 3]], dtype=torch.long).to(device)
 
@@ -403,12 +404,12 @@ def evaluate_tool_use(
         if isinstance(test_case, dict):
             prompt = test_case.get("prompt", "")
             expected_tool = test_case.get("expected_tool", None)
-            expected_args = test_case.get("expected_args", None)
+            test_case.get("expected_args", None)
         else:
             # Handle Mock objects or other types
             prompt = getattr(test_case, "prompt", "")
             expected_tool = getattr(test_case, "expected_tool", None)
-            expected_args = getattr(test_case, "expected_args", None)
+            getattr(test_case, "expected_args", None)
 
         # Use generate_text function (will use mocked version in tests)
         # Import it locally to get the potentially-mocked version
@@ -677,7 +678,7 @@ def main():
                         f"[tool_use_eval] WARN: Config file not found: {config_path_str}, continuing without config")
                     continue  # Skip this config file, continue with others
                 # Config file exists, can load it here if needed
-            except (TypeError, AttributeError, ValueError) as e:
+            except (TypeError, AttributeError, ValueError):
                 # Path conversion error - warn and continue (config is optional)
                 print(
                     f"[tool_use_eval] WARN: Config file path invalid: {config_path_str}, continuing without config")

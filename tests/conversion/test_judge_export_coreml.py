@@ -5,11 +5,8 @@ Tests judge model conversion to CoreML, error handling, and placeholder creation
 """
 # @author: @darianrosebrook
 
-import sys
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch
 
-import pytest
 import typer.testing
 
 # Import the module
@@ -252,4 +249,10 @@ class TestJudgeExportCoreML:
             assert result.exit_code == 0
             assert "Successfully converted judge model" in result.output
             assert "Note: Judge should use INT8 weights" in result.output
+
+
+
+
+
+
 

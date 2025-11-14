@@ -253,7 +253,6 @@ class TestAggregateSpeedMetrics:
 
     def test_aggregate_all_inf_values(self):
         """Test aggregation when all values are inf (should return 0.0)."""
-        import numpy as np
         metrics_list = [
             {"ttft_ms": float("inf"), "tps": float("inf"), "ttfa_tokens": float("inf"), "ttfa_ms": float("inf")},
             {"ttft_ms": float("inf"), "tps": float("inf"), "ttfa_tokens": float("inf"), "ttfa_ms": float("inf")},

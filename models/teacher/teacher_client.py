@@ -29,7 +29,7 @@ from urllib3.util.retry import Retry
 
 try:
     import torch
-    from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+    from transformers import pipeline
 
     HF_AVAILABLE = True
 except ImportError:
@@ -89,18 +89,22 @@ class TeacherClient:
         self._tier_limits: Optional[TierLimits] = TIER_LIMITS[APITier.FREE]
         self._max_retries = kwargs.get("max_retries", 5)
         self._retry_backoff_factor = kwargs.get("retry_backoff_factor", 2.0)
-        self._retry_status_codes = kwargs.get("retry_status_codes", [429, 500, 502, 503, 504])
+        self._retry_status_codes = kwargs.get(
+            "retry_status_codes", [429, 500, 502, 503, 504])
 
         if backend == "http":
-            endpoint = kwargs.get("endpoint", "http://localhost:8000").rstrip("/")
+            endpoint = kwargs.get(
+                "endpoint", "http://localhost:8000").rstrip("/")
             # Normalize endpoint - remove trailing /v1 if present (we add it in requests)
             if endpoint.endswith("/v1"):
                 endpoint = endpoint[:-3]
             self.endpoint = endpoint.rstrip("/")
-            self.api_key = kwargs.get("api_key") or self._load_api_key_from_env()
+            self.api_key = kwargs.get(
+                "api_key") or self._load_api_key_from_env()
             # Increased timeout for kimi-k2-thinking which can take longer due to reasoning_content
             # Docs recommend streaming for long responses, but we use longer timeout as fallback
-            self.timeout = kwargs.get("timeout", 600)  # 10 minutes for long reasoning responses
+            # 10 minutes for long reasoning responses
+            self.timeout = kwargs.get("timeout", 600)
             self._setup_retry_session()
             # Don't detect tier on initialization (saves a request)
             # Tier will be detected from first API response headers
@@ -172,7 +176,8 @@ class TeacherClient:
 
         # Don't retry 429 in urllib3 - let our custom logic handle it with proper backoff
         # Only retry on server errors (5xx) and connection errors
-        retry_status_codes = [code for code in self._retry_status_codes if code != 429]
+        retry_status_codes = [
+            code for code in self._retry_status_codes if code != 429]
 
         retry_strategy = Retry(
             total=self._max_retries,
@@ -241,14 +246,16 @@ class TeacherClient:
                     tier = APITier.FREE
 
                 self._tier = tier
-                self._tier_limits = TIER_LIMITS.get(tier, TIER_LIMITS[APITier.FREE])
+                self._tier_limits = TIER_LIMITS.get(
+                    tier, TIER_LIMITS[APITier.FREE])
                 print(
                     f"[TeacherClient] Detected tier: {tier.value} (RPM: {rpm}, delay: {self._tier_limits.delay}s)"
                 )
                 return tier
 
         except Exception as e:
-            print(f"[TeacherClient] Tier detection failed: {e}, defaulting to FREE tier")
+            print(
+                f"[TeacherClient] Tier detection failed: {e}, defaulting to FREE tier")
             self._tier = APITier.FREE
             self._tier_limits = TIER_LIMITS[APITier.FREE]
 
@@ -270,7 +277,8 @@ class TeacherClient:
         tpd_header = response.headers.get("x-ratelimit-limit-tpd") or response.headers.get(
             "ratelimit-limit-tpd"
         )
-        response.headers.get("x-ratelimit-limit-tpm") or response.headers.get("ratelimit-limit-tpm")
+        response.headers.get(
+            "x-ratelimit-limit-tpm") or response.headers.get("ratelimit-limit-tpm")
 
         # Infer tier from rate limits if available
         if rpm_header:
@@ -290,7 +298,8 @@ class TeacherClient:
                 # Update tier if detected
                 if tier != self._tier:
                     self._tier = tier
-                    self._tier_limits = TIER_LIMITS.get(tier, TIER_LIMITS[APITier.FREE])
+                    self._tier_limits = TIER_LIMITS.get(
+                        tier, TIER_LIMITS[APITier.FREE])
                     print(
                         f"[TeacherClient] Detected tier: {tier.value} (RPM: {rpm}, delay: {self._tier_limits.delay}s)"
                     )
@@ -521,7 +530,8 @@ class TeacherClient:
         while retry_count < max_attempts:
             # Debug: Log attempt details
             if retry_count > 0:
-                print(f"[TeacherClient] Retry attempt {retry_count + 1}/{max_attempts}")
+                print(
+                    f"[TeacherClient] Retry attempt {retry_count + 1}/{max_attempts}")
             else:
                 print(f"[TeacherClient] Initial attempt 1/{max_attempts}")
             try:
@@ -592,7 +602,8 @@ class TeacherClient:
                         )
                     elif hasattr(message, "reasoning_content"):
                         # Handle case where reasoning_content exists but not in dict
-                        reasoning_content = getattr(message, "reasoning_content", None)
+                        reasoning_content = getattr(
+                            message, "reasoning_content", None)
                         if reasoning_content:
                             print(
                                 f"[TeacherClient] Reasoning content present: {len(reasoning_content)} chars"
@@ -615,7 +626,8 @@ class TeacherClient:
                     # For multi-step calls (payload_override), return full message structure
                     if payload_override:
                         result = {
-                            "message": message.copy(),  # Full message with reasoning_content, tool_calls, etc.
+                            # Full message with reasoning_content, tool_calls, etc.
+                            "message": message.copy(),
                             "text": text,
                             "logits": None,
                         }
@@ -658,11 +670,13 @@ class TeacherClient:
                             else {}
                         )
                         error_msg = (
-                            error_data.get("error", {}).get("message", response.text[:200])
+                            error_data.get("error", {}).get(
+                                "message", response.text[:200])
                             if isinstance(error_data, dict)
                             else str(response.text[:200])
                         )
-                        print(f"[TeacherClient] Rate limit error message: {error_msg}")
+                        print(
+                            f"[TeacherClient] Rate limit error message: {error_msg}")
                     except Exception:
                         pass
 
@@ -673,7 +687,8 @@ class TeacherClient:
                         # Respect Retry-After but ensure minimum tier delay
                         # For FREE tier, API may return short Retry-After (1s) but we need 20s
                         min_delay = self._tier_limits.delay
-                        tier_backoff = min_delay * (self._retry_backoff_factor**retry_count)
+                        tier_backoff = min_delay * \
+                            (self._retry_backoff_factor**retry_count)
                         wait_time = max(retry_after, tier_backoff)
                         tier_info = f" (Retry-After: {retry_after}s, tier min: {min_delay}s, tier backoff: {tier_backoff:.1f}s, using: {wait_time:.1f}s)"
                     elif retry_after:
@@ -687,7 +702,8 @@ class TeacherClient:
                     elif self._tier_limits:
                         # Tier-aware backoff: start with tier delay, then exponential
                         base_delay = self._tier_limits.delay
-                        wait_time = base_delay * (self._retry_backoff_factor**retry_count)
+                        wait_time = base_delay * \
+                            (self._retry_backoff_factor**retry_count)
                         tier_info = f" (tier: {self._tier.value}, base: {base_delay}s, exponential: {wait_time:.1f}s)"
                     else:
                         # Fallback to standard exponential backoff
@@ -713,7 +729,8 @@ class TeacherClient:
                         else {}
                     )
                     error_msg = (
-                        error_data.get("error", {}).get("message", response.text)
+                        error_data.get("error", {}).get(
+                            "message", response.text)
                         if isinstance(error_data, dict)
                         else str(response.text)
                     )
@@ -749,11 +766,13 @@ class TeacherClient:
                             else {}
                         )
                         error_msg = (
-                            error_data.get("error", {}).get("message", response.text[:200])
+                            error_data.get("error", {}).get(
+                                "message", response.text[:200])
                             if isinstance(error_data, dict)
                             else str(response.text[:200])
                         )
-                        print(f"[TeacherClient] Server error ({response.status_code}): {error_msg}")
+                        print(
+                            f"[TeacherClient] Server error ({response.status_code}): {error_msg}")
                     except Exception:
                         print(
                             f"[TeacherClient] Server error ({response.status_code}): {response.text[:200]}"
@@ -782,14 +801,16 @@ class TeacherClient:
                             else {}
                         )
                         error_msg = (
-                            error_data.get("error", {}).get("message", response.text[:200])
+                            error_data.get("error", {}).get(
+                                "message", response.text[:200])
                             if isinstance(error_data, dict)
                             else str(response.text[:200])
                         )
                     except Exception:
                         error_msg = str(response.text[:200])
 
-                    print(f"[TeacherClient] API error ({response.status_code}): {error_msg}")
+                    print(
+                        f"[TeacherClient] API error ({response.status_code}): {error_msg}")
                     return {
                         "prompt": prompt,
                         "text": "",
@@ -850,8 +871,10 @@ class TeacherClient:
                 break
 
         # All retries exhausted
-        error_msg = str(last_exception) if last_exception else "Max retries exceeded"
-        print(f"[TeacherClient] ERROR: All retries exhausted. Final error: {error_msg}")
+        error_msg = str(
+            last_exception) if last_exception else "Max retries exceeded"
+        print(
+            f"[TeacherClient] ERROR: All retries exhausted. Final error: {error_msg}")
         return {
             "prompt": prompt,
             "text": "",
@@ -861,7 +884,8 @@ class TeacherClient:
 
     def _get_retry_after(self, response: requests.Response) -> Optional[float]:
         """Extract Retry-After header value."""
-        retry_after = response.headers.get("Retry-After") or response.headers.get("retry-after")
+        retry_after = response.headers.get(
+            "Retry-After") or response.headers.get("retry-after")
         if retry_after:
             try:
                 return float(retry_after)
@@ -949,9 +973,11 @@ class TeacherClient:
 
                 if return_logits:
                     # Get logits from model directly
-                    inputs = self._tokenizer(prompt, return_tensors="pt").to(self._model.device)
+                    inputs = self._tokenizer(
+                        prompt, return_tensors="pt").to(self._model.device)
                     with torch.no_grad():
-                        outputs = self._model(**inputs, output_hidden_states=False)
+                        outputs = self._model(
+                            **inputs, output_hidden_states=False)
                         # Get logits for the last token position
                         logits = outputs.logits[0, -1, :].cpu().numpy()
                         result["logits"] = logits.tolist()
@@ -959,7 +985,8 @@ class TeacherClient:
                 results.append(result)
 
             except Exception as e:
-                print(f"[TeacherClient] WARN: HF generation failed for prompt: {e}")
+                print(
+                    f"[TeacherClient] WARN: HF generation failed for prompt: {e}")
                 results.append(
                     {
                         "prompt": prompt,
@@ -1015,7 +1042,8 @@ class TeacherClient:
             result2 = client.sample_multi_step(messages, tools=tools)
         """
         if self.backend != "http":
-            raise ValueError("Multi-step tool calls only supported for HTTP backend")
+            raise ValueError(
+                "Multi-step tool calls only supported for HTTP backend")
 
         model_name = kwargs.get("model", "kimi-k2-thinking")
         is_thinking_model = "kimi-k2-thinking" in model_name.lower()
@@ -1070,7 +1098,8 @@ class TeacherClient:
             for attempt in range(max_attempts):
                 try:
                     # Try health endpoint first
-                    response = self.session.get(f"{self.endpoint}/health", timeout=5)
+                    response = self.session.get(
+                        f"{self.endpoint}/health", timeout=5)
                     if response.status_code == 200:
                         return True
 

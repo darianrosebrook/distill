@@ -178,7 +178,7 @@ class TestGenerateText:
             [[[0.1, 0.9, 0.0]]]
         )  # EOS token has highest prob
 
-        result = generate_text(mock_model, mock_tokenizer, prompt, max_length=10)
+        generate_text(mock_model, mock_tokenizer, prompt, max_length=10)
 
         mock_tokenizer.decode.assert_called()
 
@@ -198,7 +198,7 @@ class TestGenerateText:
         prompt = "Long prompt that should be truncated"
         max_length = 5
 
-        result = generate_text(mock_model, mock_tokenizer, prompt, max_length=max_length)
+        generate_text(mock_model, mock_tokenizer, prompt, max_length=max_length)
 
         # Should respect max length
         mock_tokenizer.decode.assert_called()
@@ -211,7 +211,7 @@ class TestValidateJSON:
         """Test validating simple valid JSON."""
         valid_json = '{"name": "test", "value": 42}'
         result = validate_json(valid_json)
-        assert result == True
+        assert result
 
     def test_validate_json_valid_complex(self):
         """Test validating complex valid JSON."""
@@ -230,7 +230,7 @@ class TestValidateJSON:
         }
         """
         result = validate_json(complex_json)
-        assert result == True
+        assert result
 
     def test_validate_json_invalid_syntax(self):
         """Test validating JSON with syntax errors."""
@@ -244,28 +244,28 @@ class TestValidateJSON:
 
         for invalid_json in invalid_cases:
             result = validate_json(invalid_json)
-            assert result == False, f"Should reject invalid JSON: {invalid_json}"
+            assert not result, f"Should reject invalid JSON: {invalid_json}"
 
     def test_validate_json_empty_string(self):
         """Test validating empty string."""
         result = validate_json("")
-        assert result == False
+        assert not result
 
     def test_validate_json_whitespace_only(self):
         """Test validating whitespace-only string."""
         result = validate_json("   \n\t  ")
-        assert result == False
+        assert not result
 
     def test_validate_json_non_json_text(self):
         """Test validating plain text."""
         result = validate_json("This is not JSON")
-        assert result == False
+        assert not result
 
     def test_validate_json_partial_json(self):
         """Test validating partial JSON."""
         partial = '{"valid": "json", "incomplete": '
         result = validate_json(partial)
-        assert result == False
+        assert not result
 
 
 class TestExtractToolCall:
@@ -385,7 +385,7 @@ class TestEvaluateToolUse:
         """Test successful tool use evaluation."""
         # Mock model and tokenizer
         mock_model = Mock()
-        mock_tokenizer = Mock()
+        Mock()
         mock_load.return_value = mock_model
 
         # Mock test cases
@@ -423,16 +423,16 @@ class TestEvaluateToolUse:
         # Check first result
         result1 = results[0]
         assert result1["prompt"] == "Calculate 2 + 2"
-        assert result1["json_valid"] == True
-        assert result1["tool_correct"] == True
-        assert result1["args_correct"] == True
+        assert result1["json_valid"]
+        assert result1["tool_correct"]
+        assert result1["args_correct"]
 
         # Check second result
         result2 = results[1]
         assert result2["prompt"] == "Search for Python docs"
-        assert result2["json_valid"] == True
-        assert result2["tool_correct"] == True
-        assert result2["args_correct"] == True
+        assert result2["json_valid"]
+        assert result2["tool_correct"]
+        assert result2["args_correct"]
 
     @patch("evaluation.tool_use_eval.load_model")
     @patch("evaluation.tool_use_eval.generate_text")
@@ -456,9 +456,9 @@ class TestEvaluateToolUse:
 
         assert len(results) == 1
         result = results[0]
-        assert result["json_valid"] == False
-        assert result["tool_correct"] == False
-        assert result["args_correct"] == False
+        assert not result["json_valid"]
+        assert not result["tool_correct"]
+        assert not result["args_correct"]
 
     @patch("evaluation.tool_use_eval.load_model")
     @patch("evaluation.tool_use_eval.generate_text")
@@ -482,9 +482,9 @@ class TestEvaluateToolUse:
 
         assert len(results) == 1
         result = results[0]
-        assert result["json_valid"] == True
-        assert result["tool_correct"] == False  # Wrong tool
-        assert result["args_correct"] == False  # Args don't matter if tool is wrong
+        assert result["json_valid"]
+        assert not result["tool_correct"]  # Wrong tool
+        assert not result["args_correct"]  # Args don't matter if tool is wrong
 
     @patch("evaluation.tool_use_eval.load_model")
     def test_evaluate_tool_use_model_load_failure(self, mock_load):
@@ -579,7 +579,7 @@ class TestToolUseEvalIntegration:
         ]
 
         for valid_json in valid_cases:
-            assert validate_json(valid_json) == True
+            assert validate_json(valid_json)
 
         # Invalid cases
         invalid_cases = [
@@ -591,7 +591,7 @@ class TestToolUseEvalIntegration:
         ]
 
         for invalid_json in invalid_cases:
-            assert validate_json(invalid_json) == False
+            assert not validate_json(invalid_json)
 
     def test_tool_call_extraction_variations(self):
         """Test tool call extraction with different JSON structures."""
@@ -665,9 +665,9 @@ class TestToolUseEvalIntegration:
 
             # Both should be correct
             for result in results:
-                assert result["json_valid"] == True
-                assert result["tool_correct"] == True
-                assert result["args_correct"] == True
+                assert result["json_valid"]
+                assert result["tool_correct"]
+                assert result["args_correct"]
 
     def test_evaluation_metrics_calculation(self):
         """Test that evaluation metrics are calculated correctly."""
@@ -749,7 +749,7 @@ class TestToolUseEvalIntegration:
             mock_student_lm.return_value = mock_model
             
             device = torch.device("cpu")
-            result = load_model(checkpoint_path, device)
+            load_model(checkpoint_path, device)
             
             # Should load state dict directly (not from "model_state_dict" key)
             mock_model.load_state_dict.assert_called_once_with(mock_checkpoint, strict=False)
@@ -824,7 +824,7 @@ class TestToolUseEvalIntegration:
         mock_tokenizer.decode = Mock(return_value="Generated")
         mock_tokenizer.eos_token_id = 2
         
-        result = generate_text(mock_model, mock_tokenizer, prompt)
+        generate_text(mock_model, mock_tokenizer, prompt)
         # Should use default max_new_tokens=512
         mock_model.forward.assert_called()
 
@@ -846,25 +846,25 @@ class TestToolUseEvalIntegration:
         """Test validate_json finds JSON embedded in text."""
         text_with_json = "Some text before {\"key\": \"value\"} and after"
         result = validate_json(text_with_json)
-        assert result == True
+        assert result
 
     def test_validate_json_multiple_json_objects(self):
         """Test validate_json finds valid JSON when multiple objects present."""
         multiple_json = '{"first": "obj"} and {"second": "obj"}'
         result = validate_json(multiple_json)
-        assert result == True
+        assert result
 
     def test_validate_json_array(self):
         """Test validate_json validates JSON arrays."""
         json_array = '[1, 2, 3, {"nested": "object"}]'
         result = validate_json(json_array)
-        assert result == True
+        assert result
 
     def test_validate_json_nested_structures(self):
         """Test validate_json with deeply nested structures."""
         nested = '{"level1": {"level2": {"level3": {"level4": "deep"}}}}'
         result = validate_json(nested)
-        assert result == True
+        assert result
 
     def test_extract_tool_call_embedded_json(self):
         """Test extract_tool_call finds JSON embedded in text."""
@@ -952,8 +952,8 @@ class TestToolUseEvalIntegration:
         with (
             patch("evaluation.tool_use_eval.generate_text", return_value='{"name": "tool", "arguments": }'),  # Invalid JSON
             patch("evaluation.tool_use_eval.validate_json") as mock_validate,
-            patch("training.json_repair.check_json_repair_needed", return_value=(False, True)) as mock_repair_check,
-            patch("training.json_repair.repair_json", return_value=(True, {"name": "tool", "arguments": {}}, "")) as mock_repair,
+            patch("training.json_repair.check_json_repair_needed", return_value=(False, True)),
+            patch("training.json_repair.repair_json", return_value=(True, {"name": "tool", "arguments": {}}, "")),
             patch("evaluation.tool_use_eval.extract_tool_call", return_value={"name": "tool", "arguments": {}}),
         ):
             # First call: invalid JSON

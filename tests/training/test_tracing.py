@@ -7,9 +7,7 @@ JSON logging, and configuration-based tracer creation.
 # @author: @darianrosebrook
 
 import json
-import tempfile
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 import pytest
 import torch
@@ -613,4 +611,10 @@ class TestCreateTracerFromConfig:
             assert tracer.run_name == "test_run"
             assert tracer.json_log is True
             assert tracer.console_log is True
+
+
+
+
+
+
 

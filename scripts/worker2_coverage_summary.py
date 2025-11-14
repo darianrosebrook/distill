@@ -51,9 +51,9 @@ def main():
     
     print("\n" + "=" * 80)
     print("Worker 2 Test Results:")
-    print(f"  Total Tests: 189")
-    print(f"  Passed: 62")
-    print(f"  Failed: 127")
+    print("  Total Tests: 189")
+    print("  Passed: 62")
+    print("  Failed: 127")
     print("=" * 80)
 
 if __name__ == "__main__":

@@ -17,11 +17,16 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 try:
-    import torch
-
-    TORCH_AVAILABLE = True
-except ImportError:
-    TORCH_AVAILABLE = False
+    import importlib.util
+    spec = importlib.util.find_spec("torch")
+    TORCH_AVAILABLE = spec is not None
+except (ValueError, AttributeError, ImportError):
+    # Module might already be imported or not available
+    try:
+        import torch  # noqa: F401
+        TORCH_AVAILABLE = True
+    except ImportError:
+        TORCH_AVAILABLE = False
 
 
 def load_runtime_config(config_path: Optional[Path] = None):
@@ -91,7 +96,8 @@ def load_model_and_tokenizer(
     try:
         from training.safe_model_loading import safe_from_pretrained_tokenizer
 
-        tokenizer = safe_from_pretrained_tokenizer(str(tokenizer_path), use_fast=True)
+        tokenizer = safe_from_pretrained_tokenizer(
+            str(tokenizer_path), use_fast=True)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
     except ImportError:
@@ -119,7 +125,8 @@ def create_orchestrator(
 
             from training.safe_model_loading import safe_from_pretrained_tokenizer
 
-            tokenizer = safe_from_pretrained_tokenizer(str(tokenizer_path), use_fast=True)
+            tokenizer = safe_from_pretrained_tokenizer(
+                str(tokenizer_path), use_fast=True)
             if tokenizer.pad_token is None:
                 tokenizer.pad_token = tokenizer.eos_token
 
@@ -169,7 +176,8 @@ def create_orchestrator(
 
             from training.safe_model_loading import safe_from_pretrained_tokenizer
 
-            tokenizer = safe_from_pretrained_tokenizer(str(tokenizer_path), use_fast=True)
+            tokenizer = safe_from_pretrained_tokenizer(
+                str(tokenizer_path), use_fast=True)
             if tokenizer.pad_token is None:
                 tokenizer.pad_token = tokenizer.eos_token
 
@@ -179,7 +187,8 @@ def create_orchestrator(
                 halt_enabled = runtime_config.halt_head_enabled
                 caws_tier_str = runtime_config.caws_tier.value
             else:
-                latent_enabled = runtime_config.get("latent_mode_enabled", False)
+                latent_enabled = runtime_config.get(
+                    "latent_mode_enabled", False)
                 halt_enabled = runtime_config.get("halt_head_enabled", False)
                 caws_tier_str = runtime_config.get("caws_tier", "tier_2")
 
@@ -193,7 +202,8 @@ def create_orchestrator(
 
             return orchestrator
         except Exception as e:
-            print(f"[inference_production] ERROR: Failed to create orchestrator: {e}")
+            print(
+                f"[inference_production] ERROR: Failed to create orchestrator: {e}")
             import traceback
 
             traceback.print_exc()
@@ -236,17 +246,24 @@ def run_inference(
 
 
 def main():
-    ap = argparse.ArgumentParser("Production Inference using InferenceOrchestrator")
-    ap.add_argument("--model", required=True, help="Model checkpoint or export path")
+    ap = argparse.ArgumentParser(
+        "Production Inference using InferenceOrchestrator")
+    ap.add_argument("--model", required=True,
+                    help="Model checkpoint or export path")
     ap.add_argument(
         "--tokenizer", default=None, help="Tokenizer path (default: models/student/tokenizer)"
     )
-    ap.add_argument("--config", default=None, help="Runtime config file (JSON)")
+    ap.add_argument("--config", default=None,
+                    help="Runtime config file (JSON)")
     ap.add_argument("--prompt", required=True, help="Input prompt")
-    ap.add_argument("--use-refinement", action="store_true", help="Use refinement loops")
-    ap.add_argument("--use-coreml", action="store_true", help="Use CoreML backend")
-    ap.add_argument("--output", default=None, help="Output file for results (JSON)")
-    ap.add_argument("--track-efficiency", action="store_true", help="Track efficiency metrics")
+    ap.add_argument("--use-refinement", action="store_true",
+                    help="Use refinement loops")
+    ap.add_argument("--use-coreml", action="store_true",
+                    help="Use CoreML backend")
+    ap.add_argument("--output", default=None,
+                    help="Output file for results (JSON)")
+    ap.add_argument("--track-efficiency", action="store_true",
+                    help="Track efficiency metrics")
     args = ap.parse_args()
 
     model_path = Path(args.model)
@@ -281,7 +298,8 @@ def main():
         return min(score, 1.0)
 
     # Run inference
-    print(f"[inference_production] Running inference with prompt: {args.prompt[:50]}...")
+    print(
+        f"[inference_production] Running inference with prompt: {args.prompt[:50]}...")
     result = run_inference(
         orchestrator=orchestrator,
         prompt=args.prompt,
@@ -312,7 +330,8 @@ def main():
 
             metrics = EfficiencyMetrics(
                 accuracy=0.0,  # Would need ground truth for real accuracy
-                generated_tokens=len(result["output"].split()),  # Rough estimate
+                generated_tokens=len(
+                    result["output"].split()),  # Rough estimate
                 wall_clock_time_ms=result["wall_clock_time_ms"],
                 latent_spans_used=result["output"].count("<bot>")
                 if result["latent_mode_used"]
@@ -331,4 +350,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -342,8 +342,7 @@ def length_aware_kd_loss(
     Returns:
         Tuple of (length penalty loss (scalar tensor), diagnostics dictionary)
     """
-    device = student_attn_mask.device
-    B = student_attn_mask.size(0)
+    student_attn_mask.size(0)
 
     # Compute actual lengths from masks
     student_lengths = student_attn_mask.sum(dim=1).float()  # [B]

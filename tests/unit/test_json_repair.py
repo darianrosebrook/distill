@@ -9,7 +9,6 @@ Tests:
 """
 
 import importlib.util
-from unittest.mock import patch, MagicMock
 
 import pytest
 from training.json_repair import (
@@ -18,7 +17,6 @@ from training.json_repair import (
     check_json_repair_needed,
     batch_check_json_repair,
     extract_json_from_text,
-    simple_json_repair,
 )
 
 

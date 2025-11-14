@@ -20,7 +20,6 @@ import pytest
 import subprocess
 import tempfile
 import json
-import torch
 from pathlib import Path
 import os
 

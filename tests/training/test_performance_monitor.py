@@ -7,7 +7,7 @@ Tests memory usage tracking, timing, and performance metrics.
 
 import pytest
 import time
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from training.performance_monitor import (
     PerformanceMetrics,
     PerformanceMonitor,

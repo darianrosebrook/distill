@@ -108,3 +108,9 @@ def test_benchmark_claim_requires_bench_json():
     res = v.verify_claim_evidence(claim, evid)
     assert res.status == "INSUFFICIENT_EVIDENCE"
     assert res.outcome_id == 6
+
+
+
+
+
+

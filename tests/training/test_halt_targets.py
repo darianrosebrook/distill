@@ -6,7 +6,6 @@ Judge scores, and combined signals.
 """
 # @author: @darianrosebrook
 
-import pytest
 import torch
 
 from training.halt_targets import HaltHeadTargets, create_halt_targets_batch
@@ -84,7 +83,7 @@ class TestHaltHeadTargets:
 
         # Stage 1: halt at 75% of max
         max_loops = 10
-        halt_threshold = int(max_loops * 0.75)  # 7
+        int(max_loops * 0.75)  # 7
 
         # Before threshold, continue
         target = halt_targets.derive_from_curriculum(
@@ -106,7 +105,7 @@ class TestHaltHeadTargets:
 
         # Stage 2+: halt at 50% of max
         max_loops = 10
-        halt_threshold = int(max_loops * 0.5)  # 5
+        int(max_loops * 0.5)  # 5
 
         # Before threshold, continue
         target = halt_targets.derive_from_curriculum(
@@ -147,7 +146,7 @@ class TestHaltHeadTargets:
         # Score above threshold, but delta is small (shrinking)
         prev_score = 0.88
         current_score = 0.90
-        score_delta = current_score - prev_score  # 0.02 < 0.05
+        current_score - prev_score  # 0.02 < 0.05
 
         target = halt_targets.derive_from_judge(
             judge_score=current_score, prev_score=prev_score, loop_index=5
@@ -164,7 +163,7 @@ class TestHaltHeadTargets:
         # Score above threshold, delta is large (still improving)
         prev_score = 0.75
         current_score = 0.90
-        score_delta = current_score - prev_score  # 0.15 > 0.05
+        current_score - prev_score  # 0.15 > 0.05
 
         target = halt_targets.derive_from_judge(
             judge_score=current_score, prev_score=prev_score, loop_index=5
@@ -563,5 +562,10 @@ class TestHaltTargetsIntegration:
         # After warmup
         result_after = create_halt_targets_batch(batch_metadata, halt_targets, current_step=1500)
         assert result_after is not None
+
+
+
+
+
 
 

@@ -66,13 +66,13 @@ class TestTorchScriptExport:
 
         with (
             patch("torch.jit.trace") as mock_trace,
-            patch("torch.jit.save") as mock_save,
+            patch("torch.jit.save"),
             patch("pathlib.Path.mkdir") as mock_mkdir,
         ):
             mock_traced = Mock()
             mock_trace.return_value = mock_traced
 
-            result = export_torchscript(mock_model, example_input, output_path)
+            export_torchscript(mock_model, example_input, output_path)
 
             # Verify mkdir was called with parents=True, exist_ok=True
             mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
@@ -133,7 +133,7 @@ class TestExportedProgramExport:
 
         with (
             patch("torch.export.export") as mock_export,
-            patch("torch.save") as mock_save,
+            patch("torch.save"),
             patch("builtins.open") as mock_open,
             patch("pathlib.Path.mkdir") as mock_mkdir,
         ):
@@ -143,7 +143,7 @@ class TestExportedProgramExport:
             mock_file = Mock()
             mock_open.return_value.__enter__.return_value = mock_file
 
-            result = export_exported_program(mock_model, example_input, output_path)
+            export_exported_program(mock_model, example_input, output_path)
 
             # Verify mkdir was called
             mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)

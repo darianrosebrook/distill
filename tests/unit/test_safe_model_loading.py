@@ -5,8 +5,7 @@ Tests revision pinning, config loading, and safe model/tokenizer loading functio
 """
 # @author: @darianrosebrook
 
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock, mock_open
+from unittest.mock import Mock, patch, mock_open
 import pytest
 import warnings
 import yaml
@@ -41,7 +40,7 @@ class TestGetModelRevision:
 
         # Mock the file operations to return our config
         with patch("pathlib.Path.exists", return_value=True):
-            with patch("builtins.open", mock_open()) as mock_file:
+            with patch("builtins.open", mock_open()):
                 with patch("yaml.safe_load", return_value=config):
                     revision = get_model_revision("test-model")
                     assert revision == "abc123"

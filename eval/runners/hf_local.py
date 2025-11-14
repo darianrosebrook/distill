@@ -45,7 +45,8 @@ class HFLocalRunner(Runner):
         if prompt_wrapper:
             with open(prompt_wrapper, "r", encoding="utf-8") as f:
                 content = f.read()
-            self._wrapper_sha256 = hashlib.sha256(content.encode("utf-8")).hexdigest()
+            self._wrapper_sha256 = hashlib.sha256(
+                content.encode("utf-8")).hexdigest()
             if jinja2:
                 self._wrapper_tpl = jinja2.Environment(
                     autoescape=False, undefined=jinja2.StrictUndefined
@@ -57,14 +58,14 @@ class HFLocalRunner(Runner):
         """Lazy load model and tokenizer."""
         if self._model is None:
             try:
-                from transformers import AutoModelForCausalLM, AutoTokenizer
                 import torch
 
                 from training.safe_model_loading import (
                     safe_from_pretrained_tokenizer,
                     safe_from_pretrained_causal_lm,
                 )
-                self._tokenizer = safe_from_pretrained_tokenizer(self.tokenizer_path, use_fast=True)
+                self._tokenizer = safe_from_pretrained_tokenizer(
+                    self.tokenizer_path, use_fast=True)
                 self._model = safe_from_pretrained_causal_lm(
                     self.model,
                     torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
@@ -73,7 +74,8 @@ class HFLocalRunner(Runner):
                 if self._tokenizer.pad_token is None:
                     self._tokenizer.pad_token = self._tokenizer.eos_token
             except ImportError:
-                raise ImportError("transformers and torch required for HFLocalRunner")
+                raise ImportError(
+                    "transformers and torch required for HFLocalRunner")
 
     def fingerprint(self) -> Dict[str, Any]:
         """Return runner fingerprint for reproducibility."""
@@ -96,7 +98,8 @@ class HFLocalRunner(Runner):
         if not self._wrapper_tpl:
             return f"<s>[SYSTEM]{system_default}</s>\n[USER]{prompt}"
         if jinja2 and isinstance(self._wrapper_tpl, jinja2.environment.Template):
-            rendered = self._wrapper_tpl.render(system=system_default, user=prompt, tools=tools)
+            rendered = self._wrapper_tpl.render(
+                system=system_default, user=prompt, tools=tools)
             try:
                 as_json = json.loads(rendered)
                 sys_txt = as_json.get("system") or system_default
@@ -147,7 +150,7 @@ class HFLocalRunner(Runner):
 
         # Decode
         generated = self._tokenizer.decode(
-            outputs[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True
+            outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True
         )
 
         # Extract tool calls from generated text
@@ -184,7 +187,8 @@ class HFLocalRunner(Runner):
             r"TOOL_CALL:\s*(\{.*?\})",
             r"<tool_call>(.*?)</tool_call>",
             r"```json\s*(\{.*?\})\s*```",
-            r'\{\s*"name"\s*:\s*"[^"]+",\s*"arguments"\s*:\s*\{[^}]*\}\s*\}',  # Inline JSON
+            # Inline JSON
+            r'\{\s*"name"\s*:\s*"[^"]+",\s*"arguments"\s*:\s*\{[^}]*\}\s*\}',
         ]
 
         tool_names = {t.get("name", "") for t in tools}
@@ -192,7 +196,8 @@ class HFLocalRunner(Runner):
         for pattern in patterns:
             matches = re.finditer(pattern, text, re.DOTALL)
             for match in matches:
-                json_str = match.group(1) if len(match.groups()) > 0 else match.group(0)
+                json_str = match.group(1) if len(
+                    match.groups()) > 0 else match.group(0)
                 try:
                     call_obj = json.loads(json_str)
                     name = call_obj.get("name", "")

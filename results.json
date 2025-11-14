@@ -1,0 +1,21 @@
+{
+  "checkpoint": "model.pt",
+  "metrics": {
+    "json_validity_rate": 1.0,
+    "tool_selection_rate": 1.0,
+    "repair_rate": 0.0,
+    "tool_success_rate": 0.0,
+    "json_valid_count": 1,
+    "tool_correct_count": 1,
+    "needs_repair_count": 0,
+    "tool_success_count": 0,
+    "total": 1
+  },
+  "results": [
+    {
+      "prompt": "Test",
+      "json_valid": true,
+      "tool_correct": true
+    }
+  ]
+}

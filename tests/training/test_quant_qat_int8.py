@@ -8,7 +8,7 @@ Tests min-max observers, fake quantization, quantized layers, and model quantiza
 import pytest
 import torch
 import torch.nn as nn
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from training.quant_qat_int8 import (
     MinMaxObserver,
     FakeQuantize,
@@ -37,10 +37,12 @@ class TestMinMaxObserver:
         observer = MinMaxObserver(num_channels=4)
         x = torch.tensor([[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]])
 
-        result = observer(x)
+        observer(x)
 
-        assert torch.allclose(observer.min_val, torch.tensor([1.0, 2.0, 3.0, 4.0]))
-        assert torch.allclose(observer.max_val, torch.tensor([5.0, 6.0, 7.0, 8.0]))
+        assert torch.allclose(
+            observer.min_val, torch.tensor([1.0, 2.0, 3.0, 4.0]))
+        assert torch.allclose(
+            observer.max_val, torch.tensor([5.0, 6.0, 7.0, 8.0]))
         assert observer.num_observations.item() == 1
 
     def test_min_max_observer_forward_multiple_observations(self):
@@ -62,7 +64,8 @@ class TestMinMaxObserver:
         observer.min_val = torch.tensor([-10.0, -5.0])
         observer.max_val = torch.tensor([10.0, 5.0])
 
-        scale, zero_point = observer.get_scale_zero_point(num_bits=8, signed=True)
+        scale, zero_point = observer.get_scale_zero_point(
+            num_bits=8, signed=True)
 
         assert scale.shape == (2,)
         assert zero_point.shape == (2,)
@@ -76,7 +79,8 @@ class TestMinMaxObserver:
         observer.min_val = torch.tensor([0.0, 1.0])
         observer.max_val = torch.tensor([10.0, 5.0])
 
-        scale, zero_point = observer.get_scale_zero_point(num_bits=8, signed=False)
+        scale, zero_point = observer.get_scale_zero_point(
+            num_bits=8, signed=False)
 
         assert scale.shape == (2,)
         assert zero_point.shape == (2,)
@@ -89,7 +93,7 @@ class TestMinMaxObserver:
         observer = MinMaxObserver(num_channels=3)
         x = torch.tensor([1.0, 2.0, 3.0])
 
-        result = observer(x)
+        observer(x)
 
         # Should handle 1D tensors
         assert observer.num_observations.item() == 1
@@ -108,7 +112,7 @@ class TestFakeQuantize:
         fake_quant = FakeQuantize(observer, num_bits=8, signed=True)
         assert fake_quant.observer == observer
         assert fake_quant.num_bits == 8
-        assert fake_quant.signed == True
+        assert fake_quant.signed
         assert fake_quant.scale.shape == (4,)
         assert fake_quant.zero_point.shape == (4,)
 
@@ -252,16 +256,18 @@ class TestQuantizedAttention:
 
     def test_quantized_attention_initialization(self, mock_attention):
         """Test QuantizedAttention initialization."""
-        quantized = QuantizedAttention(mock_attention, weight_bits=8, act_bits=8)
+        quantized = QuantizedAttention(
+            mock_attention, weight_bits=8, act_bits=8)
 
         assert quantized.n_heads == 8
         assert quantized.n_kv_heads == 4
         assert quantized.d_head == 16
-        assert quantized.clamp_pre_softmax == True
+        assert quantized.clamp_pre_softmax
 
     def test_quantized_attention_forward(self, mock_attention):
         """Test QuantizedAttention forward pass."""
-        quantized = QuantizedAttention(mock_attention, weight_bits=8, act_bits=8)
+        quantized = QuantizedAttention(
+            mock_attention, weight_bits=8, act_bits=8)
         quantized.train()
 
         x = torch.randn(2, 10, 128)
@@ -271,7 +277,8 @@ class TestQuantizedAttention:
 
     def test_quantized_attention_with_mask(self, mock_attention):
         """Test QuantizedAttention with attention mask."""
-        quantized = QuantizedAttention(mock_attention, weight_bits=8, act_bits=8)
+        quantized = QuantizedAttention(
+            mock_attention, weight_bits=8, act_bits=8)
         quantized.train()
 
         x = torch.randn(2, 10, 128)
@@ -486,7 +493,7 @@ class TestQuantizationIntegration:
 
         # Observe some data
         x = torch.tensor([[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]])
-        result = fake_quant(x)
+        fake_quant(x)
 
         # Observer should be updated
         assert observer.num_observations.item() == 1
@@ -527,5 +534,3 @@ class TestQuantizationIntegration:
         result = quantized(x)
 
         assert result.shape == (2, 10, 512)
-
-

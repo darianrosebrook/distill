@@ -59,7 +59,7 @@ def safe_load_checkpoint(
         # If weights_only succeeds, it's a pure tensor checkpoint - validate structure
         if not isinstance(checkpoint, dict):
             raise ValueError(f"Checkpoint must be a dictionary, got {type(checkpoint)}")
-    except Exception as e:
+    except Exception:
         # weights_only failed (expected for checkpoints with metadata)
         # Load without weights_only but validate structure immediately
         try:

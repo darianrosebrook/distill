@@ -20,11 +20,16 @@ from torch.utils.data import DataLoader
 import yaml
 
 try:
-    from transformers import AutoTokenizer
-
-    HF_TOKENIZER_AVAILABLE = True
-except ImportError:
-    HF_TOKENIZER_AVAILABLE = False
+    import importlib.util
+    spec = importlib.util.find_spec("transformers")
+    HF_TOKENIZER_AVAILABLE = spec is not None
+except (ValueError, AttributeError, ImportError):
+    # Module might already be imported or not available
+    try:
+        import transformers  # noqa: F401
+        HF_TOKENIZER_AVAILABLE = True
+    except ImportError:
+        HF_TOKENIZER_AVAILABLE = False
 
 from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
 from training.losses import combined_kd_loss
@@ -176,7 +181,8 @@ def train_step_process(
             if tool_name_ids.numel() > 0:
                 # Decode tool name IDs back to text for loss computation
                 # Handle batched tool names - decode each sample's tool name
-                batch_size = tool_name_ids.size(0) if tool_name_ids.dim() > 1 else 1
+                batch_size = tool_name_ids.size(
+                    0) if tool_name_ids.dim() > 1 else 1
                 decoded_tool_names = []
 
                 for i in range(batch_size):
@@ -206,10 +212,12 @@ def train_step_process(
 
                 # Only use non-None tool names
                 if any(name is not None for name in decoded_tool_names):
-                    target_tool_names = [name for name in decoded_tool_names if name is not None]
+                    target_tool_names = [
+                        name for name in decoded_tool_names if name is not None]
                     if len(target_tool_names) < batch_size:
                         # Pad with None if needed
-                        target_tool_names.extend([None] * (batch_size - len(target_tool_names)))
+                        target_tool_names.extend(
+                            [None] * (batch_size - len(target_tool_names)))
 
         tool_names = proc_cfg.get("tool_names", [])
 
@@ -235,7 +243,8 @@ def train_step_process(
             target_tool_names=target_tool_names,
             tool_names=tool_names,
             tokenizer=tokenizer,
-            json_validity_weight=proc_cfg.get("loss_json_validity_weight", 0.3),
+            json_validity_weight=proc_cfg.get(
+                "loss_json_validity_weight", 0.3),
             tool_select_weight=proc_cfg.get("loss_tool_select_weight", 0.7),
             # Pass token ID-based arguments
             tool_name_ids=tool_name_ids,
@@ -245,10 +254,12 @@ def train_step_process(
         )
 
         # Combine losses
-        kd_weight = cfg.get("distillation", {}).get("process_supervision_weight", 0.7)
+        kd_weight = cfg.get("distillation", {}).get(
+            "process_supervision_weight", 0.7)
         proc_weight = 1.0 - kd_weight
 
-        total_loss = kd_weight * kd_loss_dict["total"] + proc_weight * proc_loss_dict["total"]
+        total_loss = kd_weight * \
+            kd_loss_dict["total"] + proc_weight * proc_loss_dict["total"]
 
         loss_dict = {
             **{f"kd_{k}": v for k, v in kd_loss_dict.items()},
@@ -284,12 +295,18 @@ def train_step_process(
 
 def main():
     ap = argparse.ArgumentParser(description="Process supervision training")
-    ap.add_argument("--checkpoint", required=True, help="Checkpoint to continue from")
-    ap.add_argument("--config", nargs="+", required=True, help="Config file(s)")
-    ap.add_argument("--output-dir", default="models/student/checkpoints", help="Output directory")
-    ap.add_argument("--steps", type=int, default=10000, help="Number of training steps")
-    ap.add_argument("--save-every", type=int, default=1000, help="Save checkpoint every N steps")
-    ap.add_argument("--log-every", type=int, default=50, help="Log every N steps")
+    ap.add_argument("--checkpoint", required=True,
+                    help="Checkpoint to continue from")
+    ap.add_argument("--config", nargs="+",
+                    required=True, help="Config file(s)")
+    ap.add_argument(
+        "--output-dir", default="models/student/checkpoints", help="Output directory")
+    ap.add_argument("--steps", type=int, default=10000,
+                    help="Number of training steps")
+    ap.add_argument("--save-every", type=int, default=1000,
+                    help="Save checkpoint every N steps")
+    ap.add_argument("--log-every", type=int, default=50,
+                    help="Log every N steps")
     args = ap.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -333,7 +350,8 @@ def main():
         jsonl_path=train_shards[0],
         tokenizer_path=tokenizer_path,
         max_seq_length=seq_lengths[0],
-        teacher_logits_available=cfg.get("kd", {}).get("teacher_logits_available", False),
+        teacher_logits_available=cfg.get("kd", {}).get(
+            "teacher_logits_available", False),
     )
 
     dataloader = DataLoader(
@@ -352,8 +370,10 @@ def main():
     print("[distill_process] Starting process supervision training:")
     print(f"  Device: {device}")
     print(f"  Steps: {args.steps}")
-    print(f"  JSON validity weight: {proc_cfg.get('loss_json_validity_weight', 0.3)}")
-    print(f"  Tool selection weight: {proc_cfg.get('loss_tool_select_weight', 0.7)}")
+    print(
+        f"  JSON validity weight: {proc_cfg.get('loss_json_validity_weight', 0.3)}")
+    print(
+        f"  Tool selection weight: {proc_cfg.get('loss_tool_select_weight', 0.7)}")
 
     step = 0
     for epoch in range(100):  # Max epochs
@@ -375,11 +395,14 @@ def main():
             step += 1
 
             if step % args.log_every == 0:
-                loss_str = ", ".join([f"{k}={v:.4f}" for k, v in loss_dict.items()])
-                print(f"[distill_process] Step {step}/{args.steps}: {loss_str}")
+                loss_str = ", ".join(
+                    [f"{k}={v:.4f}" for k, v in loss_dict.items()])
+                print(
+                    f"[distill_process] Step {step}/{args.steps}: {loss_str}")
 
             if step % args.save_every == 0:
-                checkpoint_path = output_dir / f"process_supervised_step_{step}.pt"
+                checkpoint_path = output_dir / \
+                    f"process_supervised_step_{step}.pt"
                 torch.save(
                     {
                         "step": step,

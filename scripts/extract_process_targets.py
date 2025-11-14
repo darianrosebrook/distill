@@ -30,14 +30,14 @@ from scripts.util_token_spans import (  # noqa: E402
 def load_tokenizer(tokenizer_path: str):
     """Load tokenizer from path."""
     try:
-        from transformers import AutoTokenizer
         from training.safe_model_loading import safe_from_pretrained_tokenizer
 
         return safe_from_pretrained_tokenizer(tokenizer_path, use_fast=True)
     except ImportError:
         raise RuntimeError("transformers required for token span extraction")
     except Exception as e:
-        raise RuntimeError(f"Failed to load tokenizer from {tokenizer_path}: {e}")
+        raise RuntimeError(
+            f"Failed to load tokenizer from {tokenizer_path}: {e}")
 
 
 def extract_process_step_targets(
@@ -73,13 +73,15 @@ def extract_process_step_targets(
     if tool_name_span:
         start_char, end_char = tool_name_span
         tool_name_text = teacher_text[start_char:end_char]
-        tool_name_ids = tokenizer.encode(tool_name_text, add_special_tokens=False)
+        tool_name_ids = tokenizer.encode(
+            tool_name_text, add_special_tokens=False)
         targets["tool_name_ids"] = tool_name_ids
         targets["tool_name_mask"] = [1] * len(tool_name_ids)
         targets["tool_name_span_bytes"] = [start_char, end_char]
 
         # Add token spans
-        token_span = bytes_to_token_span(teacher_text, start_char, end_char, tokenizer)
+        token_span = bytes_to_token_span(
+            teacher_text, start_char, end_char, tokenizer)
         if token_span:
             targets["tool_name_span_tokens"] = list(token_span)
 
@@ -99,7 +101,8 @@ def extract_process_step_targets(
             json_bytes_spans.append([start_char, end_char])
 
             # Add token spans
-            token_span = bytes_to_token_span(teacher_text, start_char, end_char, tokenizer)
+            token_span = bytes_to_token_span(
+                teacher_text, start_char, end_char, tokenizer)
             if token_span:
                 json_token_spans.append(list(token_span))
 
@@ -122,13 +125,15 @@ def extract_process_step_targets(
 
         for start_char, end_char in integration_spans:
             integration_text = teacher_text[start_char:end_char]
-            integration_ids = tokenizer.encode(integration_text, add_special_tokens=False)
+            integration_ids = tokenizer.encode(
+                integration_text, add_special_tokens=False)
             all_integration_ids.extend(integration_ids)
             all_integration_mask.extend([1] * len(integration_ids))
             integration_bytes_spans.append([start_char, end_char])
 
             # Add token spans
-            token_span = bytes_to_token_span(teacher_text, start_char, end_char, tokenizer)
+            token_span = bytes_to_token_span(
+                teacher_text, start_char, end_char, tokenizer)
             if token_span:
                 integration_token_spans.append(list(token_span))
 
@@ -159,14 +164,14 @@ def validate_json_args(
         return False, None, None
 
     try:
-        json_text = teacher_text[json_span_bytes[0] : json_span_bytes[1]]
+        json_text = teacher_text[json_span_bytes[0]: json_span_bytes[1]]
         # Find JSON object in the span
         start_idx = json_text.find("{")
         end_idx = json_text.rfind("}")
         if start_idx == -1 or end_idx == -1:
             return False, None, None
 
-        json_obj = json.loads(json_text[start_idx : end_idx + 1])
+        json_obj = json.loads(json_text[start_idx: end_idx + 1])
         tool_name = json_obj.get("name")
         args = json_obj.get("arguments", {})
 
@@ -202,7 +207,7 @@ def extract_integration_fields(
     # This is a heuristic - in practice, you'd match against actual tool result schemas
     for span in integration_spans_bytes:
         if len(span) >= 2:
-            span_text = teacher_text[span[0] : span[1]]
+            span_text = teacher_text[span[0]: span[1]]
             # Look for patterns like "summary", "results", "content", etc.
             common_fields = ["summary", "results", "content", "data", "output"]
             for field in common_fields:
@@ -239,7 +244,8 @@ def process_sample(
     spans_target = metadata.get("spans_target", "teacher")
 
     # Get tool names from call sequence
-    tool_names = [call.get("name") for call in call_sequence if call.get("name")]
+    tool_names = [call.get("name")
+                  for call in call_sequence if call.get("name")]
 
     # Extract process-step targets (use normalized text for span extraction)
     targets = extract_process_step_targets(
@@ -303,9 +309,12 @@ def process_sample(
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Extract process-step targets and add token spans")
-    ap.add_argument("--in", dest="input_file", required=True, help="Input JSONL file")
-    ap.add_argument("--out", dest="output_file", required=True, help="Output JSONL file")
+    ap = argparse.ArgumentParser(
+        description="Extract process-step targets and add token spans")
+    ap.add_argument("--in", dest="input_file",
+                    required=True, help="Input JSONL file")
+    ap.add_argument("--out", dest="output_file",
+                    required=True, help="Output JSONL file")
     ap.add_argument(
         "--tokenizer-path",
         default="models/student/tokenizer",
@@ -349,12 +358,15 @@ def main():
     with open(args.output_file, "w", encoding="utf-8") as f:
         # Write header first if present
         if dataset_header:
-            f.write(json.dumps(dataset_header, ensure_ascii=False, separators=(",", ":")) + "\n")
+            f.write(json.dumps(dataset_header, ensure_ascii=False,
+                    separators=(",", ":")) + "\n")
         # Write processed items
         for item in processed:
-            f.write(json.dumps(item, ensure_ascii=False, separators=(",", ":")) + "\n")
+            f.write(json.dumps(item, ensure_ascii=False,
+                    separators=(",", ":")) + "\n")
 
-    print(f"[extract_process_targets] Processed {len(processed)} samples to {args.output_file}")
+    print(
+        f"[extract_process_targets] Processed {len(processed)} samples to {args.output_file}")
 
 
 if __name__ == "__main__":

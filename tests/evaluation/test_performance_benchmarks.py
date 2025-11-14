@@ -5,7 +5,6 @@ Tests performance targets, metrics evaluation, and benchmark functionality.
 """
 # @author: @darianrosebrook
 
-import pytest
 
 from evaluation.performance_benchmarks import (
     ModelRole,

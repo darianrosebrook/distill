@@ -14,13 +14,18 @@ import sys
 from pathlib import Path
 
 try:
-    from transformers import AutoTokenizer
-
-    HF_AVAILABLE = True
-except ImportError:
-    HF_AVAILABLE = False
-    print("ERROR: transformers library not available. Install with: pip install transformers")
-    sys.exit(1)
+    import importlib.util
+    spec = importlib.util.find_spec("transformers")
+    HF_AVAILABLE = spec is not None
+except (ValueError, AttributeError, ImportError):
+    # Module might already be imported or not available
+    try:
+        import transformers  # noqa: F401
+        HF_AVAILABLE = True
+    except ImportError:
+        HF_AVAILABLE = False
+        print("ERROR: transformers library not available. Install with: pip install transformers")
+        sys.exit(1)
 
 
 def download_tokenizer(model_id: str, output_dir: Path, verify_vocab_size: int = 32000):
@@ -109,7 +114,8 @@ def main():
                 if vocab_size == args.vocab_size:
                     print(f"✅ Vocab size matches expected ({args.vocab_size})")
                 else:
-                    print(f"⚠️  Vocab size mismatch: expected {args.vocab_size}, got {vocab_size}")
+                    print(
+                        f"⚠️  Vocab size mismatch: expected {args.vocab_size}, got {vocab_size}")
                 return 0
             except Exception as e:
                 print(f"❌ Failed to load tokenizer: {e}")
@@ -119,7 +125,8 @@ def main():
             return 1
     else:
         # Download tokenizer
-        success = download_tokenizer(args.tokenizer, tokenizer_dir, args.vocab_size)
+        success = download_tokenizer(
+            args.tokenizer, tokenizer_dir, args.vocab_size)
 
         if success:
             print("\n" + "=" * 60)
@@ -130,7 +137,8 @@ def main():
             print("  io:")
             print(f'    tokenizer_path: "{tokenizer_dir.absolute()}"')
             print("\nOr create a symlink:")
-            print(f"  ln -s {tokenizer_dir.absolute()} models/student/tokenizer")
+            print(
+                f"  ln -s {tokenizer_dir.absolute()} models/student/tokenizer")
             return 0
         else:
             print("\n❌ Download failed!")

@@ -7,7 +7,6 @@ prediction comparison, and evaluation metrics.
 # @author: @darianrosebrook
 
 import json
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
@@ -86,7 +85,7 @@ class TestDataClasses:
         assert result.predicted_token == 205
         assert result.predicted_answer == "Outlook good"
         assert result.confidence == 0.85
-        assert result.is_correct == True
+        assert result.is_correct
 
     def test_evaluation_metrics_creation(self):
         """Test EvaluationMetrics dataclass creation."""
@@ -271,7 +270,7 @@ class TestEvaluatePyTorchModel:
         # Mock the import to fail
         with patch("evaluation.eightball_eval.AutoTokenizer", None):
             # Patch the import inside the function
-            with patch("builtins.__import__", side_effect=ImportError("No module named transformers")) as mock_import:
+            with patch("builtins.__import__", side_effect=ImportError("No module named transformers")):
                 # The function should try to import transformers and fail
                 # It will raise ImportError with the transformers message
                 # But the actual error might be from the import itself
@@ -323,10 +322,6 @@ class TestEvaluateCoreMLModel:
         questions = ["Will it work?", "Should I proceed?"]
 
         # Mock CoreML prediction results
-        mock_predictions = [
-            {"output": [0.1, 0.9, 0.8]},  # Mock logits
-            {"output": [0.7, 0.2, 0.6]},
-        ]
 
         with (
             patch("coremltools.models.MLModel") as mock_mlmodel_class,

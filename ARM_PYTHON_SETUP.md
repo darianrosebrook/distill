@@ -31,3 +31,9 @@ python -c "import torch; print(f'MPS: {torch.backends.mps.is_available()}')"
 **ALWAYS use ARM Python (`/opt/homebrew/bin/python3.11`) for this project.**
 
 The README.md and .python-version file have been updated to reflect this requirement.
+
+
+
+
+
+

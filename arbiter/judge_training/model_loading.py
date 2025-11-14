@@ -2,7 +2,7 @@
 # Safe model loading utilities with revision pinning
 # @author: @darianrosebrook
 
-from typing import Optional, Dict, Any
+from typing import Optional
 from transformers import AutoTokenizer, AutoModel
 import warnings
 

@@ -69,7 +69,14 @@ def main(config: str = "conversion/shape_sets.json", mode: str = "both"):
         # Fallback to default sequence lengths
         seqs = [2048, 4096, 8192]
 
-    model = StudentLM(ModelCfg())
+    # Create ModelCfg with valid GQA configuration (n_heads must be divisible by n_kv_heads)
+    # Default ModelCfg has n_heads=28, n_kv_heads=8, but 28 % 8 != 0, so use valid defaults
+    model_cfg = ModelCfg()
+    # Ensure n_heads is divisible by n_kv_heads for GQA
+    if model_cfg.n_heads % model_cfg.n_kv_heads != 0:
+        # Adjust to valid GQA configuration
+        model_cfg.n_heads = (model_cfg.n_heads // model_cfg.n_kv_heads) * model_cfg.n_kv_heads
+    model = StudentLM(model_cfg)
     model.eval()
 
     os.makedirs("coreml", exist_ok=True)

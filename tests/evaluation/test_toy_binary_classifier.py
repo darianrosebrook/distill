@@ -6,9 +6,7 @@ Tests binary classifier configuration, mappings, and question loading.
 # @author: @darianrosebrook
 
 import json
-from pathlib import Path
 
-import pytest
 
 from evaluation.toy.binary_classifier import (
     BINARY_ANSWERS,
@@ -177,4 +175,9 @@ class TestBinaryClassifierIntegration:
         # Test reverse mapping
         for answer, token_id in BINARY_ANSWER_TO_ID.items():
             assert ID_TO_BINARY_ANSWER[token_id] == answer
+
+
+
+
+
 

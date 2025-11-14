@@ -26,8 +26,8 @@ class TestExtractedClaim:
         )
         assert claim.statement == "The answer is 42"
         assert claim.confidence == 0.8
-        assert claim.is_verifiable == True
-        assert claim.has_context == False
+        assert claim.is_verifiable
+        assert not claim.has_context
 
     def test_extracted_claim_with_context(self):
         """Test creating ExtractedClaim with context."""
@@ -37,7 +37,7 @@ class TestExtractedClaim:
             is_verifiable=True,
             has_context=True,
         )
-        assert claim.has_context == True
+        assert claim.has_context
         assert "[" in claim.statement
 
 
@@ -304,7 +304,7 @@ class TestClaimExtractionIntegration:
 
         # Verify claim properties
         for claim in claims:
-            assert claim.is_verifiable == True
+            assert claim.is_verifiable
             assert 0.0 <= claim.confidence <= 1.0
 
     def test_claim_extraction_with_metrics(self):
@@ -342,4 +342,10 @@ class TestClaimExtractionIntegration:
         claims = extractor.extract_claims(mixed)
         # Should extract verifiable parts
         assert isinstance(claims, list)
+
+
+
+
+
+
 

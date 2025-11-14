@@ -83,7 +83,7 @@ class TestStructuredLogger:
         """Test that logger doesn't propagate to root."""
         logger = StructuredLogger("test")
 
-        assert logger.logger.propagate == False
+        assert not logger.logger.propagate
 
     def test_structured_logger_formatter_assignment(self):
         """Test that StructuredFormatter is assigned to handler."""
@@ -293,7 +293,7 @@ class TestSetupTrainingLogging:
         mock_structured = Mock()
         mock_structured_logger.return_value = mock_structured
 
-        result = setup_training_logging(log_dir=log_file.parent)
+        setup_training_logging(log_dir=log_file.parent)
 
         # Should have created file handler
         # This is tested implicitly through the function working
@@ -311,7 +311,7 @@ class TestSetupTrainingLogging:
             mock_structured = Mock()
             mock_structured_logger.return_value = mock_structured
 
-            result = setup_training_logging(level=level)
+            setup_training_logging(level=level)
 
             mock_structured_logger.assert_called_with("training", level)
 
@@ -514,7 +514,7 @@ class TestLoggingIntegration:
         log_file = tmp_path / "test.log"
 
         # Set up logging
-        logger = setup_training_logging(log_dir=log_file.parent)
+        setup_training_logging(log_dir=log_file.parent)
 
         # Log various events
         log_training_step(10, 2.5, 1e-3, 1.2)

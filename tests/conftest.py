@@ -1,5 +1,7 @@
 """
 Pytest configuration and shared fixtures.
+
+Includes timeout configuration to prevent watchdog timeouts and kernel panics.
 """
 
 import json
@@ -11,6 +13,12 @@ import pytest
 import torch
 
 from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
+
+
+# Pytest timeout configuration
+# Default timeout is set in pytest.ini, but can be overridden per test
+# Use @pytest.mark.timeout(seconds) to set custom timeout for specific tests
+# Use @pytest.mark.timeout(0) to disable timeout for specific tests
 
 
 @pytest.fixture

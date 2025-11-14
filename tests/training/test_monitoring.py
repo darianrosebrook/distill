@@ -478,28 +478,28 @@ class TestTrainingMonitor:
         """Test training monitor initialization."""
         assert isinstance(training_monitor.metrics_collector, MetricsCollector)
         assert isinstance(training_monitor.health_checker, HealthChecker)
-        assert training_monitor.is_monitoring == False
+        assert not training_monitor.is_monitoring
         assert training_monitor.monitoring_thread is None
 
     def test_start_monitoring(self, training_monitor):
         """Test starting monitoring."""
         training_monitor.start_monitoring(interval=1.0)
 
-        assert training_monitor.is_monitoring == True
+        assert training_monitor.is_monitoring
         assert training_monitor.monitoring_thread is not None
         assert training_monitor.monitoring_thread.is_alive()
 
         # Stop monitoring
         training_monitor.stop_monitoring()
-        assert training_monitor.is_monitoring == False
+        assert not training_monitor.is_monitoring
 
     def test_stop_monitoring(self, training_monitor):
         """Test stopping monitoring."""
         training_monitor.start_monitoring(interval=1.0)
-        assert training_monitor.is_monitoring == True
+        assert training_monitor.is_monitoring
 
         training_monitor.stop_monitoring()
-        assert training_monitor.is_monitoring == False
+        assert not training_monitor.is_monitoring
 
         # Thread should eventually stop
         if training_monitor.monitoring_thread:

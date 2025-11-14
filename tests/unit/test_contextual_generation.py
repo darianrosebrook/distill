@@ -2799,7 +2799,7 @@ class TestErrorHandling:
     def test_load_tokenizer_general_exception(self):
         """Test tokenizer loading with general exception."""
         from scripts.extract_process_targets import load_tokenizer
-        from unittest.mock import patch, Mock
+        from unittest.mock import patch
 
         with patch("training.safe_model_loading.safe_from_pretrained_tokenizer") as mock_safe:
             mock_safe.side_effect = Exception("Load failed")
