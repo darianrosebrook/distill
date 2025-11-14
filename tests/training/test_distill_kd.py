@@ -2621,3 +2621,370 @@ class TestMainFunction:
             from training.distill_kd import main
 
             main()
+
+    def test_train_step_gradient_accumulation_with_scaler_and_grad_norm(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test gradient accumulation with scaler and gradient norm logging."""
+        scaler = None
+        if device.type == "cuda":
+            scaler = torch.cuda.amp.GradScaler()
+        else:
+            # Skip on CPU (scaler requires CUDA)
+            pytest.skip("GradScaler requires CUDA")
+
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+
+        # Test gradient accumulation with scaler at step 100 (grad norm logging)
+        result = train_step(
+            model=small_model,
+            batch=sample_batch,
+            optimizer=simple_optimizer,
+            scaler=scaler,
+            cfg=training_config,
+            device=device,
+            grad_accum_steps=2,
+            grad_accum_counter=1,  # Complete accumulation
+            current_step=100,  # Multiple of 100 for grad norm logging
+        )
+
+        assert "total" in result
+        assert "grad_norm" in result  # Should log gradient norm
+
+    def test_train_step_gradient_accumulation_with_scaler_no_grad_norm(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test gradient accumulation with scaler but without gradient norm logging."""
+        scaler = None
+        if device.type == "cuda":
+            scaler = torch.cuda.amp.GradScaler()
+        else:
+            pytest.skip("GradScaler requires CUDA")
+
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+
+        # Test gradient accumulation with scaler at step 50 (no grad norm logging)
+        result = train_step(
+            model=small_model,
+            batch=sample_batch,
+            optimizer=simple_optimizer,
+            scaler=scaler,
+            cfg=training_config,
+            device=device,
+            grad_accum_steps=2,
+            grad_accum_counter=1,  # Complete accumulation
+            current_step=50,  # Not multiple of 100
+        )
+
+        assert "total" in result
+        # grad_norm may or may not be present depending on implementation
+
+    def test_train_step_normal_update_with_scaler(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test normal update (not accumulation step) with scaler."""
+        scaler = None
+        if device.type == "cuda":
+            scaler = torch.cuda.amp.GradScaler()
+        else:
+            pytest.skip("GradScaler requires CUDA")
+
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+
+        # Test normal update (grad_accum_counter=0, grad_accum_steps=2)
+        result = train_step(
+            model=small_model,
+            batch=sample_batch,
+            optimizer=simple_optimizer,
+            scaler=scaler,
+            cfg=training_config,
+            device=device,
+            grad_accum_steps=2,
+            grad_accum_counter=0,  # Not complete accumulation
+        )
+
+        assert "total" in result
+
+    def test_train_step_halt_logits_with_hidden_states(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test halt logits extraction when return_hidden_states=True (separate forward pass)."""
+        training_config["distillation"]["use_intermediate_layers"] = True
+        training_config["latent"]["halt_head_enabled"] = True
+
+        # Mock model to have use_halt_head attribute
+        small_model.use_halt_head = True
+
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+
+        # Mock model forward to return halt logits as tuple
+        def mock_forward_with_halt(input_ids, attention_mask=None, return_halt_logits=False, return_hidden_states=False):
+            batch_size, seq_len = input_ids.shape
+            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            if return_halt_logits:
+                halt_logits = torch.randn(batch_size, 2, device=device, requires_grad=True)
+                return logits, halt_logits
+            elif return_hidden_states:
+                hidden_states = [torch.randn(batch_size, seq_len, 128, device=device, requires_grad=True) for _ in range(2)]
+                return logits, hidden_states
+            return logits
+
+        small_model.forward = mock_forward_with_halt
+
+        result = train_step(
+            model=small_model,
+            batch=sample_batch,
+            optimizer=simple_optimizer,
+            scaler=None,
+            cfg=training_config,
+            device=device,
+        )
+
+        assert "total" in result
+
+    def test_train_step_halt_logits_with_eval_score(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test halt logits extraction when return_eval_score=True (separate forward pass)."""
+        training_config["distillation"]["use_self_evaluation"] = True
+        training_config["latent"]["halt_head_enabled"] = True
+
+        # Mock model to have use_halt_head attribute
+        small_model.use_halt_head = True
+
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+
+        # Mock model forward to return halt logits and eval score
+        def mock_forward_with_halt_eval(input_ids, attention_mask=None, return_halt_logits=False, return_eval_score=False):
+            batch_size, seq_len = input_ids.shape
+            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            if return_halt_logits:
+                halt_logits = torch.randn(batch_size, 2, device=device, requires_grad=True)
+                return logits, halt_logits
+            elif return_eval_score:
+                eval_score = torch.randn(batch_size, 1, device=device, requires_grad=True)
+                return logits, eval_score
+            return logits
+
+        small_model.forward = mock_forward_with_halt_eval
+
+        result = train_step(
+            model=small_model,
+            batch=sample_batch,
+            optimizer=simple_optimizer,
+            scaler=None,
+            cfg=training_config,
+            device=device,
+        )
+
+        assert "total" in result
+
+    def test_train_step_halt_logits_without_other_flags(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test halt logits extraction without return_hidden_states or return_eval_score (combined forward pass)."""
+        training_config["latent"]["halt_head_enabled"] = True
+
+        # Mock model to have use_halt_head attribute
+        small_model.use_halt_head = True
+
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+
+        # Mock model forward to return halt logits as tuple
+        def mock_forward_with_halt(input_ids, attention_mask=None, return_halt_logits=False):
+            batch_size, seq_len = input_ids.shape
+            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            if return_halt_logits:
+                halt_logits = torch.randn(batch_size, 2, device=device, requires_grad=True)
+                return logits, halt_logits
+            return logits
+
+        small_model.forward = mock_forward_with_halt
+
+        result = train_step(
+            model=small_model,
+            batch=sample_batch,
+            optimizer=simple_optimizer,
+            scaler=None,
+            cfg=training_config,
+            device=device,
+        )
+
+        assert "total" in result
+
+    def test_train_step_eval_score_with_hidden_states(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test eval score extraction when return_hidden_states=True (separate forward pass)."""
+        training_config["distillation"]["use_intermediate_layers"] = True
+        training_config["distillation"]["use_self_evaluation"] = True
+
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+
+        # Mock model forward to return hidden states and eval score separately
+        def mock_forward_with_eval(input_ids, attention_mask=None, return_hidden_states=False, return_eval_score=False):
+            batch_size, seq_len = input_ids.shape
+            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            if return_hidden_states:
+                hidden_states = [torch.randn(batch_size, seq_len, 128, device=device, requires_grad=True) for _ in range(2)]
+                return logits, hidden_states
+            elif return_eval_score:
+                eval_score = torch.randn(batch_size, 1, device=device, requires_grad=True)
+                return logits, eval_score
+            return logits
+
+        small_model.forward = mock_forward_with_eval
+
+        result = train_step(
+            model=small_model,
+            batch=sample_batch,
+            optimizer=simple_optimizer,
+            scaler=None,
+            cfg=training_config,
+            device=device,
+        )
+
+        assert "total" in result
+
+    def test_train_step_eval_score_without_hidden_states(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test eval score extraction without return_hidden_states (combined forward pass)."""
+        training_config["distillation"]["use_self_evaluation"] = True
+
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+
+        # Mock model forward to return eval score
+        def mock_forward_with_eval(input_ids, attention_mask=None, return_eval_score=False):
+            batch_size, seq_len = input_ids.shape
+            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            if return_eval_score:
+                eval_score = torch.randn(batch_size, 1, device=device, requires_grad=True)
+                return logits, eval_score
+            return logits
+
+        small_model.forward = mock_forward_with_eval
+
+        result = train_step(
+            model=small_model,
+            batch=sample_batch,
+            optimizer=simple_optimizer,
+            scaler=None,
+            cfg=training_config,
+            device=device,
+        )
+
+        assert "total" in result
+
+    def test_train_step_tokenizer_from_model(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test tokenizer loading from model.tokenizer."""
+        training_config["distillation"]["w_tool"] = 0.1  # Requires tokenizer
+
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+
+        # Mock tokenizer on model
+        mock_tokenizer = Mock()
+        mock_tokenizer.convert_tokens_to_ids = Mock(return_value=100)
+        mock_tokenizer.encode = Mock(return_value=[100])
+        small_model.tokenizer = mock_tokenizer
+
+        result = train_step(
+            model=small_model,
+            batch=sample_batch,
+            optimizer=simple_optimizer,
+            scaler=None,
+            cfg=training_config,
+            device=device,
+        )
+
+        assert "total" in result
+
+    def test_train_step_tokenizer_from_model_module(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test tokenizer loading from model.module.tokenizer (DDP case)."""
+        training_config["distillation"]["w_tool"] = 0.1  # Requires tokenizer
+
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+
+        # Mock DDP model with tokenizer on module
+        mock_module = Mock()
+        mock_tokenizer = Mock()
+        mock_tokenizer.convert_tokens_to_ids = Mock(return_value=100)
+        mock_tokenizer.encode = Mock(return_value=[100])
+        mock_module.tokenizer = mock_tokenizer
+        small_model.module = mock_module
+
+        result = train_step(
+            model=small_model,
+            batch=sample_batch,
+            optimizer=simple_optimizer,
+            scaler=None,
+            cfg=training_config,
+            device=device,
+        )
+
+        assert "total" in result
+
+    @patch("training.dataset.load_tokenizer")
+    def test_train_step_tokenizer_from_config_path(
+        self, mock_load_tokenizer, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test tokenizer loading from cfg['tokenizer_path']."""
+        training_config["distillation"]["w_tool"] = 0.1  # Requires tokenizer
+        training_config["tokenizer_path"] = "models/student/tokenizer"
+
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+
+        # Mock tokenizer loading
+        mock_tokenizer = Mock()
+        mock_tokenizer.convert_tokens_to_ids = Mock(return_value=100)
+        mock_tokenizer.encode = Mock(return_value=[100])
+        mock_load_tokenizer.return_value = mock_tokenizer
+
+        result = train_step(
+            model=small_model,
+            batch=sample_batch,
+            optimizer=simple_optimizer,
+            scaler=None,
+            cfg=training_config,
+            device=device,
+        )
+
+        assert "total" in result
+        mock_load_tokenizer.assert_called_once_with("models/student/tokenizer")
