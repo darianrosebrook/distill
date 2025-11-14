@@ -9,14 +9,12 @@ and configuration merging.
 import json
 import pytest
 import yaml
-from pathlib import Path
 from training.config_validation import (
     validate_training_config,
     validate_config_file,
     create_default_config,
     save_config_template,
     merge_configs,
-    TRAINING_CONFIG_SCHEMA,
 )
 
 
@@ -216,9 +214,8 @@ class TestValidateConfigFile:
     def test_validate_config_file_not_found(self, tmp_path):
         """Test validating non-existent config file."""
         config_file = tmp_path / "nonexistent.yaml"
-        errors = validate_config_file(config_file)
-        assert len(errors) > 0
-        assert "not found" in errors[0].lower()
+        with pytest.raises(FileNotFoundError, match="not found"):
+            validate_config_file(config_file)
 
     def test_validate_config_file_invalid_yaml(self, tmp_path):
         """Test validating invalid YAML config file."""
@@ -453,7 +450,7 @@ class TestMergeConfigs:
 
     def test_merge_configs_file_not_found(self, tmp_path):
         """Test merging with non-existent file."""
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(FileNotFoundError, match="not found"):
             merge_configs([str(tmp_path / "nonexistent.yaml")])
 
     def test_merge_configs_invalid_file(self, tmp_path):
@@ -462,11 +459,14 @@ class TestMergeConfigs:
         with open(invalid_file, "w") as f:
             f.write("invalid: yaml: content")
 
-        with pytest.raises(ValueError, match="Invalid configuration"):
+        with pytest.raises((yaml.YAMLError, yaml.scanner.ScannerError)):
             merge_configs([str(invalid_file)])
 
     def test_merge_configs_empty_list(self):
         """Test merging with empty file list."""
         with pytest.raises(ValueError):
             merge_configs([])
+
+
+
 

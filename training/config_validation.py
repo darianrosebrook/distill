@@ -238,6 +238,9 @@ def merge_configs(config_files: List[str], validate_final: bool = False) -> Dict
         FileNotFoundError: If configuration file does not exist
         yaml.YAMLError: If YAML parsing fails
     """
+    if not config_files:
+        raise ValueError("At least one configuration file must be provided")
+
     merged_config = {}
 
     for config_file in config_files:
