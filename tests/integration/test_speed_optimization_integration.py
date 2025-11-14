@@ -331,7 +331,7 @@ class TestTrainingStepWithSpeedOptimizations:
         }
 
         cfg = {
-            "kd": {
+            "distillation": {
                 "use_length_aware_kd": True,
                 "length_kd_weight": 0.05,
                 "length_kd_hinge": 0.15,

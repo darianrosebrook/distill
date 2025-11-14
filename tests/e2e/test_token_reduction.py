@@ -116,14 +116,43 @@ class TestTokenReductionE2E:
 
     def test_token_reduction_at_equal_accuracy(self, mock_model, mock_tokenizer, long_chain_task):
         """Test that latent mode achieves ≥25% token reduction at equal accuracy."""
-        # Get baseline metrics
-        baseline_metrics = self.test_baseline_direct_cot(
-            mock_model, mock_tokenizer, long_chain_task
+        # Compute baseline metrics directly (don't call test methods)
+        engine_baseline = LatentModeEngine(
+            model=mock_model,
+            tokenizer=mock_tokenizer,
+            latent_mode_enabled=False,
+        )
+        input_ids = torch.tensor([[1, 2, 3]])
+        baseline_result = engine_baseline.generate_with_latent_mode(
+            input_ids,
+            max_new_tokens=100,
+        )
+        baseline_tokens = len(baseline_result["tokens"])
+        baseline_metrics = EfficiencyMetrics(
+            accuracy=0.85,
+            generated_tokens=baseline_tokens,
+            wall_clock_time_ms=100.0,
+            latent_spans_used=0,
+            refinement_loops=1,
         )
 
-        # Get latent metrics
-        latent_metrics = self.test_latent_mode_token_reduction(
-            mock_model, mock_tokenizer, long_chain_task
+        # Compute latent metrics directly
+        engine_latent = LatentModeEngine(
+            model=mock_model,
+            tokenizer=mock_tokenizer,
+            latent_mode_enabled=True,
+        )
+        latent_result = engine_latent.generate_with_latent_mode(
+            input_ids,
+            max_new_tokens=100,
+        )
+        latent_tokens = len(latent_result["tokens"])
+        latent_metrics = EfficiencyMetrics(
+            accuracy=0.85,
+            generated_tokens=latent_tokens,
+            wall_clock_time_ms=95.0,
+            latent_spans_used=len(latent_result.get("latent_span_lengths", [])),
+            refinement_loops=1,
         )
 
         # Calculate token reduction

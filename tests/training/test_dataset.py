@@ -19,7 +19,7 @@ class TestLoadTokenizer:
     """Test load_tokenizer function."""
 
     @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
-    @patch("training.dataset.safe_from_pretrained_tokenizer")
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_load_tokenizer_basic(self, mock_safe_from_pretrained):
         """Test basic tokenizer loading."""
         mock_tokenizer = Mock()
@@ -34,7 +34,7 @@ class TestLoadTokenizer:
         assert tokenizer.pad_token == "<eos>"
 
     @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
-    @patch("training.dataset.safe_from_pretrained_tokenizer")
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_load_tokenizer_with_pad_token(self, mock_safe_from_pretrained):
         """Test tokenizer loading when pad_token already exists."""
         mock_tokenizer = Mock()
@@ -84,7 +84,7 @@ class TestKDDataset:
         return tokenizer
 
     @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
-    @patch("training.dataset.safe_from_pretrained_tokenizer")
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_kd_dataset_init_basic(self, mock_safe_from_pretrained, jsonl_file, mock_tokenizer):
         """Test basic KDDataset initialization."""
         mock_safe_from_pretrained.return_value = mock_tokenizer
@@ -96,7 +96,7 @@ class TestKDDataset:
         assert dataset.tokenizer == mock_tokenizer
 
     @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
-    @patch("training.dataset.safe_from_pretrained_tokenizer")
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_kd_dataset_init_with_header(self, mock_safe_from_pretrained, tmp_path, mock_tokenizer):
         """Test KDDataset initialization with dataset header."""
         mock_safe_from_pretrained.return_value = mock_tokenizer
@@ -116,7 +116,7 @@ class TestKDDataset:
         assert len(dataset) == 1
 
     @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
-    @patch("training.dataset.safe_from_pretrained_tokenizer")
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_kd_dataset_init_nonexistent_file(self, mock_safe_from_pretrained, mock_tokenizer):
         """Test KDDataset initialization with nonexistent file."""
         mock_safe_from_pretrained.return_value = mock_tokenizer
@@ -125,7 +125,7 @@ class TestKDDataset:
             KDDataset("nonexistent.jsonl", "tokenizer/path")
 
     @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
-    @patch("training.dataset.safe_from_pretrained_tokenizer")
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_kd_dataset_init_missing_fields(self, mock_safe_from_pretrained, tmp_path, mock_tokenizer):
         """Test KDDataset initialization with missing required fields."""
         mock_safe_from_pretrained.return_value = mock_tokenizer
@@ -145,7 +145,7 @@ class TestKDDataset:
         assert len(dataset) == 1
 
     @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
-    @patch("training.dataset.safe_from_pretrained_tokenizer")
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_kd_dataset_init_cot_validation(self, mock_safe_from_pretrained, tmp_path, mock_tokenizer):
         """Test KDDataset initialization with CoT-free validation."""
         mock_safe_from_pretrained.return_value = mock_tokenizer
@@ -168,7 +168,7 @@ class TestKDDataset:
             KDDataset(str(jsonl_path), "tokenizer/path")
 
     @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
-    @patch("training.dataset.safe_from_pretrained_tokenizer")
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_kd_dataset_getitem_basic(self, mock_safe_from_pretrained, jsonl_file, mock_tokenizer):
         """Test basic __getitem__ functionality."""
         mock_safe_from_pretrained.return_value = mock_tokenizer
@@ -185,7 +185,7 @@ class TestKDDataset:
         assert isinstance(item["labels"], torch.Tensor)
 
     @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
-    @patch("training.dataset.safe_from_pretrained_tokenizer")
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_kd_dataset_getitem_with_process_targets(
         self, mock_safe_from_pretrained, tmp_path, mock_tokenizer
     ):
@@ -221,7 +221,7 @@ class TestKDDataset:
         assert "integration_mask" in item
 
     @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
-    @patch("training.dataset.safe_from_pretrained_tokenizer")
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_kd_dataset_getitem_with_teacher_logits(
         self, mock_safe_from_pretrained, tmp_path, mock_tokenizer
     ):
@@ -254,7 +254,7 @@ class TestKDDataset:
         assert item["teacher_logits"].dim() == 2  # [T, V]
 
     @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
-    @patch("training.dataset.safe_from_pretrained_tokenizer")
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_kd_dataset_getitem_with_quality_score(
         self, mock_safe_from_pretrained, tmp_path, mock_tokenizer
     ):
@@ -281,7 +281,7 @@ class TestKDDataset:
         assert item["teacher_quality_score"] == 0.85
 
     @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
-    @patch("training.dataset.safe_from_pretrained_tokenizer")
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_kd_dataset_getitem_truncation(
         self, mock_safe_from_pretrained, tmp_path, mock_tokenizer
     ):
@@ -304,7 +304,7 @@ class TestKDDataset:
         assert item["labels"].size(0) <= 50
 
     @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
-    @patch("training.dataset.safe_from_pretrained_tokenizer")
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_kd_dataset_getitem_with_training_text(
         self, mock_safe_from_pretrained, tmp_path, mock_tokenizer
     ):
@@ -332,7 +332,7 @@ class TestKDDataset:
         assert "labels" in item
 
     @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
-    @patch("training.dataset.safe_from_pretrained_tokenizer")
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_kd_dataset_getitem_with_loss_mask(
         self, mock_safe_from_pretrained, tmp_path, mock_tokenizer
     ):

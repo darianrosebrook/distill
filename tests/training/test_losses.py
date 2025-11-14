@@ -1788,6 +1788,41 @@ class TestCAWSStructureLoss:
         assert isinstance(loss, torch.Tensor)
         assert loss.item() < 1e-5
 
+    def test_caws_structure_loss_equality_case_gte(self, device):
+        """Test CAWS structure loss with equality case (>= check).
+        
+        This test catches mutations that change >= to < in line 913.
+        """
+        # Test with student_score == teacher_score (equality case)
+        score = 0.7
+        loss_equal = caws_structure_loss(teacher_score=score, student_score=score)
+        
+        # Test with student_score > teacher_score (student better)
+        loss_student_better = caws_structure_loss(teacher_score=0.6, student_score=0.8)
+        
+        # Test with student_score < teacher_score (student worse)
+        loss_student_worse = caws_structure_loss(teacher_score=0.8, student_score=0.6)
+
+        # Verify that >= is used (not <)
+        # With >=: student_score == teacher_score should return zero loss (no penalty)
+        # With <: student_score == teacher_score would return non-zero loss (wrong behavior)
+        assert isinstance(loss_equal, torch.Tensor)
+        assert loss_equal.item() < 1e-5, "student_score == teacher_score should return zero loss with >= check"
+        
+        # Student better should return zero loss (no penalty)
+        assert isinstance(loss_student_better, torch.Tensor)
+        assert loss_student_better.item() < 1e-5, "student_score > teacher_score should return zero loss"
+        
+        # Student worse should return non-zero loss (penalty)
+        assert isinstance(loss_student_worse, torch.Tensor)
+        assert loss_student_worse.item() > 0, "student_score < teacher_score should return non-zero loss"
+        
+        # Verify the penalty is correct: loss = teacher_score - student_score
+        expected_loss = 0.8 - 0.6  # 0.2
+        assert abs(loss_student_worse.item() - expected_loss) < 1e-5, (
+            f"Penalty should be teacher_score - student_score, expected {expected_loss}, got {loss_student_worse.item()}"
+        )
+
 
 class TestEntropyWeighting:
     """Test entropy weighting function."""
