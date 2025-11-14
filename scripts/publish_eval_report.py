@@ -59,6 +59,7 @@ def publish_report(
     try:
         import requests
 
+        # Add explicit timeout for security (prevents hanging requests)
         response = requests.post(
             f"{supabase_url}/eval_reports",
             headers={
@@ -68,7 +69,7 @@ def publish_report(
                 "Prefer": "return=representation",
             },
             json=payload,
-            timeout=30,
+            timeout=60,  # 60 second timeout
         )
         response.raise_for_status()
 

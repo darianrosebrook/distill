@@ -550,13 +550,14 @@ class TestValidateToolTrace:
 
     def test_validate_tool_trace_valid(self):
         """Test validating valid tool trace."""
+        # validate_tool_trace expects tool_name, tool_input, tool_output (not name/arguments)
         trace = [
-            {"name": "tool1", "arguments": {"param1": "value1"}},
-            {"name": "tool2", "arguments": {"param2": "value2"}},
+            {"tool_name": "tool1", "tool_input": "input1", "tool_output": "output1"},
+            {"tool_name": "tool2", "tool_input": "input2", "tool_output": "output2"},
         ]
         result = validate_tool_trace(trace)
         assert len(result) == 2
-        assert result[0]["name"] == "tool1"
+        assert result[0]["tool_name"] == "tool1"
 
     def test_validate_tool_trace_not_list(self):
         """Test validating tool trace that is not a list."""
@@ -639,10 +640,19 @@ class TestGlobalValidator:
         """Test that global validator is in strict mode."""
         assert validator.strict_mode
 
+
+class TestInputValidatorAdditional:
+    """Additional tests for InputValidator to cover missing lines."""
+
+    @pytest.fixture
+    def strict_validator(self):
+        """Create validator in strict mode."""
+        return InputValidator(strict_mode=True)
+
     def test_validate_training_example_missing_response_after_check(self, strict_validator):
         """Test validate_training_example when response/answer check fails (line 322)."""
         # This tests the else branch when neither response nor answer is present
-        # after the initial check
+        # after the initial check (line 304-306 checks, then 321-323 else branch)
         example = {"prompt": "Test prompt"}
         # Remove both response and answer to trigger line 322
         with pytest.raises(ValidationError, match="missing required field: response"):
