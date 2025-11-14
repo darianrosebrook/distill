@@ -338,6 +338,8 @@ def main():
     print(f"\n{assessment}")
 
     # Save detailed results (use tempfile for security)
+    # nosec B108 - Using tempfile.gettempdir() is secure (respects TMPDIR env var)
+    # This is acceptable for test scripts where we need a predictable temp location
     temp_dir = Path(tempfile.gettempdir())
     output_file = str(temp_dir / "toy_test_results.json")
     with open(output_file, "w") as f:

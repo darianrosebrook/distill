@@ -2302,9 +2302,9 @@ class TestCodeModePreferenceLoss:
         assert loss_eligible.item() >= 0, "Loss should be non-negative"
 
     def test_code_mode_preference_loss_intermediate_sizes_length_check(self, device):
-        """Test CodeModePreferenceLoss with intermediate_sizes length check (> 0).
+        """Test CodeModePreferenceLoss with intermediate_sizes length check (> 0) and elif statement.
         
-        This test catches mutations that change > 0 to < 0 or == 0 in line 767.
+        This test catches mutations that change > 0 to < 0 or == 0 in line 767, and If_Statement → If_False.
         """
         eligibility_rules = {"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []}
         reward = {"prefer_ts_api_over_direct_tool": True, "penalize_tool_result_roundtrip": True}
@@ -2320,15 +2320,17 @@ class TestCodeModePreferenceLoss:
         student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
 
         # Test with empty intermediate_sizes (should NOT be eligible via intermediate_chars)
+        # tool_count < min_tools (1 < 2), so only intermediate_sizes path can make it eligible
         batch_meta_empty = [
-            {"tool_count": 1, "intermediate_sizes": [], "pii_tags_present": False},  # Empty list
-            {"tool_count": 1, "intermediate_sizes": [], "pii_tags_present": False},  # Empty list
+            {"tool_count": 1, "intermediate_sizes": [], "pii_tags_present": False},  # Empty list, not eligible
+            {"tool_count": 1, "intermediate_sizes": [], "pii_tags_present": False},  # Empty list, not eligible
         ]
 
         # Test with non-empty intermediate_sizes (should be eligible if max_size >= min_intermediate_chars)
+        # tool_count < min_tools (1 < 2), so only intermediate_sizes path can make it eligible
         batch_meta_nonempty = [
-            {"tool_count": 1, "intermediate_sizes": [15000], "pii_tags_present": False},  # Non-empty, eligible
-            {"tool_count": 1, "intermediate_sizes": [5000], "pii_tags_present": False},  # Non-empty, not eligible
+            {"tool_count": 1, "intermediate_sizes": [15000], "pii_tags_present": False},  # Non-empty, eligible (max >= 10000)
+            {"tool_count": 1, "intermediate_sizes": [5000], "pii_tags_present": False},  # Non-empty, not eligible (max < 10000)
         ]
 
         span_targets = [
@@ -2339,10 +2341,11 @@ class TestCodeModePreferenceLoss:
         loss_empty = loss_fn(student_logits, span_targets=span_targets, batch_meta=batch_meta_empty)
         loss_nonempty = loss_fn(student_logits, span_targets=span_targets, batch_meta=batch_meta_nonempty)
 
-        # Verify that > 0 is used (not < 0 or == 0)
+        # Verify that > 0 is used (not < 0 or == 0) and elif statement is executed
         # With > 0: len(intermediate_sizes) > 0 checks if list has elements (correct)
         # With < 0: len(intermediate_sizes) < 0 would always be False (wrong behavior)
         # With == 0: len(intermediate_sizes) == 0 would check if list is empty (inverted logic)
+        # With If_False: elif intermediate_sizes and len(intermediate_sizes) > 0: would become elif False: (skip block)
         assert isinstance(loss_empty, torch.Tensor)
         assert isinstance(loss_nonempty, torch.Tensor)
         
@@ -2350,18 +2353,28 @@ class TestCodeModePreferenceLoss:
         # Non-empty intermediate_sizes with eligible max_size should produce non-zero loss
         # If > 0 were changed to < 0, empty lists would be treated as non-empty (wrong behavior)
         # If > 0 were changed to == 0, non-empty lists would be treated as empty (wrong behavior)
+        # If elif were changed to elif False:, the entire block would be skipped (wrong behavior)
         assert loss_empty.item() >= 0, "Loss should be non-negative"
         assert loss_nonempty.item() >= 0, "Loss should be non-negative"
         
         # Non-empty list with eligible max_size should have higher loss than empty list
-        # This verifies that > 0 is used correctly
+        # This verifies that > 0 is used correctly AND the elif statement is executed
+        # If elif were changed to elif False:, both would produce zero loss (wrong behavior)
         if loss_nonempty.item() > 0:
             # The first sample in batch_meta_nonempty is eligible (max_size >= min_intermediate_chars)
             # So loss_nonempty should be >= loss_empty (which should be 0 or minimal)
             assert loss_nonempty.item() >= loss_empty.item(), (
                 f"Non-empty intermediate_sizes with eligible max_size should have higher loss than empty list "
-                f"({loss_nonempty.item()} >= {loss_empty.item()}), verifying > 0 check"
+                f"({loss_nonempty.item()} >= {loss_empty.item()}), verifying > 0 check and elif statement"
             )
+        
+        # Most importantly: verify that the elif block is actually executed
+        # If elif were changed to elif False:, loss_nonempty would be 0.0 (same as loss_empty)
+        # This verifies that the elif statement is executed (not always False)
+        assert loss_nonempty.item() > loss_empty.item() or (loss_nonempty.item() > 0 and loss_empty.item() == 0), (
+            f"Non-empty intermediate_sizes with eligible max_size should have higher loss than empty list "
+            f"({loss_nonempty.item()} > {loss_empty.item()}), verifying elif statement is executed (not If_False)"
+        )
 
     def test_code_mode_preference_loss_penalize_tool_result_roundtrip_true_check(self, device):
         """Test CodeModePreferenceLoss with penalize_tool_result_roundtrip True check.

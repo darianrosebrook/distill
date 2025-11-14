@@ -55,6 +55,7 @@ def main():
 
     # Use tempfile for security (avoids hardcoded /tmp/ paths)
     if args.output_dir is None:
+        # nosec B108 - tempfile.mkdtemp() is the secure way to create temp directories
         output_dir = Path(tempfile.mkdtemp(prefix="8ball_pipeline_comparison_"))
         print(f"Using temporary directory: {output_dir}")
     else:

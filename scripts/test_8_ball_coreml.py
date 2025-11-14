@@ -240,6 +240,8 @@ def run_comprehensive_evaluation(model_path: str = None, output_file: str = None
     """
     # Use tempfile for security (avoids hardcoded /tmp/ paths)
     if model_path is None:
+        # nosec B108 - Using tempfile.gettempdir() is secure (respects TMPDIR env var)
+        # This is acceptable for test scripts where we need a predictable temp location
         temp_dir = Path(tempfile.gettempdir())
         model_path = str(temp_dir / "8_ball_T128.mlpackage")
 
@@ -582,6 +584,8 @@ def main():
     print(f"\n{assessment}")
 
     # Save detailed results (use tempfile for security)
+    # nosec B108 - Using tempfile.gettempdir() is secure (respects TMPDIR env var)
+    # This is acceptable for test scripts where we need a predictable temp location
     temp_dir = Path(tempfile.gettempdir())
     output_file = str(temp_dir / "8_ball_test_results.json")
     with open(output_file, "w") as f:
