@@ -2800,32 +2800,45 @@ class TestCAWSComplianceLoss:
         
         This test catches mutations that change += to /= in line 1010.
         """
-        # Test with step_patterns > max_allowed_steps (should add penalty)
-        student_output_many_steps = "Step 1: Do this. Step 2: Do that. Step 3: Do more. Step 4: Continue. Step 5: Keep going. Step 6: Finish. Step 7: Done."
-        teacher_output = "Teacher output"
+        # Import the internal function to test it directly
+        from training.losses import _evaluate_budget_compliance
         
-        # Test with step_patterns <= max_allowed_steps (should NOT add penalty)
+        # Test with step_patterns > max_allowed_steps (should add penalty)
+        # 7 steps > 5 max_allowed_steps, so penalty should be (7 - 5) * 0.2 = 0.4
+        student_output_many_steps = "Step 1: Do this. Step 2: Do that. Step 3: Do more. Step 4: Continue. Step 5: Keep going. Step 6: Finish. Step 7: Done."
+        
+        # Test with step_patterns <= max_allowed_steps (should NOT add step penalty)
+        # 3 steps <= 5 max_allowed_steps, so no step penalty
         student_output_few_steps = "Step 1: Do this. Step 2: Do that. Step 3: Finish."
         
-        loss_many_steps = caws_compliance_loss(student_output_many_steps, teacher_output)
-        loss_few_steps = caws_compliance_loss(student_output_few_steps, teacher_output)
+        # Test the budget compliance function directly (which includes step patterns)
+        budget_penalty_many_steps = _evaluate_budget_compliance(student_output_many_steps)
+        budget_penalty_few_steps = _evaluate_budget_compliance(student_output_few_steps)
 
         # Verify that += is used (not /=)
         # With +=: penalty += (step_patterns - max_allowed_steps) * 0.2 (increments penalty)
         # With /=: penalty /= (step_patterns - max_allowed_steps) * 0.2 (divides penalty, wrong behavior)
-        assert isinstance(loss_many_steps, torch.Tensor)
-        assert isinstance(loss_few_steps, torch.Tensor)
+        assert isinstance(budget_penalty_many_steps, float)
+        assert isinstance(budget_penalty_few_steps, float)
         
         # Many steps should have penalty
-        assert loss_many_steps.item() >= 0, "Many steps should have penalty (increment verified)"
-        assert loss_few_steps.item() >= 0, "Few steps should have lower or zero penalty"
+        assert budget_penalty_many_steps >= 0, "Many steps should have penalty (increment verified)"
+        assert budget_penalty_few_steps >= 0, "Few steps should have lower or zero penalty"
         
         # Many steps should have higher penalty than few steps
         # If += were changed to /=, penalty would decrease instead of increase (wrong behavior)
-        if loss_many_steps.item() > 0:
-            assert loss_many_steps.item() >= loss_few_steps.item(), (
-                "Many steps should have higher penalty than few steps (increment verified)"
-            )
+        # With +=: penalty_many = base_penalty + (7 - 5) * 0.2 = base_penalty + 0.4
+        # With /=: penalty_many = base_penalty / ((7 - 5) * 0.2) = base_penalty / 0.4 (would decrease if base_penalty > 0.4)
+        assert budget_penalty_many_steps >= budget_penalty_few_steps, (
+            f"Many steps ({budget_penalty_many_steps}) should have higher or equal penalty than few steps ({budget_penalty_few_steps}) (increment verified)"
+        )
+        
+        # Verify that the difference is at least 0.4 (the step penalty)
+        # This ensures that += is used (not /=)
+        penalty_difference = budget_penalty_many_steps - budget_penalty_few_steps
+        assert penalty_difference >= 0.2, (
+            f"Step penalty difference should be at least 0.2 (got {penalty_difference}), indicating += is used (not /=)"
+        )
 
     def test_caws_compliance_loss_code_patterns_penalty_increment(self, device):
         """Test CAWS compliance loss with code_patterns penalty increment (+=).

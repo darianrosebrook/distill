@@ -520,14 +520,18 @@ class TestMainFunction:
         mock_args = Mock()
         mock_args.checkpoint = "model.pt"
         mock_args.tokenizer = "bad_tokenizer"
+        mock_args.config = None
+        mock_args.test_data = None
+        mock_args.output = "results.json"
         mock_parser.parse_args.return_value = mock_args
         mock_parser_class.return_value = mock_parser
         
         with (
-            patch("transformers.AutoTokenizer") as mock_tokenizer_class,
+            patch("evaluation.reasoning_eval.safe_from_pretrained_tokenizer") as mock_load_tokenizer,
             patch("builtins.print"),
         ):
-            mock_tokenizer_class.from_pretrained.side_effect = ImportError("Transformers not available")
+            # Mock ImportError to trigger RuntimeError path
+            mock_load_tokenizer.side_effect = ImportError("Transformers not available")
             
             with pytest.raises((RuntimeError, SystemExit)):
                 main()
