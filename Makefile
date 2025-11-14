@@ -1,4 +1,4 @@
-.PHONY: kd inter proc qat onnx coreml probes eval release format judge worker drafter caws-eval contextual-gen contextual-extract contextual-verify contextual-pipeline gen-scale-1k gen-scale-10k verify-scale-1k verify-scale-10k verify-dual-tokenizers verify-next-registry gen-teacher-heavy verify-teacher-heavy eval-runner-openai eval-runner-local eval-smoke speed-coreml train-student-speed train-student-qat 8-ball 8-ball-gguf
+.PHONY: kd inter proc qat onnx coreml probes eval release format judge worker drafter caws-eval contextual-gen contextual-extract contextual-verify contextual-pipeline gen-scale-1k gen-scale-10k verify-scale-1k verify-scale-10k verify-dual-tokenizers verify-next-registry gen-teacher-heavy verify-teacher-heavy eval-runner-openai eval-runner-local eval-smoke speed-coreml train-student-speed train-student-qat 8-ball 8-ball-gguf mutation-test mutation-test-critical
 
 # Worker model (primary generator, ~9B)
 worker:
@@ -559,6 +559,15 @@ toy-e2e: toy-clean
 	else \
 		echo "⚠️  CoreML model not found, skipping verification"; \
 	fi
+
+# Mutation testing targets
+mutation-test:
+	@echo "🧬 Running mutation testing..."
+	@$(PYTHON) scripts/run_mutation_testing.py --module $(MODULE) --mode $(MODE) -n $(N) $(if $(OUTPUT),-o $(OUTPUT),) $(if $(EXCEPTION),-x $(EXCEPTION),)
+
+mutation-test-critical:
+	@echo "🧬 Running mutation testing on critical modules..."
+	@$(PYTHON) scripts/run_mutation_testing.py --all-critical --mode s -n 10
 	@echo "🎱 8-ball E2E Complete! → eval/reports/8_ball_e2e.json 🎱"
 
 .PHONY: 8-ball-gguf

@@ -1,0 +1,58 @@
+# Mutation Testing Configuration
+# This file provides default settings for mutation testing
+
+# Default mutation testing mode
+# - f: full mode (all mutations, slowest but most thorough)
+# - s: break on first survivor (default, balanced)
+# - d: break on first detection (faster)
+# - sd: break on first survivor or detection (fastest)
+default_mode: s
+
+# Default number of locations to mutate
+# 0 = all locations (slower but comprehensive)
+# >0 = random sample of locations (faster)
+default_n_locations: 10
+
+# Timeout factor for mutation trials
+# If a mutation trial takes longer than this factor * clean trial time,
+# it's aborted and logged as a timeout
+timeout_factor: 2.0
+
+# Mutation score targets by module tier
+targets:
+  critical:
+    mutation_score: 70
+    modules:
+      - training/distill_kd.py
+      - training/losses.py
+      - training/input_validation.py
+      - conversion/export_onnx.py
+      - conversion/convert_coreml.py
+  
+  standard:
+    mutation_score: 60
+    modules:
+      - training/dataset.py
+      - training/process_losses.py
+      - models/teacher/teacher_client.py
+  
+  utility:
+    mutation_score: 50
+    modules:
+      - training/utils.py
+      - training/assertions.py
+
+# Exclude patterns (modules that shouldn't be mutation tested)
+exclude:
+  - "**/__pycache__/**"
+  - "**/venv/**"
+  - "**/node_modules/**"
+  - "**/htmlcov/**"
+  - "**/*.pyc"
+
+# Whitelist/blacklist mutation categories
+# See mutatest --help for available categories
+# mutation_categories:
+#   whitelist: []
+#   blacklist: []
+
