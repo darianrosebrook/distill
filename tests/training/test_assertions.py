@@ -91,6 +91,70 @@ class TestAssertLossFinite:
         # Should not raise
         assert_loss_finite(loss_dict)
 
+    def test_assert_loss_finite_non_tensor_invalid(self):
+        """Test asserting loss with non-tensor invalid total loss - line 52-56."""
+        # Test with NaN float (not tensor)
+        loss_dict = {"total": float("nan"), "kl": 0.5}
+        with pytest.raises(RuntimeError, match="not finite"):
+            assert_loss_finite(loss_dict)
+
+    def test_assert_loss_finite_non_tensor_inf(self):
+        """Test asserting loss with infinite float (not tensor) - line 52-56."""
+        loss_dict = {"total": float("inf"), "kl": 0.5}
+        with pytest.raises(RuntimeError, match="not finite"):
+            assert_loss_finite(loss_dict)
+
+    def test_assert_loss_finite_non_tensor_negative_inf(self):
+        """Test asserting loss with negative infinite float - line 52-56."""
+        loss_dict = {"total": float("-inf"), "kl": 0.5}
+        with pytest.raises(RuntimeError, match="not finite"):
+            assert_loss_finite(loss_dict)
+
+    def test_assert_loss_finite_tensor_with_some_nan(self):
+        """Test asserting loss with tensor containing some NaN values (not all)."""
+        # Create tensor with some NaN values
+        tensor_with_nan = torch.tensor([1.0, float("nan"), 3.0])
+        loss_dict = {"total": tensor_with_nan}
+        with pytest.raises(RuntimeError, match="not finite"):
+            assert_loss_finite(loss_dict)
+
+    def test_assert_loss_finite_tensor_with_some_inf(self):
+        """Test asserting loss with tensor containing some Inf values (not all)."""
+        tensor_with_inf = torch.tensor([1.0, float("inf"), 3.0])
+        loss_dict = {"total": tensor_with_inf}
+        with pytest.raises(RuntimeError, match="not finite"):
+            assert_loss_finite(loss_dict)
+
+    def test_assert_loss_finite_empty_loss_dict(self):
+        """Test asserting loss with empty dictionary."""
+        loss_dict = {}
+        with pytest.raises(RuntimeError, match="missing 'total' key"):
+            assert_loss_finite(loss_dict)
+
+    def test_assert_loss_finite_zero_loss_all_zero_components(self):
+        """Test asserting zero total loss when all components are zero - line 46-50."""
+        loss_dict = {"total": torch.tensor(0.0), "kl": torch.tensor(0.0), "ce": torch.tensor(0.0)}
+        with pytest.raises(RuntimeError, match="Total loss is zero"):
+            assert_loss_finite(loss_dict)
+
+    def test_assert_loss_finite_component_with_some_nan(self):
+        """Test asserting loss with component tensor containing some NaN values."""
+        loss_dict = {
+            "total": torch.tensor(1.5),
+            "kl": torch.tensor([0.5, float("nan"), 0.7]),
+        }
+        with pytest.raises(RuntimeError, match="not finite"):
+            assert_loss_finite(loss_dict)
+
+    def test_assert_loss_finite_component_with_some_inf(self):
+        """Test asserting loss with component tensor containing some Inf values."""
+        loss_dict = {
+            "total": torch.tensor(1.5),
+            "kl": torch.tensor([0.5, float("inf"), 0.7]),
+        }
+        with pytest.raises(RuntimeError, match="not finite"):
+            assert_loss_finite(loss_dict)
+
 
 class TestLogLossComponents:
     """Test log_loss_components function."""
@@ -325,6 +389,62 @@ class TestComputePerComponentGradientNorms:
         grad_norms = compute_per_component_gradient_norms(model, loss_dict, loss_weights)
         # Should not include 'total'
         assert "total" not in grad_norms
+
+    def test_compute_per_component_gradient_norms_no_gradients_original(self, simple_model):
+        """Test compute_per_component_gradient_norms when no original gradients exist."""
+        model = simple_model
+        x = torch.randn(2, 10)
+        y = torch.randn(2, 5)
+
+        # Don't call backward() - no original gradients
+        loss1 = nn.MSELoss()(model(x), y)
+
+        loss_dict = {"kl": loss1}
+        loss_weights = {"kl": 1.0}
+
+        grad_norms = compute_per_component_gradient_norms(model, loss_dict, loss_weights)
+        # Should still compute norms for component
+        assert "kl" in grad_norms
+
+    def test_compute_per_component_gradient_norms_missing_weight(self, simple_model):
+        """Test compute_per_component_gradient_norms when weight is missing (defaults to 1.0)."""
+        model = simple_model
+        x = torch.randn(2, 10)
+        y = torch.randn(2, 5)
+
+        loss1 = nn.MSELoss()(model(x), y)
+        loss1.backward(retain_graph=True)
+
+        loss_dict = {"kl": loss1, "ce": loss1}
+        loss_weights = {"kl": 1.0}  # ce weight missing, should default to 1.0
+
+        grad_norms = compute_per_component_gradient_norms(model, loss_dict, loss_weights)
+        # Should compute norm for ce even though weight not in dict (defaults to 1.0)
+        assert "kl" in grad_norms
+        assert "ce" in grad_norms
+
+    def test_compute_per_component_gradient_norms_restores_none_gradients(self, simple_model):
+        """Test that gradients are set to None for params without original gradients."""
+        model = simple_model
+        x = torch.randn(2, 10)
+        y = torch.randn(2, 5)
+
+        loss1 = nn.MSELoss()(model(x), y)
+        # Only compute gradient for some parameters
+        loss1.backward(retain_graph=True)
+
+        # Manually clear some gradients
+        param_list = list(model.parameters())
+        if len(param_list) > 0:
+            param_list[0].grad = None  # Remove gradient for first param
+
+        loss_dict = {"kl": loss1}
+        loss_weights = {"kl": 1.0}
+
+        compute_per_component_gradient_norms(model, loss_dict, loss_weights)
+
+        # Param without original gradient should have grad set to None
+        assert param_list[0].grad is None
 
 
 class TestAssertionsIntegration:
