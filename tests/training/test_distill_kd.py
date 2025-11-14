@@ -1160,6 +1160,149 @@ class TestQATOperationsExpanded:
 
         assert isinstance(result, dict)
 
+    def test_check_qat_stability_with_hidden_states(self, sample_batch, device):
+        """Test QAT stability check with model that returns hidden states."""
+        # Create a mock model that supports return_hidden_states
+        class MockModelWithHiddenStates(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(10, 5)
+            
+            def forward(self, input_ids, attn_mask=None, return_hidden_states=False):
+                logits = self.linear(input_ids)
+                if return_hidden_states:
+                    # Return tuple with logits and hidden states
+                    hidden_states = [input_ids, logits]  # Mock hidden states
+                    return logits, hidden_states
+                return logits
+        
+        model = MockModelWithHiddenStates().to(device)
+        baseline_model = MockModelWithHiddenStates().to(device)
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+        
+        result = check_qat_stability(
+            model, sample_batch, device, baseline_model=baseline_model
+        )
+        
+        assert isinstance(result, dict)
+        assert "qat_stability.has_nan" in result
+        assert "qat_stability.cosine_sim" in result
+        assert result["qat_stability.cosine_sim"] >= 0.0
+        assert result["qat_stability.cosine_sim"] <= 1.0
+
+    def test_check_qat_stability_with_ddp_model(self, sample_batch, device):
+        """Test QAT stability check with DDP-wrapped model."""
+        from torch.nn.parallel import DistributedDataParallel as DDP
+        
+        class MockModelWithHiddenStates(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(10, 5)
+            
+            def forward(self, input_ids, attn_mask=None, return_hidden_states=False):
+                logits = self.linear(input_ids)
+                if return_hidden_states:
+                    hidden_states = [input_ids, logits]
+                    return logits, hidden_states
+                return logits
+        
+        base_model = MockModelWithHiddenStates().to(device)
+        # Mock DDP model
+        ddp_model = Mock()
+        ddp_model.module = base_model
+        ddp_model.eval = base_model.eval
+        ddp_model.train = base_model.train
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+        
+        result = check_qat_stability(ddp_model, sample_batch, device)
+        
+        assert isinstance(result, dict)
+        assert "qat_stability.has_nan" in result
+
+    def test_check_qat_stability_with_precomputed_baseline_states(self, sample_batch, device):
+        """Test QAT stability check with pre-computed baseline hidden states."""
+        class MockModelWithHiddenStates(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(10, 5)
+            
+            def forward(self, input_ids, attn_mask=None, return_hidden_states=False):
+                logits = self.linear(input_ids)
+                if return_hidden_states:
+                    hidden_states = [input_ids, logits]
+                    return logits, hidden_states
+                return logits
+        
+        model = MockModelWithHiddenStates().to(device)
+        
+        # Pre-computed baseline hidden states
+        batch_size, seq_len = sample_batch["input_ids"].shape
+        baseline_hidden_states = [
+            torch.randn(batch_size, seq_len, 10, device=device),
+            torch.randn(batch_size, seq_len, 5, device=device),
+        ]
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+        
+        result = check_qat_stability(
+            model, sample_batch, device, baseline_hidden_states=baseline_hidden_states
+        )
+        
+        assert isinstance(result, dict)
+        assert "qat_stability.has_nan" in result
+        assert "qat_stability.cosine_sim" in result
+
+    def test_check_qat_stability_model_without_hidden_states(self, sample_batch, device):
+        """Test QAT stability check with model that doesn't support hidden states."""
+        # Simple model without return_hidden_states support
+        simple_model = nn.Linear(10, 5).to(device)
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+        
+        result = check_qat_stability(simple_model, sample_batch, device)
+        
+        assert isinstance(result, dict)
+        assert "qat_stability.has_nan" in result
+        assert "qat_stability.cosine_sim" in result
+        # Should default to 1.0 when no baseline available (or 0.0 if error occurs)
+        assert result["qat_stability.cosine_sim"] >= 0.0
+        assert result["qat_stability.cosine_sim"] <= 1.0
+
+    def test_check_qat_stability_error_handling(self, sample_batch, device):
+        """Test QAT stability check error handling."""
+        # Model that will raise an error during forward pass
+        class FailingModel(nn.Module):
+            def forward(self, input_ids, attn_mask=None):
+                raise RuntimeError("Model forward failed")
+        
+        failing_model = FailingModel().to(device)
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+        
+        result = check_qat_stability(failing_model, sample_batch, device)
+        
+        assert isinstance(result, dict)
+        assert "qat_stability.has_nan" in result
+        assert "qat_stability.cosine_sim" in result
+        assert "qat_stability.error" in result
+
 
 class TestTruncateBatchToShapeExpanded:
     """Test expanded batch truncation scenarios."""
@@ -1873,3 +2016,77 @@ class TestTrainingStepExpanded:
         )
 
         assert "total" in result
+
+
+class TestMainFunction:
+    """Test main function initialization and critical paths."""
+
+    @patch("training.distill_kd.check_training_versions")
+    @patch("training.distill_kd.merge_configs")
+    @patch("training.distill_kd.validate_config")
+    @patch("training.distill_kd.create_model")
+    @patch("training.distill_kd.create_optimizer")
+    @patch("training.distill_kd.Path.mkdir")
+    @patch("training.distill_kd.argparse.ArgumentParser")
+    def test_main_version_check_failure(
+        self,
+        mock_parser_class,
+        mock_mkdir,
+        mock_create_optimizer,
+        mock_create_model,
+        mock_validate_config,
+        mock_merge_configs,
+        mock_check_versions,
+    ):
+        """Test main function exits on version check failure."""
+        mock_parser = Mock()
+        mock_args = Mock()
+        mock_args.config = ["config.yaml"]
+        mock_args.resume = None
+        mock_args.output_dir = "outputs"
+        mock_args.local_rank = -1
+        mock_parser.parse_args.return_value = mock_args
+        mock_parser_class.return_value = mock_parser
+
+        mock_check_versions.side_effect = RuntimeError("Version mismatch")
+
+        with pytest.raises(SystemExit):
+            from training.distill_kd import main
+
+            main()
+
+    @patch("training.distill_kd.check_training_versions")
+    @patch("training.distill_kd.merge_configs")
+    @patch("training.distill_kd.validate_config")
+    @patch("training.distill_kd.create_model")
+    @patch("training.distill_kd.create_optimizer")
+    @patch("training.distill_kd.Path.mkdir")
+    @patch("training.distill_kd.argparse.ArgumentParser")
+    def test_main_config_validation_failure(
+        self,
+        mock_parser_class,
+        mock_mkdir,
+        mock_create_optimizer,
+        mock_create_model,
+        mock_validate_config,
+        mock_merge_configs,
+        mock_check_versions,
+    ):
+        """Test main function exits on config validation failure."""
+        mock_parser = Mock()
+        mock_args = Mock()
+        mock_args.config = ["config.yaml"]
+        mock_args.resume = None
+        mock_args.output_dir = "outputs"
+        mock_args.local_rank = -1
+        mock_parser.parse_args.return_value = mock_args
+        mock_parser_class.return_value = mock_parser
+
+        mock_check_versions.return_value = None
+        mock_merge_configs.return_value = {"model": {}, "training": {}}
+        mock_validate_config.side_effect = ValueError("Invalid config")
+
+        with pytest.raises(SystemExit):
+            from training.distill_kd import main
+
+            main()
