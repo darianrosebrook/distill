@@ -328,6 +328,51 @@ class TestCheckGradientBalance:
         assert isinstance(result, (type(None), str))
 
 
+class TestCheckGradientBalanceEdgeCases:
+    """Additional tests for check_gradient_balance edge cases."""
+
+    def test_check_gradient_balance_all_zero(self):
+        """Test check_gradient_balance when all norms are zero."""
+        grad_norms = {"component1": 0.0, "component2": 0.0}
+        result = check_gradient_balance(grad_norms)
+        # When all are zero, min_norm is 0, should return None
+        assert result is None
+
+    def test_check_gradient_balance_exact_threshold(self):
+        """Test check_gradient_balance at exact threshold boundary."""
+        # Test at exactly 10.0 threshold (should not trigger)
+        grad_norms = {"component1": 1.0, "component2": 10.0}  # Exactly 10x
+        result = check_gradient_balance(grad_norms, imbalance_threshold=10.0)
+        # Exactly at threshold should return None (not > threshold)
+        assert result is None
+
+    def test_check_gradient_balance_just_over_threshold(self):
+        """Test check_gradient_balance just over threshold."""
+        # Test just over 10.0 threshold (should trigger)
+        grad_norms = {"component1": 1.0, "component2": 10.1}  # Just over 10x
+        result = check_gradient_balance(grad_norms, imbalance_threshold=10.0)
+        assert result is not None
+        assert "Gradient imbalance detected" in result
+        assert "component2" in result
+
+    def test_check_gradient_balance_multiple_components(self):
+        """Test check_gradient_balance with multiple components."""
+        grad_norms = {"kl": 1.0, "ce": 5.0, "code_mode": 20.0}
+        result = check_gradient_balance(grad_norms, imbalance_threshold=10.0)
+        assert result is not None
+        assert "code_mode" in result
+        assert "20.0000" in result  # Max norm value
+        assert "1.0000" in result  # Min norm value
+
+    def test_check_gradient_balance_window_size_parameter(self):
+        """Test that window_size parameter is accepted (even if not used)."""
+        # window_size is accepted but not used in current implementation
+        grad_norms = {"component1": 1.0, "component2": 50.0}
+        result = check_gradient_balance(grad_norms, imbalance_threshold=10.0, window_size=100)
+        assert result is not None
+        assert "component2" in result
+
+
 class TestComputePerComponentGradientNorms:
     """Test compute_per_component_gradient_norms function."""
 
