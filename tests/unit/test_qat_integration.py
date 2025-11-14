@@ -126,10 +126,14 @@ class TestCheckQATStability:
             "input_ids": torch.randint(0, 1000, (2, 10)),
         }
 
-        # Mock model to return NaN logits
+        # Mock model to return NaN logits (override side_effect to return NaN logits)
         nan_logits = torch.randn(2, 10, 32000)
         nan_logits[0, 0, 0] = float("nan")
-        mock_model.return_value = nan_logits
+        
+        def forward_with_nan(input_ids, attention_mask=None):
+            return nan_logits
+        
+        mock_model.side_effect = forward_with_nan
 
         metrics = check_qat_stability(mock_model, batch, device)
 

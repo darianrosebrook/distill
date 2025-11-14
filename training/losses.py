@@ -318,87 +318,198 @@ def create_projection_layers(
 
 
 def length_aware_kd_loss(
-    student_length: int,
-    teacher_length: int,
+    student_attn_mask: torch.Tensor,
+    teacher_attn_mask: torch.Tensor,
     required_fields_present: torch.Tensor,
-    max_allowed_ratio: float = 1.2,
-) -> torch.Tensor:
+    hinge: float = 0.15,
+    slope: float = 1.0,
+    reduction: str = "mean",
+) -> tuple[torch.Tensor, Dict[str, float]]:
     """
-    Penalize student length only when it exceeds teacher by more than max_allowed_ratio
+    Penalize student length only when it exceeds teacher by more than hinge threshold
     AND required fields are missing.
 
     Hinged loss: only penalizes when student is both too long AND incomplete.
 
     Args:
-        student_length: Student sequence length
-        teacher_length: Teacher sequence length
+        student_attn_mask: [B, T_s] student attention mask
+        teacher_attn_mask: [B, T_t] teacher attention mask
         required_fields_present: [B] boolean tensor indicating if all required fields present
-        max_allowed_ratio: Maximum allowed length ratio (default: 1.2 = 20% longer)
+        hinge: Threshold for relative excess length (default: 0.15 = 15% longer)
+        slope: Slope for linear penalty above hinge (default: 1.0)
+        reduction: Reduction method ('mean' or 'sum')
 
     Returns:
-        Length penalty loss (scalar tensor)
+        Tuple of (length penalty loss (scalar tensor), diagnostics dictionary)
     """
-    if teacher_length == 0:
-        return torch.tensor(0.0, requires_grad=True)
+    device = student_attn_mask.device
+    B = student_attn_mask.size(0)
 
-    length_ratio = student_length / teacher_length
-    exceeds_ratio = length_ratio > max_allowed_ratio
+    # Compute actual lengths from masks
+    student_lengths = student_attn_mask.sum(dim=1).float()  # [B]
+    teacher_lengths = teacher_attn_mask.sum(dim=1).float()  # [B]
 
-    # Only penalize if exceeds ratio AND fields missing
-    # required_fields_present is [B], take mean to get batch-level penalty
-    fields_missing = (~required_fields_present).float().mean()
+    # Avoid division by zero
+    teacher_lengths = torch.clamp(teacher_lengths, min=1.0)
 
-    if exceeds_ratio and fields_missing > 0:
-        # Penalty proportional to excess length and missing fields
-        excess = length_ratio - max_allowed_ratio
-        penalty = excess * fields_missing
-        return torch.tensor(penalty, requires_grad=True)
+    # Compute relative excess: (student_len - teacher_len) / teacher_len
+    rel_excess = (student_lengths - teacher_lengths) / teacher_lengths  # [B]
+
+    # Only penalize examples where:
+    # 1. Excess is above hinge threshold
+    # 2. Required fields are missing
+    penalize_mask = (rel_excess > hinge) & (~required_fields_present)  # [B]
+
+    # Compute penalties: slope * (rel_excess - hinge) for penalized examples
+    excess_above_hinge = torch.clamp(rel_excess - hinge, min=0.0)  # [B]
+    penalties = slope * excess_above_hinge  # [B]
+    penalties = penalties * penalize_mask.float()  # [B]
+
+    # Reduce penalties
+    if reduction == "mean":
+        loss = penalties.mean()
+    elif reduction == "sum":
+        loss = penalties.sum()
     else:
-        return torch.tensor(0.0, requires_grad=True)
+        raise ValueError(f"Unknown reduction: {reduction}")
+
+    # Compute diagnostics
+    frac_penalized = penalize_mask.float().mean().item()
+    # Clamp excess to non-negative for diagnostics (only count excess, not deficit)
+    rel_excess_clamped = torch.clamp(rel_excess, min=0.0)
+    median_rel_excess = rel_excess_clamped.median().item()
+
+    diagnostics = {
+        "len_kd.frac_penalized": frac_penalized,
+        "len_kd.median_rel_excess": median_rel_excess,
+    }
+
+    return loss, diagnostics
 
 
 def early_tool_call_loss(
-    student_tool_call_position: int,
-    teacher_tool_call_position: int,
-    sequence_length: int,
-    ramp_start: int = 1000,
-    ramp_end: int = 5000,
-) -> torch.Tensor:
+    logits: torch.Tensor,
+    input_ids: torch.Tensor,
+    tool_should_be_used: torch.Tensor,
+    tokenizer,
+    teacher_prefix_ids: Optional[torch.Tensor] = None,
+    N: int = 25,
+    ce_weight: float = 0.2,
+    json_prior_weight: float = 0.02,
+    ramp_t: float = 1.0,
+) -> tuple[torch.Tensor, Dict[str, float]]:
     """
-    Gated + ramped loss encouraging early tool calls.
+    Early tool call loss: encourage valid tool JSON within first N tokens.
 
-    Penalizes student for calling tools later than teacher, with ramping schedule.
+    Uses teacher prefix IDs if available (CE loss), otherwise JSON-envelope prior.
 
     Args:
-        student_tool_call_position: Position of student's first tool call (-1 if none)
-        teacher_tool_call_position: Position of teacher's first tool call (-1 if none)
-        sequence_length: Total sequence length
-        ramp_start: Step to start ramping loss weight
-        ramp_end: Step to reach full loss weight
+        logits: [B, T, V] student logits
+        input_ids: [B, T] input token IDs
+        tool_should_be_used: [B] boolean tensor indicating if tool should be used
+        tokenizer: Tokenizer for converting tokens to IDs
+        teacher_prefix_ids: [B, N] teacher prefix token IDs (optional)
+        N: Number of positions to check for tool tokens
+        ce_weight: Weight for cross-entropy loss on teacher prefix
+        json_prior_weight: Weight for JSON prior when teacher prefix unavailable
+        ramp_t: Ramp factor (0.0 to 1.0) to scale loss during warmup
 
     Returns:
-        Early tool call penalty loss
+        Tuple of (loss tensor, diagnostics dictionary)
     """
-    # If teacher didn't call tools, no penalty
-    if teacher_tool_call_position < 0:
-        return torch.tensor(0.0, requires_grad=True)
+    B, T, V = logits.shape
+    device = logits.device
 
-    # If student didn't call tools, penalize heavily
-    if student_tool_call_position < 0:
-        return torch.tensor(1.0, requires_grad=True)
+    # Mask out examples where tool shouldn't be used
+    should_use_mask = tool_should_be_used.float()  # [B]
+    frac_should_use = should_use_mask.mean().item()
 
-    # Normalize positions to [0, 1]
-    student_norm = student_tool_call_position / sequence_length
-    teacher_norm = teacher_tool_call_position / sequence_length
+    # Apply ramp scaling
+    scaled_ce_weight = ce_weight * ramp_t
+    scaled_json_prior_weight = json_prior_weight * ramp_t
 
-    # Penalty: difference in normalized positions
-    diff = student_norm - teacher_norm
+    # Check if teacher prefix is available
+    has_teacher_prefix = teacher_prefix_ids is not None and teacher_prefix_ids.numel() > 0
+    frac_target_available = 1.0 if has_teacher_prefix else 0.0
 
-    # Only penalize if student is later
-    if diff > 0:
-        return torch.tensor(float(diff), requires_grad=True)
+    loss = torch.tensor(0.0, device=device, requires_grad=True)
+
+    if has_teacher_prefix:
+        # Use teacher prefix IDs for cross-entropy loss
+        # Only compute loss for first N positions and where tool should be used
+        prefix_length = min(N, teacher_prefix_ids.size(1))
+        prefix_logits = logits[:, :prefix_length, :]  # [B, prefix_length, V]
+
+        # Expand mask to positions
+        mask = should_use_mask.unsqueeze(1)  # [B, 1]
+        mask = mask.expand(-1, prefix_length)  # [B, prefix_length]
+
+        # Extract target IDs (pad with -100 if shorter)
+        targets = teacher_prefix_ids[:, :prefix_length].long()  # [B, prefix_length]
+        
+        # Flatten for cross-entropy
+        logits_flat = prefix_logits.reshape(-1, V)  # [B*prefix_length, V]
+        targets_flat = targets.reshape(-1)  # [B*prefix_length]
+        mask_flat = mask.reshape(-1)  # [B*prefix_length]
+
+        # Compute CE loss (ignore -100)
+        ce_loss = F.cross_entropy(logits_flat, targets_flat, ignore_index=-100, reduction='none')  # [B*prefix_length]
+        
+        # Apply mask
+        ce_loss_masked = ce_loss * mask_flat
+        ce_loss_mean = ce_loss_masked.sum() / (mask_flat.sum() + 1e-8)
+
+        loss = loss + scaled_ce_weight * ce_loss_mean
+        mean_json_prior_nll0 = 0.0
     else:
-        return torch.tensor(0.0, requires_grad=True)
+        # Use JSON-envelope prior: encourage {, [, " tokens in first N positions
+        json_start_tokens = ["{", "[", '"']
+        json_token_ids = []
+        for token in json_start_tokens:
+            try:
+                token_id = tokenizer.convert_tokens_to_ids(token)
+                if token_id is not None:
+                    json_token_ids.append(token_id)
+            except (AttributeError, KeyError):
+                pass
+
+        if json_token_ids:
+            # Compute log-probabilities for JSON start tokens
+            first_n_logits = logits[:, :N, :]  # [B, N, V]
+            log_probs = F.log_softmax(first_n_logits, dim=-1)  # [B, N, V]
+
+            # Extract log-probs for JSON tokens
+            json_log_probs_list = []
+            for token_id in json_token_ids:
+                json_log_probs_list.append(log_probs[:, :, token_id])  # [B, N]
+
+            if json_log_probs_list:
+                # Take max log-prob across JSON tokens at each position
+                json_log_probs = torch.stack(json_log_probs_list, dim=0).max(dim=0)[0]  # [B, N]
+                
+                # Negative log-likelihood (we want high probability, so minimize negative)
+                json_nll = -json_log_probs  # [B, N]
+
+                # Apply mask and average
+                mask_expanded = should_use_mask.unsqueeze(1).expand(-1, N)  # [B, N]
+                json_nll_masked = json_nll * mask_expanded
+                json_nll_mean = json_nll_masked.sum() / (mask_expanded.sum() + 1e-8)
+
+                loss = loss + scaled_json_prior_weight * json_nll_mean
+                mean_json_prior_nll0 = json_nll_mean.item() if ramp_t > 0 else 0.0
+            else:
+                mean_json_prior_nll0 = 0.0
+        else:
+            mean_json_prior_nll0 = 0.0
+
+    # Diagnostics
+    diagnostics = {
+        "early_tool.frac_should_use": frac_should_use,
+        "early_tool.frac_target_available": frac_target_available,
+        "early_tool.mean_json_prior_nll0": mean_json_prior_nll0 if not has_teacher_prefix else 0.0,
+    }
+
+    return loss, diagnostics
 
 
 def curriculum_temperature(epoch: int, total_epochs: int) -> float:
@@ -644,15 +755,22 @@ class CodeModePreferenceLoss(nn.Module):
         eligibility_mask = torch.zeros(batch_size, dtype=torch.bool)
 
         for i, meta in enumerate(batch_meta):
-            tool_count = meta.get("tool_count", 0)
-            intermediate_sizes = meta.get("intermediate_sizes", [])
-            pii_tags_present = meta.get("pii_tags_present", False)
+            # Explicit type casting for TorchScript compatibility
+            tool_count: int = int(meta.get("tool_count", 0))
+            intermediate_sizes_raw = meta.get("intermediate_sizes", [])
+            intermediate_sizes: List[int] = intermediate_sizes_raw if isinstance(intermediate_sizes_raw, list) else []
+            pii_tags_present: bool = bool(meta.get("pii_tags_present", False))
 
-            eligible = (
-                tool_count >= self.min_tools
-                or (intermediate_sizes and max(intermediate_sizes) >= self.min_intermediate_chars)
-                or pii_tags_present
-            )
+            # Compute eligibility with explicit boolean logic
+            eligible: bool = False
+            if tool_count >= self.min_tools:
+                eligible = True
+            elif intermediate_sizes and len(intermediate_sizes) > 0:
+                max_size: int = max(intermediate_sizes)
+                if max_size >= self.min_intermediate_chars:
+                    eligible = True
+            elif pii_tags_present:
+                eligible = True
 
             eligibility_mask[i] = eligible
 
@@ -661,7 +779,7 @@ class CodeModePreferenceLoss(nn.Module):
     def forward(
         self,
         student_logits: torch.Tensor,
-        span_targets: Optional[Dict[str, torch.Tensor]] = None,
+        span_targets: Optional[List[Dict[str, Any]]] = None,
         batch_meta: Optional[List[Dict[str, Any]]] = None,
     ) -> torch.Tensor:
         """
@@ -669,7 +787,7 @@ class CodeModePreferenceLoss(nn.Module):
 
         Args:
             student_logits: [B, T, V] student logits
-            span_targets: Optional dict with TS API span targets
+            span_targets: Optional list of dicts with TS API span targets
             batch_meta: Optional list of batch metadata dicts with eligibility info
 
         Returns:
@@ -685,6 +803,56 @@ class CodeModePreferenceLoss(nn.Module):
         # If no items in batch are eligible, return zero loss
         if not eligibility_mask.any():
             return torch.tensor(0.0, device=student_logits.device, requires_grad=True)
+
+        # If no span targets provided, return zero loss
+        if span_targets is None or len(span_targets) == 0:
+            return torch.tensor(0.0, device=student_logits.device, requires_grad=True)
+
+        # Compute log probabilities from logits
+        log_probs = F.log_softmax(student_logits, dim=-1)  # [B, T, V]
+        
+        # Accumulate loss across eligible samples
+        total_loss = torch.tensor(0.0, device=student_logits.device, requires_grad=True)
+        num_eligible = 0
+
+        for i in range(batch_size):
+            if not eligibility_mask[i]:
+                continue
+
+            num_eligible += 1
+            sample_loss = torch.tensor(0.0, device=student_logits.device, requires_grad=True)
+
+            # Get span targets for this sample
+            sample_spans = span_targets[i] if i < len(span_targets) else {}
+            ts_mode_spans = sample_spans.get("ts_mode_spans", [])
+            direct_tool_spans = sample_spans.get("direct_tool_spans", [])
+
+            # Positive reward: encourage TS API spans (import, from, callMCPTool, await)
+            if self.reward_cfg.get("prefer_ts_api_over_direct_tool", True):
+                for start, end in ts_mode_spans:
+                    # Reward log-probability of TS API tokens in these spans
+                    if start < log_probs.size(1) and end <= log_probs.size(1):
+                        span_log_probs = log_probs[i, start:end, :]
+                        # Sum log probabilities for tokens in this span
+                        # Negative because we want to maximize (minimize negative)
+                        sample_loss = sample_loss - self.weights["pos"] * span_log_probs.sum()
+
+            # Negative penalty: discourage direct tool call spans
+            if self.reward_cfg.get("penalize_tool_result_roundtrip", True):
+                for start, end in direct_tool_spans:
+                    # Penalize log-probability of direct tool tokens
+                    if start < log_probs.size(1) and end <= log_probs.size(1):
+                        span_log_probs = log_probs[i, start:end, :]
+                        # Positive penalty to discourage these spans
+                        sample_loss = sample_loss + self.weights["neg"] * span_log_probs.sum()
+
+            total_loss = total_loss + sample_loss
+
+        # Average over eligible samples
+        if num_eligible > 0:
+            total_loss = total_loss / num_eligible
+
+        return total_loss
 
 
 def caws_compliance_loss(

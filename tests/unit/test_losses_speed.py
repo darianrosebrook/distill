@@ -43,9 +43,10 @@ def test_length_kd_hinge():
     """Test that hinge mechanism only penalizes excess above threshold."""
     B, T = 2, 16
     # Student is 20% longer than teacher (above 15% hinge)
-    s_mask = torch.ones(B, int(T * 1.2))
-    s_mask = torch.nn.functional.pad(s_mask, (0, T - s_mask.size(1)))
-    t_mask = torch.ones(B, T)
+    # Create student mask with actual length 20% longer (19 tokens vs 16)
+    student_len = int(T * 1.2)  # 19 tokens
+    s_mask = torch.ones(B, student_len)  # Student has 19 active tokens
+    t_mask = torch.ones(B, T)  # Teacher has 16 active tokens
     required = torch.tensor([False, False])  # Missing fields
 
     loss, d = length_aware_kd_loss(s_mask, t_mask, required, hinge=0.15, slope=1.0)

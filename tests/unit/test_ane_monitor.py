@@ -125,8 +125,7 @@ class TestANEResidencyMonitor:
         assert "error" in info
 
     @patch("coreml.runtime.ane_monitor.COREML_AVAILABLE", True)
-    @patch("coreml.runtime.ane_monitor.ct")
-    def test_get_model_ops_info_with_model(self, mock_ct):
+    def test_get_model_ops_info_with_model(self):
         """Test getting ops info with model."""
         # Mock CoreML model
         mock_spec = Mock()
@@ -150,7 +149,8 @@ class TestANEResidencyMonitor:
 
         monitor = ANEResidencyMonitor(model_mlpackage_path="test.mlpackage")
 
-        with patch("coreml.runtime.ane_monitor.ct", mock_ct):
+        # Patch coremltools.models.MLModel where it's actually used
+        with patch("coremltools.models.MLModel", return_value=mock_model):
             info = monitor.get_model_ops_info()
 
         assert "total_ops" in info

@@ -29,7 +29,8 @@ from scripts.util_sanitize import allowlist_urls
 def _eligible(r: Dict[str, Any]) -> bool:
     """Check if result is eligible for integration F1."""
     return r.get("integration_f1_eligible", False) or (
-        r.get("integration_f1_lax") is not None or r.get("integration_f1_strict") is not None
+        r.get("integration_f1_lax") is not None or r.get(
+            "integration_f1_strict") is not None
     )
 
 
@@ -105,7 +106,8 @@ def per_tool_deltas(
     for item, res in zip(items, results):
         meta = item.get("metadata", {})
         calls = meta.get("call_sequence", []) or []
-        tool_names = {c.get("name") for c in calls if isinstance(c, dict) and c.get("name")}
+        tool_names = {c.get("name")
+                      for c in calls if isinstance(c, dict) and c.get("name")}
         for t in tool_names:
             buckets.setdefault(t, []).append(res)
 
@@ -219,12 +221,13 @@ def contains_grounding(text: str, spans: List[List[int]], fields: Dict[str, str]
                 normalized_value_sets.append(("numeric", digits))
             except (ValueError, TypeError):
                 # String: normalize text + synonyms
-                normalized_value_sets.append(("string", expand_synonyms(value)))
+                normalized_value_sets.append(
+                    ("string", expand_synonyms(value)))
 
     # Check if at least one span contains at least one value (or synonym)
     for span in spans:
         if len(span) >= 2:
-            seg_text = text[span[0] : span[1]]
+            seg_text = text[span[0]: span[1]]
             seg_normalized = norm(seg_text)
 
             for value_type, value_set in normalized_value_sets:
@@ -248,7 +251,7 @@ def parse_tool_json_slice(text: str, start: int, end: int):
         r = s.rfind("}")
         if left_brace == -1 or r == -1:
             return None
-        return json.loads(s[left_brace : r + 1])
+        return json.loads(s[left_brace: r + 1])
     except Exception:
         return None
 
@@ -294,8 +297,10 @@ def check_privacy(text: str) -> Dict[str, Any]:
     contextual_pii = 0
 
     # Check emails/phones near contextual keywords (downgrade to contextual)
-    contextual_keywords = {"contact", "support", "careers", "press", "help", "info"}
-    high_severity_keywords = {"invoice", "ssn", "patient", "claim", "medical", "financial"}
+    contextual_keywords = {"contact", "support",
+                           "careers", "press", "help", "info"}
+    high_severity_keywords = {"invoice", "ssn",
+                              "patient", "claim", "medical", "financial"}
 
     for email in emails:
         # Find email position in text
@@ -332,8 +337,11 @@ def check_privacy(text: str) -> Dict[str, Any]:
             else:
                 medium_severity_pii += 1
 
-    # Privacy OK if no high-severity PII and URL allowlist passes
-    privacy_ok = high_severity_pii == 0 and url_ok
+    # Privacy OK if no PII of any kind (high, medium, contextual), no UUIDs, and URL allowlist passes
+    # UUIDs and emails are considered PII violations as they can be used to identify individuals/records
+    total_pii = high_severity_pii + medium_severity_pii + contextual_pii
+    privacy_ok = total_pii == 0 and len(
+        uuids) == 0 and len(emails) == 0 and url_ok
 
     return {
         "emails_found": len(emails),
@@ -448,7 +456,8 @@ def grounded_values_in_span_strict(seg: str, fields: Dict[str, str]) -> bool:
                 # For now, normalize by removing all non-digit characters except one decimal point
                 seg_digits = re.sub(r"[^\d.]", "", seg_norm)
                 # Also try replacing comma with period (for European formats like 1.234,56)
-                seg_digits_alt = re.sub(r"[^\d,]", "", seg_norm).replace(",", ".")
+                seg_digits_alt = re.sub(
+                    r"[^\d,]", "", seg_norm).replace(",", ".")
                 try:
                     seg_num = float(seg_digits) if seg_digits else None
                     seg_num_alt = (
@@ -532,7 +541,7 @@ def compute_integration_f1(
     grounded_count = 0
     for span in integration_spans_bytes:
         if len(span) >= 2:
-            seg = teacher_text[span[0] : span[1]]
+            seg = teacher_text[span[0]: span[1]]
             if grounded_values_in_span(seg, tool_result_fields):
                 grounded_count += 1
 
@@ -577,7 +586,7 @@ def compute_integration_f1_strict(
     grounded_count = 0
     for span in integration_spans_bytes:
         if len(span) >= 2:
-            seg = teacher_text[span[0] : span[1]]
+            seg = teacher_text[span[0]: span[1]]
             if grounded_values_in_span_strict(seg, tool_result_fields):
                 grounded_count += 1
 
@@ -622,7 +631,8 @@ def verify_token_alignment(
         text, text_norm=text_norm, line_endings=line_endings
     )
 
-    token_span = bytes_to_token_span(text_normalized, span_bytes[0], span_bytes[1], tokenizer)
+    token_span = bytes_to_token_span(
+        text_normalized, span_bytes[0], span_bytes[1], tokenizer)
     if token_span is None:
         return False, None
 
@@ -630,11 +640,11 @@ def verify_token_alignment(
     try:
         decoded = tokenizer.decode(
             tokenizer.encode(text_normalized[: span_bytes[1]], add_special_tokens=False)[
-                token_span[0] : token_span[1]
+                token_span[0]: token_span[1]
             ],
             skip_special_tokens=True,
         )
-        original = text_normalized[span_bytes[0] : span_bytes[1]]
+        original = text_normalized[span_bytes[0]: span_bytes[1]]
         # Normalize whitespace for comparison
         decoded_norm = " ".join(decoded.split())
         original_norm = " ".join(original.split())
@@ -670,7 +680,8 @@ def verify_item(
     if not privacy_check["privacy_ok"]:
         problems.append("privacy_violation")
         if privacy_check["high_severity_pii"] > 0:
-            problems.append(f"high_severity_pii:{privacy_check['high_severity_pii']}")
+            problems.append(
+                f"high_severity_pii:{privacy_check['high_severity_pii']}")
         if privacy_check["emails_found"] > 0:
             problems.append(f"emails_found:{privacy_check['emails_found']}")
         if privacy_check["uuids_found"] > 0:
@@ -679,7 +690,8 @@ def verify_item(
             problems.append("url_not_in_allowlist")
     # Warn on medium-severity PII (but don't fail)
     if privacy_check.get("medium_severity_pii", 0) > 0:
-        problems.append(f"medium_severity_pii_warning:{privacy_check['medium_severity_pii']}")
+        problems.append(
+            f"medium_severity_pii_warning:{privacy_check['medium_severity_pii']}")
 
     # ToS compliance check: assert teacher_reasoning_content field is absent
     if "teacher_reasoning_content" in item:
@@ -842,9 +854,11 @@ def verify_item(
         tool_name_spans_count = len(tool_name_spans_bytes)
 
         if json_spans_count != k:
-            problems.append(f"json_args_spans_mismatch:expected_{k}_got_{json_spans_count}")
+            problems.append(
+                f"json_args_spans_mismatch:expected_{k}_got_{json_spans_count}")
         if tool_name_spans_count != k and tool_name_spans_count > 0:
-            problems.append(f"tool_name_spans_mismatch:expected_{k}_got_{tool_name_spans_count}")
+            problems.append(
+                f"tool_name_spans_mismatch:expected_{k}_got_{tool_name_spans_count}")
 
     # Integration F1 check (per-item) - compute both lax and strict
     integration_f1_lax = 0.0
@@ -860,18 +874,21 @@ def verify_item(
     if integration_spans_bytes and tool_result_fields and call_sequence:
         # Compute lax F1
         integration_precision_lax, integration_recall_lax, integration_f1_lax = (
-            compute_integration_f1(teacher, integration_spans_bytes, tool_result_fields)
+            compute_integration_f1(
+                teacher, integration_spans_bytes, tool_result_fields)
         )
         # Compute strict F1
         integration_precision_strict, integration_recall_strict, integration_f1_strict = (
-            compute_integration_f1_strict(teacher, integration_spans_bytes, tool_result_fields)
+            compute_integration_f1_strict(
+                teacher, integration_spans_bytes, tool_result_fields)
         )
         # Gate on lax F1 (keep existing threshold)
         if integration_f1_lax < 0.75:
             problems.append(f"low_integration_f1_lax:{integration_f1_lax:.2f}")
         # Warn on strict failures (but don't gate)
         if integration_f1_strict < 0.75:
-            problems.append(f"low_integration_f1_strict:{integration_f1_strict:.2f}")
+            problems.append(
+                f"low_integration_f1_strict:{integration_f1_strict:.2f}")
 
     # Grounding check: verify integration spans contain tool result fields (lax mode)
     tool_result_fields = meta.get("tool_result_fields", {})
@@ -884,7 +901,8 @@ def verify_item(
 
     # Negative control check: require grounded=false when negative_control=true
     if negative_control and integration_grounded:
-        problems.append("negative_control_grounded:integration_spans_grounded_when_should_be_empty")
+        problems.append(
+            "negative_control_grounded:integration_spans_grounded_when_should_be_empty")
         ok = False
     elif (
         not negative_control
@@ -914,7 +932,8 @@ def verify_item(
         for i, (call, span) in enumerate(zip(call_sequence, json_args_spans_bytes)):
             if len(span) >= 2:
                 # Find the tool JSON in teacher text
-                tool_json = json.dumps(call, separators=(",", ":"), ensure_ascii=False)
+                tool_json = json.dumps(call, separators=(
+                    ",", ":"), ensure_ascii=False)
                 tool_start = teacher.find(tool_json)
                 if tool_start >= 0:
                     tool_end = tool_start + len(tool_json)
@@ -971,14 +990,17 @@ def check_stratification_backbone(
                 continue  # Skip multi_step - it doesn't have single_call samples
             if coverage.get((scenario, "single_call"), 0) == 0:
                 missing.append(
-                    {"scenario": scenario, "complexity": "single_call", "required": 1, "actual": 0}
+                    {"scenario": scenario, "complexity": "single_call",
+                        "required": 1, "actual": 0}
                 )
 
         # Check: at least one multi_call overall
-        multi_call_found = any(count > 0 for (s, c), count in coverage.items() if c == "multi_call")
+        multi_call_found = any(count > 0 for (
+            s, c), count in coverage.items() if c == "multi_call")
         if not multi_call_found:
             missing.append(
-                {"scenario": "any", "complexity": "multi_call", "required": 1, "actual": 0}
+                {"scenario": "any", "complexity": "multi_call",
+                    "required": 1, "actual": 0}
             )
 
         # Check: at least one branching_error_recovery overall
@@ -1058,7 +1080,8 @@ def main():
     ap = argparse.ArgumentParser(description="Verify contextual dataset")
     ap.add_argument("--in", required=True, help="Input JSONL file")
     ap.add_argument("--report", required=True, help="Output report JSON file")
-    ap.add_argument("--tokenizer", default=None, help="Tokenizer path (optional)")
+    ap.add_argument("--tokenizer", default=None,
+                    help="Tokenizer path (optional)")
     ap.add_argument(
         "--long-token-threshold",
         type=int,
@@ -1144,7 +1167,8 @@ def main():
         try:
             from transformers import AutoTokenizer
 
-            secondary_tok = AutoTokenizer.from_pretrained(args.secondary_tokenizer, use_fast=True)
+            secondary_tok = AutoTokenizer.from_pretrained(
+                args.secondary_tokenizer, use_fast=True)
         except Exception as e:
             print(
                 f"[VERIFY] WARN: Could not load secondary tokenizer from {args.secondary_tokenizer}: {e}"
@@ -1158,7 +1182,8 @@ def main():
             # Try to load as a Python module path or file path
             import importlib.util
 
-            spec = importlib.util.spec_from_file_location("next_registry", args.next_registry)
+            spec = importlib.util.spec_from_file_location(
+                "next_registry", args.next_registry)
             if spec and spec.loader:
                 next_reg_module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(next_reg_module)
@@ -1168,9 +1193,11 @@ def main():
                     else None
                 )
             if next_reg is None:
-                print(f"[VERIFY] WARN: Could not load next registry from {args.next_registry}")
+                print(
+                    f"[VERIFY] WARN: Could not load next registry from {args.next_registry}")
         except Exception as e:
-            print(f"[VERIFY] WARN: Could not load next registry from {args.next_registry}: {e}")
+            print(
+                f"[VERIFY] WARN: Could not load next registry from {args.next_registry}: {e}")
             next_reg = None
 
     # Build tool schema guard: pre-compute known tools
@@ -1180,7 +1207,8 @@ def main():
         schema = reg.get(tool_name)
         if schema:
             schema_str = json.dumps(schema, sort_keys=True)
-            tool_schema_hashes[tool_name] = hashlib.sha256(schema_str.encode()).hexdigest()[:8]
+            tool_schema_hashes[tool_name] = hashlib.sha256(
+                schema_str.encode()).hexdigest()[:8]
 
     # Load dataset schema for validation (optional)
     # Use Path.resolve() for zip/CI safety
@@ -1188,7 +1216,8 @@ def main():
     if HAS_JSONSCHEMA:
         from pathlib import Path
 
-        schema_path = Path(__file__).resolve().parents[1] / "schemas" / "dataset_item.schema.json"
+        schema_path = Path(__file__).resolve(
+        ).parents[1] / "schemas" / "dataset_item.schema.json"
         try:
             with open(schema_path, "r", encoding="utf-8") as f:
                 dataset_schema = json.load(f)
@@ -1223,7 +1252,8 @@ def main():
                 # Validate against schema if available
                 if dataset_schema and HAS_JSONSCHEMA:
                     try:
-                        jsonschema.validate(instance=item, schema=dataset_schema)
+                        jsonschema.validate(
+                            instance=item, schema=dataset_schema)
                     except jsonschema.ValidationError as e:
                         schema_validation_errors.append(
                             {
@@ -1255,7 +1285,8 @@ def main():
         # Extract fingerprints from header
         header_tokenizer_fp = dataset_header.get("tokenizer_fingerprint")
         header_registry_sha256 = dataset_header.get("tool_registry_sha256")
-        header_integration_span_cap = dataset_header.get("integration_span_cap", 3)
+        header_integration_span_cap = dataset_header.get(
+            "integration_span_cap", 3)
 
         # Update integration span cap from header
         integration_span_cap = header_integration_span_cap
@@ -1267,9 +1298,11 @@ def main():
             try:
                 from scripts.generate_contextual_prompts import compute_tokenizer_fingerprint
 
-                current_tokenizer_fp = compute_tokenizer_fingerprint(args.tokenizer)
+                current_tokenizer_fp = compute_tokenizer_fingerprint(
+                    args.tokenizer)
             except Exception as e:
-                fingerprint_warnings.append(f"Could not compute current tokenizer fingerprint: {e}")
+                fingerprint_warnings.append(
+                    f"Could not compute current tokenizer fingerprint: {e}")
 
         # Compute current registry fingerprint
         try:
@@ -1277,7 +1310,8 @@ def main():
 
             current_registry_sha256 = compute_registry_fingerprint(reg)
         except Exception as e:
-            fingerprint_warnings.append(f"Could not compute current registry fingerprint: {e}")
+            fingerprint_warnings.append(
+                f"Could not compute current registry fingerprint: {e}")
             current_registry_sha256 = None
 
         # Verify tokenizer fingerprint
@@ -1358,13 +1392,15 @@ def main():
                 if tool_name:
                     next_schema = next_reg.get(tool_name)
                     if not next_schema:
-                        res["problems"].append(f"unknown_tool_next_registry:{tool_name}")
+                        res["problems"].append(
+                            f"unknown_tool_next_registry:{tool_name}")
                     else:
                         # Check arg semantics against next registry
                         args_obj = call.get("arguments", {})
                         sem_ok, errs = validate_args(next_schema, args_obj)
                         if not sem_ok:
-                            res["problems"].extend([f"arg_next_registry_{e}" for e in errs])
+                            res["problems"].extend(
+                                [f"arg_next_registry_{e}" for e in errs])
 
         # Track failures for CI-friendly output
         if res["problems"]:
@@ -1427,7 +1463,8 @@ def main():
             r.get("integration_f1_lax", r.get("integration_f1", 0.0)) for r in eligible_results
         ]
         precisions_lax = [
-            r.get("integration_precision_lax", r.get("integration_precision", 0.0))
+            r.get("integration_precision_lax", r.get(
+                "integration_precision", 0.0))
             for r in eligible_results
         ]
         recalls_lax = [
@@ -1435,21 +1472,29 @@ def main():
             for r in eligible_results
         ]
         avg_integration_f1_macro_lax = sum(f1_scores_lax) / len(f1_scores_lax)
-        avg_integration_precision_macro_lax = sum(precisions_lax) / len(precisions_lax)
+        avg_integration_precision_macro_lax = sum(
+            precisions_lax) / len(precisions_lax)
         avg_integration_recall_macro_lax = sum(recalls_lax) / len(recalls_lax)
 
         # Strict mode metrics
-        f1_scores_strict = [r.get("integration_f1_strict", 0.0) for r in eligible_results]
-        precisions_strict = [r.get("integration_precision_strict", 0.0) for r in eligible_results]
-        recalls_strict = [r.get("integration_recall_strict", 0.0) for r in eligible_results]
-        avg_integration_f1_macro_strict = sum(f1_scores_strict) / len(f1_scores_strict)
-        avg_integration_precision_macro_strict = sum(precisions_strict) / len(precisions_strict)
-        avg_integration_recall_macro_strict = sum(recalls_strict) / len(recalls_strict)
+        f1_scores_strict = [r.get("integration_f1_strict", 0.0)
+                            for r in eligible_results]
+        precisions_strict = [
+            r.get("integration_precision_strict", 0.0) for r in eligible_results]
+        recalls_strict = [r.get("integration_recall_strict", 0.0)
+                          for r in eligible_results]
+        avg_integration_f1_macro_strict = sum(
+            f1_scores_strict) / len(f1_scores_strict)
+        avg_integration_precision_macro_strict = sum(
+            precisions_strict) / len(precisions_strict)
+        avg_integration_recall_macro_strict = sum(
+            recalls_strict) / len(recalls_strict)
 
         # Micro-F1: aggregate TP/FP/FN across all items, then compute F1
         # For micro-F1, we sum all grounded spans and total spans across items
         total_grounded_spans_lax = sum(
-            precisions_lax[i] * len(item.get("metadata", {}).get("integration_spans_bytes", []))
+            precisions_lax[i] * len(item.get("metadata",
+                                    {}).get("integration_spans_bytes", []))
             for i, item in enumerate(eligible_items)
             if len(item.get("metadata", {}).get("integration_spans_bytes", [])) > 0
         )
@@ -1474,7 +1519,8 @@ def main():
 
         # Micro-F1 strict
         total_grounded_spans_strict = sum(
-            precisions_strict[i] * len(item.get("metadata", {}).get("integration_spans_bytes", []))
+            precisions_strict[i] * len(item.get("metadata",
+                                       {}).get("integration_spans_bytes", []))
             for i, item in enumerate(eligible_items)
             if len(item.get("metadata", {}).get("integration_spans_bytes", [])) > 0
         )
@@ -1494,8 +1540,10 @@ def main():
 
         # Count misses (recall = 0) for both modes
         integration_misses_count_lax = sum(1 for r in recalls_lax if r == 0.0)
-        integration_misses_count_strict = sum(1 for r in recalls_strict if r == 0.0)
-        allowed_integration_f1_misses = max(1, math.ceil(0.05 * len(eligible_items)))
+        integration_misses_count_strict = sum(
+            1 for r in recalls_strict if r == 0.0)
+        allowed_integration_f1_misses = max(
+            1, math.ceil(0.05 * len(eligible_items)))
 
         # Backward compatibility: use lax metrics for old field names
         avg_integration_f1 = avg_integration_f1_macro_lax
@@ -1528,7 +1576,8 @@ def main():
     # Integration span cap check (already set from header if available, otherwise default to 3)
     integration_spans_over_cap_count = 0
     integration_spans_over_cap_items = []
-    integration_span_count_histogram = defaultdict(int)  # Count of items with N spans
+    integration_span_count_histogram = defaultdict(
+        int)  # Count of items with N spans
     for item_idx, item in enumerate(items):
         meta = item.get("metadata", {})
         integration_spans = meta.get("integration_spans_bytes", [])
@@ -1595,7 +1644,8 @@ def main():
 
     # Count-based gates: allow max(1, ceil(0.05 * N)) misses
     allowed_integration_misses = (
-        max(1, math.ceil(0.05 * integration_total)) if integration_total > 0 else 1
+        max(1, math.ceil(0.05 * integration_total)
+            ) if integration_total > 0 else 1
     )
     allowed_grounding_misses = (
         max(1, math.ceil(0.05 * integration_grounded_total))
@@ -1607,7 +1657,8 @@ def main():
     grounding_misses_count = len(grounding_misses)
 
     integration_coverage = (
-        round(integration_ok / integration_total, 3) if integration_total > 0 else None
+        round(integration_ok / integration_total,
+              3) if integration_total > 0 else None
     )
     integration_grounded_coverage = (
         round(integration_grounded_ok / integration_grounded_total, 3)
@@ -1631,7 +1682,8 @@ def main():
             multi_call_parity_ok += 1
         else:
             # Find the actual line number in the original items list
-            actual_line = next((i + 1 for i, it in enumerate(items) if it == item), item_idx + 1)
+            actual_line = next(
+                (i + 1 for i, it in enumerate(items) if it == item), item_idx + 1)
             multi_call_parity_misses.append(
                 {
                     "line": actual_line,
@@ -1659,7 +1711,8 @@ def main():
     controls_with_integration = 0
 
     allowed_multi_call_misses = (
-        max(1, math.ceil(0.05 * multi_call_parity_total)) if multi_call_parity_total > 0 else 1
+        max(1, math.ceil(0.05 * multi_call_parity_total)
+            ) if multi_call_parity_total > 0 else 1
     )
     multi_call_misses_count = len(multi_call_parity_misses)
 
@@ -1830,7 +1883,8 @@ def main():
             f"[VERIFY] FAIL: Found {len(duplicate_sample_ids)} duplicate sample_ids (sharding violation)"
         )
         for dup in duplicate_sample_ids[:5]:
-            print(f"  - {dup['sample_id']}: lines {dup['line_1']} and {dup['line_2']}")
+            print(
+                f"  - {dup['sample_id']}: lines {dup['line_1']} and {dup['line_2']}")
         gates_ok = False
         passed = False
 
@@ -1970,8 +2024,10 @@ def main():
                 if any(r.get("token_align_ok") is not None for r in results_t2)
                 else None
             )
-            summary["avg_integration_f1_macro_lax_t2"] = round(macro_f1(results_t2, mode="lax"), 3)
-            summary["avg_integration_f1_micro_lax_t2"] = round(micro_f1(results_t2, mode="lax"), 3)
+            summary["avg_integration_f1_macro_lax_t2"] = round(
+                macro_f1(results_t2, mode="lax"), 3)
+            summary["avg_integration_f1_micro_lax_t2"] = round(
+                micro_f1(results_t2, mode="lax"), 3)
             summary["avg_integration_f1_macro_strict_t2"] = round(
                 macro_f1(results_t2, mode="strict"), 3
             )
@@ -1987,7 +2043,8 @@ def main():
 
     # Warn on large per-tool deltas
     per_tool = summary.get("per_tool_deltas", {})
-    large_deltas = {t: v for t, v in per_tool.items() if v.get("delta_lax_minus_strict", 0.0) > 0.2}
+    large_deltas = {t: v for t, v in per_tool.items() if v.get(
+        "delta_lax_minus_strict", 0.0) > 0.2}
     if large_deltas:
         print("[VERIFY] WARN: Large lax→strict deltas detected per tool:")
         for t, v in sorted(
@@ -2036,16 +2093,19 @@ def main():
                 args.secondary_tokenizer
             )
         except Exception as e:
-            print(f"[VERIFY] WARN: Could not compute secondary tokenizer fingerprint: {e}")
+            print(
+                f"[VERIFY] WARN: Could not compute secondary tokenizer fingerprint: {e}")
 
     # Add next registry SHA256 if provided
     if next_reg:
         try:
             from scripts.generate_contextual_prompts import compute_registry_fingerprint
 
-            report_header["next_registry_sha256"] = compute_registry_fingerprint(next_reg)
+            report_header["next_registry_sha256"] = compute_registry_fingerprint(
+                next_reg)
         except Exception as e:
-            print(f"[VERIFY] WARN: Could not compute next registry fingerprint: {e}")
+            print(
+                f"[VERIFY] WARN: Could not compute next registry fingerprint: {e}")
 
     report_data = {
         "header": report_header,
@@ -2060,7 +2120,8 @@ def main():
     print(f"[VERIFY] Total samples: {total}")
     print(f"[VERIFY] OK rate: {summary['ok_rate']:.3f}")
     print(f"[VERIFY] Semantic OK rate: {summary['semantic_ok_rate']:.3f}")
-    print(f"[VERIFY] CAWS header OK rate: {summary['caws_header_ok_rate']:.3f}")
+    print(
+        f"[VERIFY] CAWS header OK rate: {summary['caws_header_ok_rate']:.3f}")
     print(f"[VERIFY] Privacy OK rate: {summary['privacy_ok_rate']:.3f}")
     if eligible_results:
         print(
@@ -2073,10 +2134,12 @@ def main():
             f"[VERIFY] Eligible items: {summary['integration_f1_eligible_count']}, misses (lax/strict): {summary['integration_f1_misses_lax']}/{summary['integration_f1_misses_strict']}, allowed: {summary['integration_f1_allowed_misses']}"
         )
     else:
-        print(f"[VERIFY] Avg integration F1: {summary['avg_integration_f1']:.3f}")
+        print(
+            f"[VERIFY] Avg integration F1: {summary['avg_integration_f1']:.3f}")
 
     if stratification:
-        print(f"[VERIFY] Stratification: {len(stratification['missing_cells'])} missing cells")
+        print(
+            f"[VERIFY] Stratification: {len(stratification['missing_cells'])} missing cells")
         if not stratification["all_cells_populated"]:
             print("[VERIFY] WARN: Some stratification cells are missing!")
 
@@ -2111,15 +2174,18 @@ def main():
         passed = False
         gates_ok = False
     if summary["semantic_ok_rate"] < 0.98:
-        print(f"[VERIFY] FAIL: Semantic OK rate {summary['semantic_ok_rate']:.3f} < 0.98")
+        print(
+            f"[VERIFY] FAIL: Semantic OK rate {summary['semantic_ok_rate']:.3f} < 0.98")
         passed = False
         gates_ok = False
     if summary["caws_header_ok_rate"] < 0.95:
-        print(f"[VERIFY] FAIL: CAWS header OK rate {summary['caws_header_ok_rate']:.3f} < 0.95")
+        print(
+            f"[VERIFY] FAIL: CAWS header OK rate {summary['caws_header_ok_rate']:.3f} < 0.95")
         passed = False
         gates_ok = False
     if summary["privacy_ok_rate"] < 1.0:
-        print(f"[VERIFY] FAIL: Privacy OK rate {summary['privacy_ok_rate']:.3f} < 1.0")
+        print(
+            f"[VERIFY] FAIL: Privacy OK rate {summary['privacy_ok_rate']:.3f} < 1.0")
         passed = False
         gates_ok = False
     # Control contamination check: hard fail if controls have integration spans (must run before gates)
@@ -2188,13 +2254,14 @@ def main():
                 sample_id = meta.get("sample_id", "unknown")
                 fields = meta.get("tool_result_fields", {})
                 spans = meta.get("integration_spans_bytes", [])
-                f1_lax = result.get("integration_f1_lax", result.get("integration_f1", 0.0))
+                f1_lax = result.get("integration_f1_lax",
+                                    result.get("integration_f1", 0.0))
                 print(
                     f"  - {sample_id}: F1_lax={f1_lax:.2f}, fields={list(fields.keys())}, spans={len(spans)}"
                 )
                 if spans and len(spans[0]) >= 2:
                     teacher_text = item.get("teacher_text", "")
-                    span_text = teacher_text[spans[0][0] : spans[0][1]]
+                    span_text = teacher_text[spans[0][0]: spans[0][1]]
                     print(f'    First span: "{span_text[:80]}..."')
 
         # Warn on strict failures (but don't gate)
@@ -2217,14 +2284,15 @@ def main():
                 fields = meta.get("tool_result_fields", {})
                 spans = meta.get("integration_spans_bytes", [])
                 f1_strict = result.get("integration_f1_strict", 0.0)
-                f1_lax = result.get("integration_f1_lax", result.get("integration_f1", 0.0))
+                f1_lax = result.get("integration_f1_lax",
+                                    result.get("integration_f1", 0.0))
                 print(
                     f"  - {sample_id}: F1_strict={f1_strict:.2f} (F1_lax={f1_lax:.2f}), fields={list(fields.keys())}, spans={len(spans)}"
                 )
                 # Show diff: expected fields vs found text
                 if spans and len(spans[0]) >= 2:
                     teacher_text = item.get("teacher_text", "")
-                    span_text = teacher_text[spans[0][0] : spans[0][1]]
+                    span_text = teacher_text[spans[0][0]: spans[0][1]]
                     expected_keys = [
                         k for k in ["summary", "lines", "count", "top_k"] if k in fields
                     ]
@@ -2234,9 +2302,11 @@ def main():
     if stratification:
         # For N < 36, check backbone only
         if total < 36:
-            backbone_ok, backbone_missing = check_stratification_backbone(items, total)
+            backbone_ok, backbone_missing = check_stratification_backbone(
+                items, total)
             if not backbone_ok:
-                print(f"[VERIFY] FAIL: Stratification backbone missing: {backbone_missing}")
+                print(
+                    f"[VERIFY] FAIL: Stratification backbone missing: {backbone_missing}")
                 passed = False
                 gates_ok = False
             elif len(stratification["missing_cells"]) > 0:
@@ -2299,14 +2369,17 @@ def main():
             gates_ok = False
             # Print misses with details
             for miss in grounding_misses[:3]:
-                print(f"  - line {miss['line']} ({miss['sample_id']}): integration_not_grounded")
-                print(f'    tool_result_fields.summary = "{miss.get("summary", "N/A")}"')
+                print(
+                    f"  - line {miss['line']} ({miss['sample_id']}): integration_not_grounded")
+                print(
+                    f'    tool_result_fields.summary = "{miss.get("summary", "N/A")}"')
                 if miss.get("spans") and len(miss["spans"]) > 0 and len(miss["spans"][0]) >= 2:
                     # Get teacher text for this item
                     item_idx = miss["line"] - 1
                     if item_idx < len(items):
                         teacher_text = items[item_idx].get("teacher_text", "")
-                        span_text = teacher_text[miss["spans"][0][0] : miss["spans"][0][1]]
+                        span_text = teacher_text[miss["spans"]
+                                                 [0][0]: miss["spans"][0][1]]
                         print(f'    spans[0] = "{span_text[:100]}..."')
 
     # Multi-call parity check (count-based)
@@ -2323,9 +2396,11 @@ def main():
                 )
 
     # Adversarial quota check
-    required_adversarial_types = {"range_violation", "malformed_json", "ambiguity"}
+    required_adversarial_types = {
+        "range_violation", "malformed_json", "ambiguity"}
     if total >= 30 and not summary.get("adversarial_quota_ok", True):
-        missing = required_adversarial_types - set(summary.get("adversarial_by_type", {}).keys())
+        missing = required_adversarial_types - \
+            set(summary.get("adversarial_by_type", {}).keys())
         print(f"[VERIFY] FAIL: Adversarial quota missing types: {missing}")
         passed = False
         gates_ok = False
@@ -2335,7 +2410,8 @@ def main():
         print("\n[VERIFY] First 5 failing items:")
         for fail_item in failing_items[:5]:
             line_num = fail_item.get("line", "?")
-            problems = fail_item.get("problems", [fail_item.get("problem", "unknown")])
+            problems = fail_item.get(
+                "problems", [fail_item.get("problem", "unknown")])
             sample_id = fail_item.get("sample_id", f"line_{line_num}")
             print(f"  Line {line_num} ({sample_id}): {', '.join(problems)}")
             if "expected" in fail_item:
@@ -2345,7 +2421,8 @@ def main():
 
     # Performance budget check
     verification_time_sec = time.time() - verification_start_time
-    time_per_100_items = (verification_time_sec / total) * 100 if total > 0 else 0.0
+    time_per_100_items = (verification_time_sec / total) * \
+        100 if total > 0 else 0.0
 
     if time_per_100_items > args.perf_budget_sec_per_100:
         print(

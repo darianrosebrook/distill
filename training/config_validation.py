@@ -98,13 +98,15 @@ def validate_training_config(config: Dict[str, Any]) -> List[str]:
     Returns:
         List of validation error messages (empty if valid)
     """
-    try:
-        jsonschema.validate(config, TRAINING_CONFIG_SCHEMA)
-        return []
-    except jsonschema.ValidationError as e:
-        return [f"Configuration validation error: {e.message}"]
-    except jsonschema.SchemaError as e:
-        return [f"Schema validation error: {e.message}"]
+    errors = []
+    validator = jsonschema.Draft7Validator(TRAINING_CONFIG_SCHEMA)
+    
+    for error in validator.iter_errors(config):
+        # Build error message with path
+        path = ".".join(str(p) for p in error.path) if error.path else "root"
+        errors.append(f"Configuration validation error at '{path}': {error.message}")
+    
+    return errors
 
 
 def validate_config_file(config_path: Path) -> List[str]:
@@ -115,9 +117,12 @@ def validate_config_file(config_path: Path) -> List[str]:
 
     Returns:
         List of validation error messages (empty if valid)
+        
+    Raises:
+        FileNotFoundError: If configuration file does not exist
     """
     if not config_path.exists():
-        return [f"Configuration file not found: {config_path}"]
+        raise FileNotFoundError(f"Configuration file not found: {config_path}")
 
     try:
         # Load configuration
@@ -218,17 +223,20 @@ def save_config_template(output_path: Path) -> None:
     print(f"Configuration template saved to: {output_path}")
 
 
-def merge_configs(config_files: List[str]) -> Dict[str, Any]:
+def merge_configs(config_files: List[str], validate_final: bool = False) -> Dict[str, Any]:
     """Merge multiple configuration files.
 
     Args:
         config_files: List of configuration file paths
+        validate_final: Whether to validate the final merged configuration (default: False)
 
     Returns:
         Merged configuration dictionary
 
     Raises:
         ValueError: If configuration files are invalid or conflicting
+        FileNotFoundError: If configuration file does not exist
+        yaml.YAMLError: If YAML parsing fails
     """
     merged_config = {}
 
@@ -236,14 +244,9 @@ def merge_configs(config_files: List[str]) -> Dict[str, Any]:
         config_path = Path(config_file)
 
         if not config_path.exists():
-            raise ValueError(f"Configuration file not found: {config_path}")
+            raise FileNotFoundError(f"Configuration file not found: {config_path}")
 
-        # Validate individual config
-        errors = validate_config_file(config_path)
-        if errors:
-            raise ValueError(f"Invalid configuration in {config_path}: {'; '.join(errors)}")
-
-        # Load and merge
+        # Load configuration (don't validate individual files - they may be partial)
         with open(config_path, "r") as f:
             if config_path.suffix.lower() in [".yaml", ".yml"]:
                 config = yaml.safe_load(f)
@@ -252,6 +255,12 @@ def merge_configs(config_files: List[str]) -> Dict[str, Any]:
 
         # Deep merge
         merged_config = _deep_merge(merged_config, config)
+
+    # Optionally validate the final merged configuration
+    if validate_final:
+        errors = validate_training_config(merged_config)
+        if errors:
+            raise ValueError(f"Invalid merged configuration: {'; '.join(errors)}")
 
     return merged_config
 
