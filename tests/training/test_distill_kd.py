@@ -2291,6 +2291,165 @@ class TestTrainingStepExpanded:
             # Code-mode loss should be computed (fallback initialization)
             assert "code_mode_pref" in result or "code_mode_weight" in result
 
+    def test_train_step_with_caws_structure_loss(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test training step with CAWS structure loss."""
+        training_config["distillation"]["use_caws_structure"] = True
+        training_config["distillation"]["caws_structure_weight"] = 0.05
+        training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
+        
+        # Add teacher_text to batch
+        sample_batch["teacher_text"] = "Working Spec:\n- Feature: test\nInvariants:\n- Rule 1\nAcceptance:\n- Test passes"
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+        
+        # Mock tokenizer on model or via load_tokenizer
+        mock_tokenizer = Mock()
+        mock_tokenizer.decode = Mock(return_value="Working Spec:\n- Feature: test")
+        small_model.tokenizer = mock_tokenizer
+        
+        with patch("training.caws_structure.caws_structure_score") as mock_score:
+            with patch("training.losses.caws_structure_loss") as mock_loss:
+                # Mock structure scores
+                mock_score.side_effect = [0.8, 0.6]  # Teacher: 0.8, Student: 0.6
+                # Mock structure loss
+                mock_loss.return_value = torch.tensor(0.2, device=device, requires_grad=True)
+                
+                result = train_step(
+                    model=small_model,
+                    batch=sample_batch,
+                    optimizer=simple_optimizer,
+                    scaler=None,
+                    cfg=training_config,
+                    device=device,
+                    current_step=100,  # Logging step
+                )
+                
+                assert "total" in result
+                # Verify structure loss was computed
+                assert mock_score.call_count >= 2  # Called for teacher and student
+                assert mock_loss.called
+
+    def test_train_step_with_caws_structure_loss_list_teacher_text(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test training step with CAWS structure loss when teacher_text is a list."""
+        training_config["distillation"]["use_caws_structure"] = True
+        training_config["distillation"]["caws_structure_weight"] = 0.05
+        training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
+        
+        # Add teacher_text as list
+        sample_batch["teacher_text"] = ["Working Spec:\n- Feature: test"]
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+        
+        # Mock tokenizer on model
+        mock_tokenizer = Mock()
+        mock_tokenizer.decode = Mock(return_value="Working Spec:\n- Feature: test")
+        small_model.tokenizer = mock_tokenizer
+        
+        with patch("training.caws_structure.caws_structure_score") as mock_score:
+            with patch("training.losses.caws_structure_loss") as mock_loss:
+                mock_score.side_effect = [0.8, 0.6]
+                mock_loss.return_value = torch.tensor(0.2, device=device, requires_grad=True)
+                
+                result = train_step(
+                    model=small_model,
+                    batch=sample_batch,
+                    optimizer=simple_optimizer,
+                    scaler=None,
+                    cfg=training_config,
+                    device=device,
+                )
+                
+                assert "total" in result
+                assert mock_score.called
+
+    def test_train_step_with_caws_compliance_loss(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test training step with CAWS compliance loss."""
+        training_config["distillation"]["use_caws_compliance"] = True
+        training_config["distillation"]["caws_compliance_weight"] = 0.05
+        training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
+        
+        # Add teacher_text to batch
+        sample_batch["teacher_text"] = "Test teacher output"
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+        
+        # Mock tokenizer on model
+        mock_tokenizer = Mock()
+        mock_tokenizer.decode = Mock(return_value="Test student output")
+        small_model.tokenizer = mock_tokenizer
+        
+        with patch("training.losses.caws_compliance_loss") as mock_compliance:
+            mock_compliance.return_value = torch.tensor(0.1, device=device, requires_grad=True)
+            
+            result = train_step(
+                model=small_model,
+                batch=sample_batch,
+                optimizer=simple_optimizer,
+                scaler=None,
+                cfg=training_config,
+                device=device,
+            )
+            
+            assert "total" in result
+            # CAWS compliance loss should be added if tokenizer is available
+            # Check if it was called (might not be in result if exception occurred)
+            mock_compliance.assert_called_once()
+
+    def test_train_step_with_caws_compliance_loss_from_metadata(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test training step with CAWS compliance loss when teacher_text is in metadata."""
+        training_config["distillation"]["use_caws_compliance"] = True
+        training_config["distillation"]["caws_compliance_weight"] = 0.05
+        training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
+        
+        # Add teacher_text to metadata instead of batch
+        sample_batch["metadata"] = {"teacher_text": "Test teacher output"}
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+        
+        with patch("training.distill_kd.load_tokenizer") as mock_load:
+            mock_tokenizer = Mock()
+            mock_tokenizer.decode = Mock(return_value="Test student output")
+            mock_load.return_value = mock_tokenizer
+            
+            # Mock the tokenizer path lookup in train_step
+            training_config["tokenizer_path"] = "models/student/tokenizer"
+            
+            with patch("training.losses.caws_compliance_loss") as mock_compliance:
+                mock_compliance.return_value = torch.tensor(0.1, device=device, requires_grad=True)
+                
+                result = train_step(
+                    model=small_model,
+                    batch=sample_batch,
+                    optimizer=simple_optimizer,
+                    scaler=None,
+                    cfg=training_config,
+                    device=device,
+                )
+                
+                assert "total" in result
+                # Verify compliance loss was called
+                mock_compliance.assert_called_once()
+
 
 class TestMainFunction:
     """Test main function initialization and critical paths."""
