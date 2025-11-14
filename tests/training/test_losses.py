@@ -7,6 +7,8 @@ and CAWS compliance losses.
 """
 # @author: @darianrosebrook
 
+from unittest.mock import Mock
+
 import torch
 import torch.nn as nn
 
@@ -553,6 +555,157 @@ class TestLengthAwareKDLoss:
 class TestEarlyToolCallLoss:
     """Test early tool call loss function."""
 
+    def test_early_tool_call_loss_with_teacher_prefix(self, device):
+        """Test early_tool_call_loss with teacher prefix IDs."""
+        batch_size = 2
+        seq_len = 30
+        vocab_size = 1000
+        N = 25
+
+        logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+        input_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        tool_should_be_used = torch.tensor([1.0, 0.0], device=device)
+        teacher_prefix_ids = torch.randint(0, vocab_size, (batch_size, 10), device=device)
+
+        mock_tokenizer = Mock()
+        mock_tokenizer.convert_tokens_to_ids = Mock(return_value=100)
+
+        loss, diags = early_tool_call_loss(
+            logits=logits,
+            input_ids=input_ids,
+            tool_should_be_used=tool_should_be_used,
+            tokenizer=mock_tokenizer,
+            teacher_prefix_ids=teacher_prefix_ids,
+            N=N,
+            json_prior_weight=0.02,
+            ce_weight=0.2,
+            ramp_t=1.0,
+        )
+
+        assert isinstance(loss, torch.Tensor)
+        assert loss.requires_grad
+        assert loss.item() >= 0
+        assert "early_tool.frac_should_use" in diags
+        assert "early_tool.frac_target_available" in diags
+
+    def test_early_tool_call_loss_without_teacher_prefix_json_prior(self, device):
+        """Test early_tool_call_loss without teacher prefix (JSON-envelope prior path)."""
+        batch_size = 2
+        seq_len = 30
+        vocab_size = 1000
+        N = 25
+
+        logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+        input_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        tool_should_be_used = torch.tensor([1.0, 0.0], device=device)
+        teacher_prefix_ids = None  # No teacher prefix
+
+        mock_tokenizer = Mock()
+        # Mock convert_tokens_to_ids to return valid token IDs for JSON start tokens
+        def mock_convert_tokens_to_ids(token):
+            if token == "{":
+                return 200
+            elif token == "[":
+                return 201
+            elif token == '"':
+                return 202
+            return None
+        mock_tokenizer.convert_tokens_to_ids = Mock(side_effect=mock_convert_tokens_to_ids)
+
+        loss, diags = early_tool_call_loss(
+            logits=logits,
+            input_ids=input_ids,
+            tool_should_be_used=tool_should_be_used,
+            tokenizer=mock_tokenizer,
+            teacher_prefix_ids=teacher_prefix_ids,
+            N=N,
+            json_prior_weight=0.02,
+            ce_weight=0.2,
+            ramp_t=1.0,
+        )
+
+        assert isinstance(loss, torch.Tensor)
+        assert loss.requires_grad
+        assert loss.item() >= 0
+        assert "early_tool.frac_should_use" in diags
+        assert "early_tool.frac_target_available" in diags
+        assert diags["early_tool.frac_target_available"] == 0.0  # No teacher prefix
+
+    def test_early_tool_call_loss_no_json_tokens(self, device):
+        """Test early_tool_call_loss when tokenizer doesn't have JSON tokens."""
+        batch_size = 2
+        seq_len = 30
+        vocab_size = 1000
+        N = 25
+
+        logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+        input_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        tool_should_be_used = torch.tensor([1.0, 0.0], device=device)
+        teacher_prefix_ids = None
+
+        mock_tokenizer = Mock()
+        # Tokenizer doesn't recognize JSON tokens
+        mock_tokenizer.convert_tokens_to_ids = Mock(return_value=None)
+
+        loss, diags = early_tool_call_loss(
+            logits=logits,
+            input_ids=input_ids,
+            tool_should_be_used=tool_should_be_used,
+            tokenizer=mock_tokenizer,
+            teacher_prefix_ids=teacher_prefix_ids,
+            N=N,
+            json_prior_weight=0.02,
+            ce_weight=0.2,
+            ramp_t=1.0,
+        )
+
+        assert isinstance(loss, torch.Tensor)
+        assert loss.item() == 0.0  # Should return zero loss when no JSON tokens found
+
+    def test_early_tool_call_loss_with_ramp(self, device):
+        """Test early_tool_call_loss with ramp scaling."""
+        batch_size = 2
+        seq_len = 30
+        vocab_size = 1000
+        N = 25
+
+        logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+        input_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        tool_should_be_used = torch.tensor([1.0, 1.0], device=device)
+        teacher_prefix_ids = torch.randint(0, vocab_size, (batch_size, 10), device=device)
+
+        mock_tokenizer = Mock()
+        mock_tokenizer.convert_tokens_to_ids = Mock(return_value=100)
+
+        # Test with ramp_t = 0.0 (no loss)
+        loss_zero, _ = early_tool_call_loss(
+            logits=logits,
+            input_ids=input_ids,
+            tool_should_be_used=tool_should_be_used,
+            tokenizer=mock_tokenizer,
+            teacher_prefix_ids=teacher_prefix_ids,
+            N=N,
+            json_prior_weight=0.02,
+            ce_weight=0.2,
+            ramp_t=0.0,
+        )
+
+        # Test with ramp_t = 1.0 (full loss)
+        loss_full, _ = early_tool_call_loss(
+            logits=logits,
+            input_ids=input_ids,
+            tool_should_be_used=tool_should_be_used,
+            tokenizer=mock_tokenizer,
+            teacher_prefix_ids=teacher_prefix_ids,
+            N=N,
+            json_prior_weight=0.02,
+            ce_weight=0.2,
+            ramp_t=1.0,
+        )
+
+        assert loss_zero.item() == 0.0  # Ramp at 0 should give zero loss
+        assert loss_full.item() >= 0  # Ramp at 1 should give non-zero loss
+
     def test_early_tool_call_loss_basic(self, device, mock_tokenizer):
         """Test basic early tool call loss."""
         batch_size = 2
@@ -670,7 +823,6 @@ class TestCombinedKDLoss:
         batch_size = 2
         seq_len = 10
         vocab_size = 1000
-        d_model = 128
 
         student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
         teacher_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
@@ -735,14 +887,10 @@ class TestCodeModePreferenceLoss:
         )
 
         # Mock batch metadata for eligibility computation
-        batch_meta = [
-            {"min_tools": 3, "min_intermediate_chars": 15000, "pii_tags_present": False},
-            {"min_tools": 1, "min_intermediate_chars": 5000, "pii_tags_present": False},
-        ]
         batch_size = 2
         seq_len = 10
         vocab_size = 1000
-        logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+        torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
 
         # CodeModePreferenceLoss needs batch metadata and span targets
         # This is a simplified test - actual usage requires more setup
@@ -767,6 +915,166 @@ class TestCodeModePreferenceLoss:
         assert loss_fn_light is not None
         assert loss_fn_heavy is not None
 
+    def test_code_mode_preference_loss_forward_with_eligibility(self, device):
+        """Test CodeModePreferenceLoss forward pass with eligible samples."""
+        eligibility_rules = {"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []}
+        reward = {"prefer_ts_api_over_direct_tool": True, "penalize_tool_result_roundtrip": True}
+        vocab_ids = {"import": 100, "from": 101}
+
+        loss_fn = CodeModePreferenceLoss(
+            eligibility_rules=eligibility_rules, reward=reward, vocab_ids=vocab_ids
+        )
+
+        batch_size = 2
+        seq_len = 20
+        vocab_size = 1000
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+
+        # Batch metadata: first sample eligible (tool_count >= 2), second not eligible
+        batch_meta = [
+            {"tool_count": 3, "intermediate_sizes": [], "pii_tags_present": False},  # Eligible
+            {"tool_count": 1, "intermediate_sizes": [], "pii_tags_present": False},  # Not eligible
+        ]
+
+        # Span targets: TS API spans and direct tool spans
+        span_targets = [
+            {
+                "ts_mode_spans": [(5, 10), (15, 18)],  # TS API spans for first sample
+                "direct_tool_spans": [(0, 3)],
+            },
+            {
+                "ts_mode_spans": [],
+                "direct_tool_spans": [],
+            },
+        ]
+
+        loss = loss_fn(student_logits, span_targets=span_targets, batch_meta=batch_meta)
+
+        assert isinstance(loss, torch.Tensor)
+        assert loss.requires_grad
+        assert loss.item() >= 0  # Loss should be non-negative
+
+    def test_code_mode_preference_loss_forward_no_eligible(self, device):
+        """Test CodeModePreferenceLoss forward pass with no eligible samples."""
+        eligibility_rules = {"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []}
+        reward = {"prefer_ts_api_over_direct_tool": True, "penalize_tool_result_roundtrip": True}
+        vocab_ids = {"import": 100, "from": 101}
+
+        loss_fn = CodeModePreferenceLoss(
+            eligibility_rules=eligibility_rules, reward=reward, vocab_ids=vocab_ids
+        )
+
+        batch_size = 2
+        seq_len = 20
+        vocab_size = 1000
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+
+        # Batch metadata: no eligible samples
+        batch_meta = [
+            {"tool_count": 1, "intermediate_sizes": [], "pii_tags_present": False},
+            {"tool_count": 0, "intermediate_sizes": [], "pii_tags_present": False},
+        ]
+
+        span_targets = [
+            {"ts_mode_spans": [(5, 10)], "direct_tool_spans": []},
+            {"ts_mode_spans": [], "direct_tool_spans": []},
+        ]
+
+        loss = loss_fn(student_logits, span_targets=span_targets, batch_meta=batch_meta)
+
+        assert isinstance(loss, torch.Tensor)
+        assert loss.item() == 0.0  # Should return zero loss when no eligible samples
+
+    def test_code_mode_preference_loss_forward_no_span_targets(self, device):
+        """Test CodeModePreferenceLoss forward pass with no span targets."""
+        eligibility_rules = {"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []}
+        reward = {"prefer_ts_api_over_direct_tool": True, "penalize_tool_result_roundtrip": True}
+        vocab_ids = {"import": 100, "from": 101}
+
+        loss_fn = CodeModePreferenceLoss(
+            eligibility_rules=eligibility_rules, reward=reward, vocab_ids=vocab_ids
+        )
+
+        batch_size = 2
+        seq_len = 20
+        vocab_size = 1000
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+
+        batch_meta = [
+            {"tool_count": 3, "intermediate_sizes": [], "pii_tags_present": False},
+            {"tool_count": 2, "intermediate_sizes": [], "pii_tags_present": False},
+        ]
+
+        # No span targets
+        loss = loss_fn(student_logits, span_targets=None, batch_meta=batch_meta)
+
+        assert isinstance(loss, torch.Tensor)
+        assert loss.item() == 0.0  # Should return zero loss when no span targets
+
+    def test_code_mode_preference_loss_eligibility_intermediate_chars(self, device):
+        """Test CodeModePreferenceLoss eligibility via intermediate_chars."""
+        eligibility_rules = {"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []}
+        reward = {"prefer_ts_api_over_direct_tool": True, "penalize_tool_result_roundtrip": True}
+        vocab_ids = {"import": 100, "from": 101}
+
+        loss_fn = CodeModePreferenceLoss(
+            eligibility_rules=eligibility_rules, reward=reward, vocab_ids=vocab_ids
+        )
+
+        batch_size = 2
+        seq_len = 20
+        vocab_size = 1000
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+
+        # Batch metadata: eligible via intermediate_chars (not tool_count)
+        batch_meta = [
+            {"tool_count": 1, "intermediate_sizes": [5000, 12000], "pii_tags_present": False},  # Eligible (max >= 10000)
+            {"tool_count": 1, "intermediate_sizes": [5000], "pii_tags_present": False},  # Not eligible
+        ]
+
+        span_targets = [
+            {"ts_mode_spans": [(5, 10)], "direct_tool_spans": []},
+            {"ts_mode_spans": [], "direct_tool_spans": []},
+        ]
+
+        loss = loss_fn(student_logits, span_targets=span_targets, batch_meta=batch_meta)
+
+        assert isinstance(loss, torch.Tensor)
+        assert loss.requires_grad
+        assert loss.item() >= 0
+
+    def test_code_mode_preference_loss_eligibility_pii_tags(self, device):
+        """Test CodeModePreferenceLoss eligibility via PII tags."""
+        eligibility_rules = {"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []}
+        reward = {"prefer_ts_api_over_direct_tool": True, "penalize_tool_result_roundtrip": True}
+        vocab_ids = {"import": 100, "from": 101}
+
+        loss_fn = CodeModePreferenceLoss(
+            eligibility_rules=eligibility_rules, reward=reward, vocab_ids=vocab_ids
+        )
+
+        batch_size = 2
+        seq_len = 20
+        vocab_size = 1000
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+
+        # Batch metadata: eligible via PII tags
+        batch_meta = [
+            {"tool_count": 1, "intermediate_sizes": [], "pii_tags_present": True},  # Eligible
+            {"tool_count": 1, "intermediate_sizes": [], "pii_tags_present": False},  # Not eligible
+        ]
+
+        span_targets = [
+            {"ts_mode_spans": [(5, 10)], "direct_tool_spans": []},
+            {"ts_mode_spans": [], "direct_tool_spans": []},
+        ]
+
+        loss = loss_fn(student_logits, span_targets=span_targets, batch_meta=batch_meta)
+
+        assert isinstance(loss, torch.Tensor)
+        assert loss.requires_grad
+        assert loss.item() >= 0
+
 
 class TestCAWSComplianceLoss:
     """Test CAWS compliance loss function."""
@@ -777,8 +1085,8 @@ class TestCAWSComplianceLoss:
         seq_len = 10
         vocab_size = 1000
 
-        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
-        teacher_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+        torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+        torch.randn(batch_size, seq_len, vocab_size, device=device)
 
         # caws_compliance_loss takes strings, not tensors
         student_output = "Valid JSON: {\"key\": \"value\"}"
