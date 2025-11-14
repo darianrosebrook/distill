@@ -63,7 +63,12 @@ def safe_load_checkpoint(
         # weights_only failed (expected for checkpoints with metadata)
         # Load without weights_only but validate structure immediately
         try:
-            checkpoint = torch.load(checkpoint_path, map_location=map_location)
+            # nosec B614: torch.load() used in fallback path after weights_only=True fails
+            # Security: This path only executes if weights_only=True fails (expected for checkpoints
+            # with metadata). Structure is validated immediately after loading (see below).
+            # This is part of the safe wrapper function pattern: try secure path first, then
+            # validate structure before using less secure fallback.
+            checkpoint = torch.load(checkpoint_path, map_location=map_location)  # nosec B614
         except Exception as load_error:
             raise RuntimeError(f"Failed to load checkpoint: {load_error}") from load_error
         

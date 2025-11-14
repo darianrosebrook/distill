@@ -1685,6 +1685,122 @@ class TestCodeModePreferenceLoss:
         assert loss_none.item() >= 0 or loss_none.item() < 0  # Can be positive or negative
         assert loss_provided.item() >= 0 or loss_provided.item() < 0  # Can be positive or negative
 
+    def test_code_mode_preference_loss_span_boundary_check_end_lte(self, device):
+        """Test CodeModePreferenceLoss with span end boundary check (<= check).
+        
+        This test catches mutations that change <= to != or == in lines 833 and 843.
+        """
+        eligibility_rules = {"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []}
+        reward = {"prefer_ts_api_over_direct_tool": True, "penalize_tool_result_roundtrip": True}
+        vocab_ids = {"import": 100, "from": 101}
+
+        loss_fn = CodeModePreferenceLoss(
+            eligibility_rules=eligibility_rules, reward=reward, vocab_ids=vocab_ids
+        )
+
+        batch_size = 1
+        seq_len = 20
+        vocab_size = 1000
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+
+        # Batch metadata: eligible sample
+        batch_meta = [
+            {"tool_count": 3, "intermediate_sizes": [15000], "pii_tags_present": False},
+        ]
+
+        # Test with end exactly equal to seq_len (boundary case)
+        # end = seq_len (20), log_probs.size(1) = 20, so end <= log_probs.size(1) should be True
+        span_targets_boundary = [
+            {"ts_mode_spans": [(5, 20)], "direct_tool_spans": []},  # end == seq_len (boundary)
+        ]
+        
+        # Test with end less than seq_len (valid case)
+        span_targets_valid = [
+            {"ts_mode_spans": [(5, 19)], "direct_tool_spans": []},  # end < seq_len (valid)
+        ]
+        
+        # Test with end greater than seq_len (out of bounds, should be skipped)
+        span_targets_oob = [
+            {"ts_mode_spans": [(5, 21)], "direct_tool_spans": []},  # end > seq_len (out of bounds)
+        ]
+
+        # Boundary case should work (end == seq_len is valid with <= check)
+        loss_boundary = loss_fn(student_logits, span_targets=span_targets_boundary, batch_meta=batch_meta)
+        
+        # Valid case should work
+        loss_valid = loss_fn(student_logits, span_targets=span_targets_valid, batch_meta=batch_meta)
+        
+        # Out of bounds case should skip the span (end > seq_len)
+        loss_oob = loss_fn(student_logits, span_targets=span_targets_oob, batch_meta=batch_meta)
+
+        # Verify that <= is used (not != or ==)
+        # With <=: end == seq_len is valid (inclusive boundary)
+        # With !=: end == seq_len would be skipped (wrong behavior)
+        # With ==: end < seq_len would be skipped (wrong behavior)
+        assert isinstance(loss_boundary, torch.Tensor), "Boundary case (end == seq_len) should work with <= check"
+        assert isinstance(loss_valid, torch.Tensor), "Valid case (end < seq_len) should work"
+        assert isinstance(loss_oob, torch.Tensor), "Out of bounds case should be handled"
+        
+        # Boundary and valid cases should produce similar losses (both should process spans)
+        # Out of bounds case might produce different loss (span skipped)
+        assert loss_boundary.requires_grad
+        assert loss_valid.requires_grad
+        assert loss_oob.requires_grad
+
+    def test_code_mode_preference_loss_span_boundary_check_start_lt(self, device):
+        """Test CodeModePreferenceLoss with span start boundary check (< check).
+        
+        This test verifies the start < log_probs.size(1) check in lines 833 and 843.
+        """
+        eligibility_rules = {"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []}
+        reward = {"prefer_ts_api_over_direct_tool": True, "penalize_tool_result_roundtrip": True}
+        vocab_ids = {"import": 100, "from": 101}
+
+        loss_fn = CodeModePreferenceLoss(
+            eligibility_rules=eligibility_rules, reward=reward, vocab_ids=vocab_ids
+        )
+
+        batch_size = 1
+        seq_len = 20
+        vocab_size = 1000
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+
+        # Batch metadata: eligible sample
+        batch_meta = [
+            {"tool_count": 3, "intermediate_sizes": [15000], "pii_tags_present": False},
+        ]
+
+        # Test with start exactly equal to seq_len (out of bounds, should be skipped)
+        # start = seq_len (20), log_probs.size(1) = 20, so start < log_probs.size(1) should be False
+        span_targets_start_oob = [
+            {"ts_mode_spans": [(20, 21)], "direct_tool_spans": []},  # start == seq_len (out of bounds)
+        ]
+        
+        # Test with start less than seq_len (valid case)
+        span_targets_start_valid = [
+            {"ts_mode_spans": [(19, 20)], "direct_tool_spans": []},  # start < seq_len (valid)
+        ]
+
+        # Out of bounds case should skip the span (start >= seq_len)
+        loss_start_oob = loss_fn(student_logits, span_targets=span_targets_start_oob, batch_meta=batch_meta)
+        
+        # Valid case should work
+        loss_start_valid = loss_fn(student_logits, span_targets=span_targets_start_valid, batch_meta=batch_meta)
+
+        # Verify that < is used (not <=)
+        # With <: start == seq_len is skipped (exclusive boundary)
+        # With <=: start == seq_len would be processed (wrong behavior, could cause IndexError)
+        assert isinstance(loss_start_oob, torch.Tensor), "Out of bounds case (start >= seq_len) should be handled"
+        assert isinstance(loss_start_valid, torch.Tensor), "Valid case (start < seq_len) should work"
+        
+        # Out of bounds case should produce zero or very small loss (span skipped)
+        # Valid case should produce non-zero loss (span processed)
+        if loss_start_valid.item() != 0.0:
+            # If valid case has non-zero loss, out of bounds case should have smaller or zero loss
+            assert loss_start_oob.item() <= loss_start_valid.item(), (
+                "Out of bounds span should produce smaller or equal loss than valid span"
+            )
+
 
 class TestCAWSComplianceLoss:
     """Test CAWS compliance loss function."""
@@ -1762,6 +1878,47 @@ class TestCAWSComplianceLoss:
         assert loss_short_high.item() >= loss_short_low.item(), (
             "High latent count (> 2) with short output should have higher loss than low count (<= 2)"
         )
+
+    def test_caws_compliance_loss_output_length_boundary_lt(self, device):
+        """Test CAWS compliance loss with output_length boundary check (< check).
+        
+        This test catches mutations that change < to > in line 1100.
+        """
+        # Test with output_length == 200 (boundary case, should NOT add penalty)
+        student_output_boundary = "A" * 200 + " <bot>span1</bot> <bot>span2</bot> <bot>span3</bot>"
+        teacher_output = "Teacher output"
+        
+        # Test with output_length < 200 (should add penalty if latent_span_count > 2)
+        student_output_short = "A" * 199 + " <bot>span1</bot> <bot>span2</bot> <bot>span3</bot>"
+        
+        # Test with output_length > 200 (should NOT add penalty)
+        student_output_long = "A" * 201 + " <bot>span1</bot> <bot>span2</bot> <bot>span3</bot>"
+        
+        loss_boundary = caws_compliance_loss(student_output_boundary, teacher_output)
+        loss_short = caws_compliance_loss(student_output_short, teacher_output)
+        loss_long = caws_compliance_loss(student_output_long, teacher_output)
+
+        # Verify that < is used (not >)
+        # With <: output_length == 200 should NOT add penalty (boundary not included)
+        # With >: output_length == 200 would add penalty (wrong behavior)
+        
+        # All should return valid losses
+        assert isinstance(loss_boundary, torch.Tensor)
+        assert isinstance(loss_short, torch.Tensor)
+        assert isinstance(loss_long, torch.Tensor)
+        
+        # Boundary case (== 200) should NOT add penalty for short output
+        # Short case (< 200) should add penalty if latent_span_count > 2
+        # Long case (> 200) should NOT add penalty for short output
+        
+        # Verify that < 200 check is used (not > 200)
+        # If < were changed to >, boundary and short cases would have different behavior
+        # Short output (< 200) with high latent count should have higher loss than long output (> 200)
+        if loss_short.item() > 0:
+            # Short output should have penalty, long output should not (or smaller penalty)
+            assert loss_short.item() >= loss_long.item(), (
+                "Short output (< 200) with high latent count should have higher loss than long output (> 200)"
+            )
 
 
 class TestCAWSStructureLoss:

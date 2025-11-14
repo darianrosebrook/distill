@@ -382,20 +382,24 @@ class TestTrainingStepWithSpeedOptimizations:
         batch["teacher_prefix_ids"][0, :5] = torch.tensor([5, 7, 110, 101, 98], device=device)
 
         cfg = {
-            "kd": {
+            "distillation": {
                 "use_early_tool_call_loss": True,
                 "early_tool_weight": 0.05,
-                "early_tool_N": 25,
+                "early_tool_N": 20,  # Match sequence length
                 "early_tool_ce_weight": 0.2,
                 "kl_weight": 0.5,
                 "ce_teacher_weight": 0.3,
                 "ce_ground_truth_weight": 0.2,
             },
-            "tokenizer_path": "mock_tokenizer",  # Provide tokenizer path for train_step
+            "tokenizer_path": "dummy",  # Enable tokenizer loading for early_tool
         }
 
         # Attach tokenizer to model for train_step to find it
         model.tokenizer = mock_tokenizer
+        
+        # Fix teacher_prefix_ids length to match sequence length
+        batch["teacher_prefix_ids"] = torch.full((2, 20), fill_value=-100, device=device)
+        batch["teacher_prefix_ids"][0, :5] = torch.tensor([5, 7, 110, 101, 98], device=device)
 
         # Training step should complete without errors
         loss_dict = train_step(

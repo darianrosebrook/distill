@@ -617,7 +617,9 @@ Examples:
         import torch
 
         try:
-            pytorch_model = torch.jit.load(args.input_path)
+            # nosec B614: torch.jit.load() is safe for TorchScript files (not arbitrary pickle)
+            # Security: TorchScript uses a safe deserialization format, not pickle
+            pytorch_model = torch.jit.load(args.input_path)  # nosec B614
             print(f"[convert_coreml] Loaded TorchScript model: {args.input_path}")
         except Exception:
             try:

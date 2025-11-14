@@ -688,16 +688,25 @@ class TestInputValidatorAdditional:
             strict_validator.validate_file_path(test_file, must_exist=True)
 
     def test_validate_training_example_with_both_response_and_answer(self, strict_validator):
-        """Test validate_training_example when both response and answer are present (line 340-342)."""
+        """Test validate_training_example when both response and answer are present (line 318, 340-342)."""
+        # Test that when both response and answer are present, answer is still validated (line 318)
         example = {
             "prompt": "Test prompt",
             "response": "Test response",
-            "answer": "Test answer",  # Both present
+            "answer": "Test answer",  # Both present - answer should still be validated
         }
         result = strict_validator.validate_training_example(example)
         assert "response" in result
         assert "answer" in result
         assert result["response"] == "Test response"
         assert result["answer"] == "Test answer"
+        # Test that answer validation happens even when response is present (line 318 check)
+        example_with_suspicious_answer = {
+            "prompt": "Test prompt",
+            "response": "Test response",
+            "answer": '<script>alert("xss")</script>',  # Suspicious answer should be caught
+        }
+        with pytest.raises(ValidationError, match="contains suspicious content"):
+            strict_validator.validate_training_example(example_with_suspicious_answer)
 
 

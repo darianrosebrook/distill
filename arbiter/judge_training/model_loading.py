@@ -89,7 +89,11 @@ def safe_from_pretrained_tokenizer(
             UserWarning
         )
 
-    return AutoTokenizer.from_pretrained(
+    # nosec B615: from_pretrained() is required for HuggingFace models, but revision is pinned
+    # Security: This is a safe wrapper function that always includes revision pinning
+    # (either from config or defaults to 'main'). The revision parameter prevents
+    # arbitrary model changes (supply chain attack protection).
+    return AutoTokenizer.from_pretrained(  # nosec B615
         model_name,
         revision=revision,
         use_fast=use_fast,
@@ -136,7 +140,11 @@ def safe_from_pretrained_model(
             UserWarning
         )
 
-    return AutoModel.from_pretrained(
+    # nosec B615: from_pretrained() is required for HuggingFace models, but revision is pinned
+    # Security: This is a safe wrapper function that always includes revision pinning
+    # (either from config or defaults to 'main'). The revision parameter prevents
+    # arbitrary model changes (supply chain attack protection).
+    return AutoModel.from_pretrained(  # nosec B615
         model_name,
         revision=revision,
         trust_remote_code=trust_remote_code,

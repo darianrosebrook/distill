@@ -41,7 +41,12 @@ def safe_load_checkpoint(checkpoint_path: str) -> Dict[str, Any]:
     except Exception:
         # weights_only failed (expected for checkpoints with metadata)
         # Load without weights_only but validate structure immediately
-        state = torch.load(checkpoint_path, map_location="cpu")
+        # nosec B614: torch.load() used in fallback path after weights_only=True fails
+        # Security: This path only executes if weights_only=True fails (expected for checkpoints
+        # with metadata). Structure is validated immediately after loading (see below).
+        # This is part of the safe wrapper function pattern: try secure path first, then
+        # validate structure before using less secure fallback.
+        state = torch.load(checkpoint_path, map_location="cpu")  # nosec B614
 
         # Validate checkpoint structure - only allow expected keys
         if not isinstance(state, dict):

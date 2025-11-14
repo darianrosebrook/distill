@@ -272,6 +272,9 @@ class KDDataset(Dataset):
         # Add loss mask if latent curriculum was applied
         if "loss_mask" in sample and sample["loss_mask"] is not None:
             loss_mask = sample["loss_mask"]
+            # Convert to tensor if it's a list
+            if not isinstance(loss_mask, torch.Tensor):
+                loss_mask = torch.tensor(loss_mask, dtype=torch.bool)
             # Ensure loss_mask matches labels length
             if len(loss_mask) < len(labels):
                 # Pad with True (supervise padding)
@@ -449,54 +452,75 @@ def collate_kd_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
 
         # Collect and pad process-step supervision targets
         # These are padded independently based on their own max lengths
-        if "tool_name_ids" in item:
-            tool_name_ids = item["tool_name_ids"]
-            tool_pad_len = max_tool_name_ids_len - tool_name_ids.size(0)
-            if tool_pad_len > 0:
-                tool_name_ids = torch.cat(
-                    [tool_name_ids, torch.full(
-                        (tool_pad_len,), -100, dtype=torch.long)]
-                )
+        # If any item has a field, all items must have it (create empty tensors for missing ones)
+        if max_tool_name_ids_len > 0:
+            if "tool_name_ids" in item:
+                tool_name_ids = item["tool_name_ids"]
+                tool_pad_len = max_tool_name_ids_len - tool_name_ids.size(0)
+                if tool_pad_len > 0:
+                    tool_name_ids = torch.cat(
+                        [tool_name_ids, torch.full(
+                            (tool_pad_len,), -100, dtype=torch.long)]
+                    )
+            else:
+                # Create empty tensor if missing
+                tool_name_ids = torch.full((max_tool_name_ids_len,), -100, dtype=torch.long)
             tool_name_ids_list.append(tool_name_ids)
 
-        if "tool_name_mask" in item:
-            tool_name_mask = item["tool_name_mask"]
-            # Pad to match tool_name_ids length
-            tool_pad_len = max_tool_name_ids_len - tool_name_mask.size(0)
-            if tool_pad_len > 0:
-                tool_name_mask = torch.cat(
-                    [tool_name_mask, torch.zeros(tool_pad_len, dtype=torch.bool)])
+        if max_tool_name_ids_len > 0:
+            if "tool_name_mask" in item:
+                tool_name_mask = item["tool_name_mask"]
+                # Pad to match tool_name_ids length
+                tool_pad_len = max_tool_name_ids_len - tool_name_mask.size(0)
+                if tool_pad_len > 0:
+                    tool_name_mask = torch.cat(
+                        [tool_name_mask, torch.zeros(tool_pad_len, dtype=torch.bool)])
+            else:
+                # Create empty tensor if missing
+                tool_name_mask = torch.zeros(max_tool_name_ids_len, dtype=torch.bool)
             tool_name_mask_list.append(tool_name_mask)
 
-        if "gold_json_text_ids" in item:
-            gold_json_text_ids = item["gold_json_text_ids"]
-            json_pad_len = max_gold_json_text_ids_len - gold_json_text_ids.size(0)
-            if json_pad_len > 0:
-                gold_json_text_ids = torch.cat(
-                    [gold_json_text_ids, torch.full(
-                        (json_pad_len,), -100, dtype=torch.long)]
-                )
+        if max_gold_json_text_ids_len > 0:
+            if "gold_json_text_ids" in item:
+                gold_json_text_ids = item["gold_json_text_ids"]
+                json_pad_len = max_gold_json_text_ids_len - gold_json_text_ids.size(0)
+                if json_pad_len > 0:
+                    gold_json_text_ids = torch.cat(
+                        [gold_json_text_ids, torch.full(
+                            (json_pad_len,), -100, dtype=torch.long)]
+                    )
+            else:
+                # Create empty tensor if missing
+                gold_json_text_ids = torch.full((max_gold_json_text_ids_len,), -100, dtype=torch.long)
             gold_json_text_ids_list.append(gold_json_text_ids)
 
-        if "mask_valid_json_tokens" in item:
-            mask_valid_json_tokens = item["mask_valid_json_tokens"]
-            # Pad to match gold_json_text_ids length
-            json_pad_len = max_gold_json_text_ids_len - mask_valid_json_tokens.size(0)
-            if json_pad_len > 0:
-                mask_valid_json_tokens = torch.cat(
-                    [mask_valid_json_tokens, torch.zeros(
-                        json_pad_len, dtype=torch.bool)]
-                )
+        if max_gold_json_text_ids_len > 0:
+            if "mask_valid_json_tokens" in item:
+                mask_valid_json_tokens = item["mask_valid_json_tokens"]
+                # Pad to match gold_json_text_ids length
+                json_pad_len = max_gold_json_text_ids_len - mask_valid_json_tokens.size(0)
+                if json_pad_len > 0:
+                    mask_valid_json_tokens = torch.cat(
+                        [mask_valid_json_tokens, torch.zeros(
+                            json_pad_len, dtype=torch.bool)]
+                    )
+            else:
+                # Create empty tensor if missing
+                mask_valid_json_tokens = torch.zeros(max_gold_json_text_ids_len, dtype=torch.bool)
             mask_valid_json_tokens_list.append(mask_valid_json_tokens)
 
-        if "tool_result_fields" in item:
-            tool_result_fields = item["tool_result_fields"]
-            result_pad_len = max_tool_result_fields_len - tool_result_fields.size(0)
-            if result_pad_len > 0:
-                tool_result_fields = torch.cat(
-                    [tool_result_fields, torch.full(
-                        (result_pad_len,), -100, dtype=torch.long)]
-                )
+        if max_tool_result_fields_len > 0:
+            if "tool_result_fields" in item:
+                tool_result_fields = item["tool_result_fields"]
+                result_pad_len = max_tool_result_fields_len - tool_result_fields.size(0)
+                if result_pad_len > 0:
+                    tool_result_fields = torch.cat(
+                        [tool_result_fields, torch.full(
+                            (result_pad_len,), -100, dtype=torch.long)]
+                    )
+            else:
+                # Create empty tensor if missing
+                tool_result_fields = torch.full((max_tool_result_fields_len,), -100, dtype=torch.long)
             tool_result_fields_list.append(tool_result_fields)
 
         if "integration_mask" in item:
