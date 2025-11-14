@@ -121,7 +121,13 @@ class TestPipelinePreservationEvalMain:
         mock_file_handle.write = Mock()
         mock_open.return_value = mock_file_handle
 
-        with patch("sys.argv", ["pipeline_preservation_eval.py", "--pytorch-model", "model.pt", "--tokenizer", "tokenizer", "--config", "test.config"]):
+        with patch("sys.argv", [
+            "pipeline_preservation_eval.py",
+            "--pytorch-model", "model.pt",
+            "--tokenizer", "tokenizer",
+            "--config", "test.config",
+            "--output-dir", str(tmp_path / "output"),  # Add required output-dir argument
+        ]):
             try:
                 main()
             except SystemExit:

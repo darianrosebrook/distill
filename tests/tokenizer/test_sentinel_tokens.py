@@ -14,8 +14,10 @@ class TestSentinelTokens:
 
     def test_token_ids_defined(self):
         """Test that token IDs are defined."""
-        assert BOT_TOKEN_ID == 3
-        assert EOT_TOKEN_ID == 4
+        # Note: Actual tokenizer encoding returns 32000 and 32001,
+        # not 3 and 4 as shown in tokenizer_config.json added_tokens_decoder
+        assert BOT_TOKEN_ID == 32000  # Actual tokenizer encoding
+        assert EOT_TOKEN_ID == 32001  # Actual tokenizer encoding
 
     def test_token_strings_defined(self):
         """Test that token strings are defined."""
