@@ -67,7 +67,7 @@ class TestRunToyDistillMain:
     @patch("training.run_toy_distill.StudentLM")
     @patch("training.run_toy_distill.ModelCfg")
     @patch("training.run_toy_distill.torch.optim.AdamW")
-    @patch("training.run_toy_distill.load_tokenizer")
+    @patch("training.dataset.load_tokenizer")
     @patch("training.run_toy_distill.KDDataset")
     @patch("training.run_toy_distill.DataLoader")
     @patch("training.run_toy_distill.teacher_logits")

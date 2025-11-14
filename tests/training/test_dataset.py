@@ -491,7 +491,9 @@ class TestCollateKDBatch:
         assert "integration_mask" in result
 
         # Check shapes (should be padded to max length)
-        assert result["tool_name_ids"].shape == (2, 3)
+        # tool_name_ids: first item has length 2, second has length 1, so max is 2
+        assert result["tool_name_ids"].shape == (2, 2)
+        # gold_json_text_ids: first item has length 3, second doesn't have it (created empty tensor)
         assert result["gold_json_text_ids"].shape == (2, 3)
 
     def test_collate_kd_batch_with_loss_mask(self):
