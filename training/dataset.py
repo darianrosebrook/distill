@@ -370,8 +370,22 @@ def collate_kd_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     Note: teacher_reasoning_content is NOT supported (ToS violation risk).
     """
-    # Find max length in batch
+    # Find max length in batch for input sequences
     max_len = max(item["input_ids"].size(0) for item in batch)
+
+    # Find max lengths for process-step supervision targets (if present)
+    # These are independent sequences that may not align with input_ids
+    max_tool_name_ids_len = 0
+    max_gold_json_text_ids_len = 0
+    max_tool_result_fields_len = 0
+    
+    for item in batch:
+        if "tool_name_ids" in item:
+            max_tool_name_ids_len = max(max_tool_name_ids_len, item["tool_name_ids"].size(0))
+        if "gold_json_text_ids" in item:
+            max_gold_json_text_ids_len = max(max_gold_json_text_ids_len, item["gold_json_text_ids"].size(0))
+        if "tool_result_fields" in item:
+            max_tool_result_fields_len = max(max_tool_result_fields_len, item["tool_result_fields"].size(0))
 
     # Pad all sequences
     input_ids_list = []
@@ -433,52 +447,61 @@ def collate_kd_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
                 teacher_logits = torch.cat([teacher_logits, padding], dim=0)
             teacher_logits_list.append(teacher_logits)
 
-        # Collect process-step supervision targets
+        # Collect and pad process-step supervision targets
+        # These are padded independently based on their own max lengths
         if "tool_name_ids" in item:
             tool_name_ids = item["tool_name_ids"]
-            if pad_len > 0:
+            tool_pad_len = max_tool_name_ids_len - tool_name_ids.size(0)
+            if tool_pad_len > 0:
                 tool_name_ids = torch.cat(
                     [tool_name_ids, torch.full(
-                        (pad_len,), -100, dtype=torch.long)]
+                        (tool_pad_len,), -100, dtype=torch.long)]
                 )
             tool_name_ids_list.append(tool_name_ids)
 
         if "tool_name_mask" in item:
             tool_name_mask = item["tool_name_mask"]
-            if pad_len > 0:
+            # Pad to match tool_name_ids length
+            tool_pad_len = max_tool_name_ids_len - tool_name_mask.size(0)
+            if tool_pad_len > 0:
                 tool_name_mask = torch.cat(
-                    [tool_name_mask, torch.zeros(pad_len, dtype=torch.bool)])
+                    [tool_name_mask, torch.zeros(tool_pad_len, dtype=torch.bool)])
             tool_name_mask_list.append(tool_name_mask)
 
         if "gold_json_text_ids" in item:
             gold_json_text_ids = item["gold_json_text_ids"]
-            if pad_len > 0:
+            json_pad_len = max_gold_json_text_ids_len - gold_json_text_ids.size(0)
+            if json_pad_len > 0:
                 gold_json_text_ids = torch.cat(
                     [gold_json_text_ids, torch.full(
-                        (pad_len,), -100, dtype=torch.long)]
+                        (json_pad_len,), -100, dtype=torch.long)]
                 )
             gold_json_text_ids_list.append(gold_json_text_ids)
 
         if "mask_valid_json_tokens" in item:
             mask_valid_json_tokens = item["mask_valid_json_tokens"]
-            if pad_len > 0:
+            # Pad to match gold_json_text_ids length
+            json_pad_len = max_gold_json_text_ids_len - mask_valid_json_tokens.size(0)
+            if json_pad_len > 0:
                 mask_valid_json_tokens = torch.cat(
                     [mask_valid_json_tokens, torch.zeros(
-                        pad_len, dtype=torch.bool)]
+                        json_pad_len, dtype=torch.bool)]
                 )
             mask_valid_json_tokens_list.append(mask_valid_json_tokens)
 
         if "tool_result_fields" in item:
             tool_result_fields = item["tool_result_fields"]
-            if pad_len > 0:
+            result_pad_len = max_tool_result_fields_len - tool_result_fields.size(0)
+            if result_pad_len > 0:
                 tool_result_fields = torch.cat(
                     [tool_result_fields, torch.full(
-                        (pad_len,), -100, dtype=torch.long)]
+                        (result_pad_len,), -100, dtype=torch.long)]
                 )
             tool_result_fields_list.append(tool_result_fields)
 
         if "integration_mask" in item:
             integration_mask = item["integration_mask"]
+            # Integration mask should match input_ids length
             if pad_len > 0:
                 integration_mask = torch.cat(
                     [integration_mask, torch.zeros(pad_len, dtype=torch.bool)]
@@ -488,6 +511,7 @@ def collate_kd_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
         # Handle loss mask (from latent curriculum)
         if "loss_mask" in item:
             loss_mask = item["loss_mask"]
+            # Loss mask should match input_ids/labels length
             if pad_len > 0:
                 # Pad with True (supervise padding tokens)
                 loss_mask = torch.cat(

@@ -229,23 +229,31 @@ def test_process_supervision_loss_with_token_ids(mock_tokenizer, device):
     logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
 
     # Create mock token IDs
-    tool_name_ids = torch.tensor(
-        [
-            mock_tokenizer.encode("read_file", add_special_tokens=False),
-            mock_tokenizer.encode("web.search", add_special_tokens=False),
-        ],
-        device=device,
-    )
+    # Encode token IDs - these may have different lengths
+    tool_name_ids_list = [
+        torch.tensor(mock_tokenizer.encode("read_file", add_special_tokens=False), device=device),
+        torch.tensor(mock_tokenizer.encode("web.search", add_special_tokens=False), device=device),
+    ]
+    # Pad to same length
+    max_tool_len = max(len(ids) for ids in tool_name_ids_list)
+    tool_name_ids = torch.stack([
+        torch.cat([ids, torch.full((max_tool_len - len(ids),), -100, dtype=torch.long, device=device)])
+        for ids in tool_name_ids_list
+    ])
 
     tool_name_mask = torch.ones_like(tool_name_ids, dtype=torch.bool, device=device)
 
-    gold_json_text_ids = torch.tensor(
-        [
-            mock_tokenizer.encode('{"name": "read_file"}', add_special_tokens=False),
-            mock_tokenizer.encode('{"name": "web.search"}', add_special_tokens=False),
-        ],
-        device=device,
-    )
+    # Encode JSON token IDs - these may have different lengths
+    gold_json_text_ids_list = [
+        torch.tensor(mock_tokenizer.encode('{"name": "read_file"}', add_special_tokens=False), device=device),
+        torch.tensor(mock_tokenizer.encode('{"name": "web.search"}', add_special_tokens=False), device=device),
+    ]
+    # Pad to same length
+    max_json_len = max(len(ids) for ids in gold_json_text_ids_list)
+    gold_json_text_ids = torch.stack([
+        torch.cat([ids, torch.full((max_json_len - len(ids),), -100, dtype=torch.long, device=device)])
+        for ids in gold_json_text_ids_list
+    ])
 
     mask_valid_json_tokens = torch.ones_like(gold_json_text_ids, dtype=torch.bool, device=device)
 

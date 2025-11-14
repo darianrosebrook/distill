@@ -36,8 +36,6 @@ class TestCAWSBudgetEnforcement:
     def test_tier_1_limits(self, mock_model, mock_tokenizer):
         """Test Tier-1 limits: latent=0, loops≤1."""
         controller = RefinementController(
-            model=mock_model,
-            tokenizer=mock_tokenizer,
             caws_tier=CAWSBudgetTier.TIER_1,
         )
 
@@ -45,19 +43,15 @@ class TestCAWSBudgetEnforcement:
         assert controller.max_loops == 1
 
         # Should halt after 1 loop
-        controller.refine(
-            initial_input_ids=Mock(),
-            max_new_tokens=100,
-            caws_tier="Tier-1",
-        )
+        current_output = {"text": "test", "diff_iou": 0.9, "failing_tests": 0}
+        should_halt, metadata = controller.should_halt(current_output, judge_score=0.9)
 
-        assert controller.loops_run <= 1
+        assert should_halt is True
+        assert controller.loop_count <= 1
 
     def test_tier_2_limits(self, mock_model, mock_tokenizer):
         """Test Tier-2 limits: latent≤1, loops≤2."""
         controller = RefinementController(
-            model=mock_model,
-            tokenizer=mock_tokenizer,
             caws_tier=CAWSBudgetTier.TIER_2,
         )
 
@@ -65,19 +59,18 @@ class TestCAWSBudgetEnforcement:
         assert controller.max_loops == 2
 
         # Should halt after 2 loops
-        controller.refine(
-            initial_input_ids=Mock(),
-            max_new_tokens=100,
-            caws_tier="Tier-2",
-        )
-
-        assert controller.loops_run <= 2
+        current_output = {"text": "test", "diff_iou": 0.9, "failing_tests": 0}
+        # First loop - should continue
+        should_halt_1, _ = controller.should_halt(current_output, judge_score=0.5)
+        assert should_halt_1 is False
+        # Second loop - should halt (max loops reached)
+        should_halt_2, metadata = controller.should_halt(current_output, judge_score=0.5)
+        assert should_halt_2 is True
+        assert controller.loop_count <= 2
 
     def test_tier_3_limits(self, mock_model, mock_tokenizer):
         """Test Tier-3 limits: latent≤3, loops≤3."""
         controller = RefinementController(
-            model=mock_model,
-            tokenizer=mock_tokenizer,
             caws_tier=CAWSBudgetTier.TIER_3,
         )
 
@@ -85,34 +78,31 @@ class TestCAWSBudgetEnforcement:
         assert controller.max_loops == 3
 
         # Should halt after 3 loops
-        controller.refine(
-            initial_input_ids=Mock(),
-            max_new_tokens=100,
-            caws_tier="Tier-3",
-        )
-
-        assert controller.loops_run <= 3
+        current_output = {"text": "test", "diff_iou": 0.9, "failing_tests": 0}
+        # First and second loops - should continue
+        should_halt_1, _ = controller.should_halt(current_output, judge_score=0.5)
+        assert should_halt_1 is False
+        should_halt_2, _ = controller.should_halt(current_output, judge_score=0.5)
+        assert should_halt_2 is False
+        # Third loop - should halt (max loops reached)
+        should_halt_3, metadata = controller.should_halt(current_output, judge_score=0.5)
+        assert should_halt_3 is True
+        assert controller.loop_count <= 3
 
     def test_budget_breach_forces_halt(self, mock_model, mock_tokenizer, mock_judge):
         """Test that budget breach forces halt even if Judge score is low."""
         controller = RefinementController(
-            model=mock_model,
-            tokenizer=mock_tokenizer,
-            judge=mock_judge,
             caws_tier=CAWSBudgetTier.TIER_1,
         )
 
-        # Set low Judge score (would normally continue)
-        mock_judge.score.return_value = {"score": 0.3}
+        # Low Judge score (would normally continue, but tier limit forces halt)
+        current_output = {"text": "test", "diff_iou": 0.3, "failing_tests": 5}
+        should_halt, metadata = controller.should_halt(current_output, judge_score=0.3)
 
-        controller.refine(
-            initial_input_ids=Mock(),
-            max_new_tokens=100,
-            caws_tier="Tier-1",
-        )
-
-        # Should still halt at max loops (hard cap)
-        assert controller.loops_run <= 1
+        # Should still halt at max loops (hard cap) even with low judge score
+        assert should_halt is True
+        assert metadata["halt_reason"] == "max_loops_reached"
+        assert controller.loop_count <= 1
 
     def test_latent_spans_respect_tier(self, mock_model, mock_tokenizer):
         """Test that latent spans respect tier limits."""
