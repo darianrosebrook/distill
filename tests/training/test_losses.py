@@ -2796,9 +2796,9 @@ class TestCAWSComplianceLoss:
             )
 
     def test_caws_compliance_loss_step_patterns_increment(self, device):
-        """Test CAWS compliance loss with step_patterns increment (+=).
+        """Test CAWS compliance loss with step_patterns increment (+=) and subtraction (-).
         
-        This test catches mutations that change += to /= in line 1010.
+        This test catches mutations that change += to /= in line 1010, and Sub to FloorDiv.
         """
         # Import the internal function to test it directly
         from training.losses import _evaluate_budget_compliance
@@ -2838,6 +2838,34 @@ class TestCAWSComplianceLoss:
         penalty_difference = budget_penalty_many_steps - budget_penalty_few_steps
         assert penalty_difference >= 0.2, (
             f"Step penalty difference should be at least 0.2 (got {penalty_difference}), indicating += is used (not /=)"
+        )
+        
+        # Verify that subtraction is used (not floor division)
+        # With Sub: (7 - 5) * 0.2 = 2 * 0.2 = 0.4
+        # With FloorDiv: (7 // 5) * 0.2 = 1 * 0.2 = 0.2
+        # The penalty difference should be 0.4 (not 0.2), indicating subtraction is used
+        # If the difference is exactly 0.4, subtraction is verified
+        # If the difference is 0.2, floor division might be used (wrong behavior)
+        expected_step_penalty = (7 - 5) * 0.2  # 0.4
+        floor_div_penalty = (7 // 5) * 0.2  # 0.2
+        
+        # The penalty difference should be close to 0.4 (subtraction) or at least > 0.2 (floor division)
+        # Since both outputs might have other penalties (e.g., bot/eot mismatches), we check that
+        # the penalty for many steps is at least 0.4 higher than the base penalty (0.0 for few steps)
+        # Actually, let's test with a cleaner input that has no other penalties
+        clean_output_many_steps = "Step 1: A. Step 2: B. Step 3: C. Step 4: D. Step 5: E. Step 6: F. Step 7: G."
+        clean_output_few_steps = "Step 1: A. Step 2: B. Step 3: C."
+        
+        clean_penalty_many = _evaluate_budget_compliance(clean_output_many_steps)
+        clean_penalty_few = _evaluate_budget_compliance(clean_output_few_steps)
+        
+        clean_difference = clean_penalty_many - clean_penalty_few
+        
+        # With subtraction: difference should be 0.4
+        # With floor division: difference should be 0.2
+        assert abs(clean_difference - expected_step_penalty) < 0.01, (
+            f"Step penalty should be {expected_step_penalty} (subtraction: 7-5=2, 2*0.2=0.4), "
+            f"got {clean_difference} (floor division would give {floor_div_penalty}, subtraction verified)"
         )
 
     def test_caws_compliance_loss_code_patterns_penalty_increment(self, device):

@@ -527,7 +527,7 @@ class TestMainFunction:
         mock_parser_class.return_value = mock_parser
         
         with (
-            patch("evaluation.reasoning_eval.safe_from_pretrained_tokenizer") as mock_load_tokenizer,
+            patch("training.safe_model_loading.safe_from_pretrained_tokenizer") as mock_load_tokenizer,
             patch("builtins.print"),
         ):
             # Mock ImportError to trigger RuntimeError path
