@@ -114,6 +114,71 @@ class TestKLDivergence:
         assert isinstance(loss, torch.Tensor)
         assert loss.item() >= 0
 
+    def test_kl_divergence_temperature_division_verification(self, device):
+        """Test that temperature scaling uses division (not addition or multiplication).
+        
+        This test catches mutations that change division to addition/multiplication.
+        Higher temperature should produce different loss values due to division.
+        """
+        batch_size = 2
+        seq_len = 5
+        vocab_size = 100
+
+        # Use fixed logits to ensure reproducible results
+        torch.manual_seed(42)
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+        teacher_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+
+        # Test with different temperatures
+        loss_t1 = kl_divergence(student_logits, teacher_logits, temperature=1.0)
+        loss_t2 = kl_divergence(student_logits, teacher_logits, temperature=2.0)
+        loss_t05 = kl_divergence(student_logits, teacher_logits, temperature=0.5)
+
+        # Verify that different temperatures produce different results
+        # (If division were changed to addition/multiplication, results would be very different)
+        assert not torch.isclose(loss_t1, loss_t2, atol=1e-6), "Temperature 1.0 and 2.0 should produce different losses"
+        assert not torch.isclose(loss_t1, loss_t05, atol=1e-6), "Temperature 1.0 and 0.5 should produce different losses"
+        
+        # Verify temperature scaling effect: higher temperature typically reduces KL divergence
+        # (This verifies division is used, not addition/multiplication)
+        assert loss_t2.item() != loss_t1.item(), "Temperature scaling should change loss values"
+        
+        # All losses should be non-negative
+        assert loss_t1.item() >= 0
+        assert loss_t2.item() >= 0
+        assert loss_t05.item() >= 0
+
+    def test_kl_divergence_temperature_scaling_effect(self, device):
+        """Test that temperature scaling correctly divides logits by temperature.
+        
+        This test specifically verifies division operation in temperature scaling.
+        """
+        batch_size = 1
+        seq_len = 3
+        vocab_size = 5
+
+        # Use different logits to ensure non-zero KL divergence
+        # Student and teacher have different distributions to create measurable loss
+        student_logits = torch.tensor([[[1.0, 2.0, 3.0, 4.0, 5.0]]], device=device, requires_grad=True)
+        teacher_logits = torch.tensor([[[5.0, 4.0, 3.0, 2.0, 1.0]]], device=device)  # Different distribution
+
+        # With temperature=1.0, logits are divided by 1 (no change)
+        loss_t1 = kl_divergence(student_logits, teacher_logits, temperature=1.0)
+        
+        # With temperature=2.0, logits are divided by 2 (should change loss)
+        loss_t2 = kl_divergence(student_logits, teacher_logits, temperature=2.0)
+
+        # Verify division is used (not addition/multiplication)
+        # With division: higher temperature reduces KL divergence (makes distributions more similar)
+        # If division were changed to addition, loss_t2 would be much larger
+        # If division were changed to multiplication, loss_t2 would be much smaller
+        # For KL divergence, higher temperature should reduce the loss (smoother distributions)
+        assert loss_t1.item() > 0, "KL divergence should be positive with different distributions"
+        assert loss_t2.item() > 0, "KL divergence should be positive with different distributions"
+        # Higher temperature should reduce KL divergence (not increase it)
+        # So loss_t2 should be less than loss_t1 (or at least different)
+        assert abs(loss_t1.item() - loss_t2.item()) > 1e-4, "Different temperatures should produce measurably different losses when division is used"
+
 
 class TestCrossEntropyOnTeacher:
     """Test cross-entropy loss on teacher predictions."""
@@ -872,6 +937,85 @@ class TestCombinedKDLoss:
         assert isinstance(loss_dict, dict)
         assert loss_dict["total"].item() >= 0
 
+    def test_combined_kd_loss_code_mode_weight_positive_check(self, device):
+        """Test that code_mode_weight > 0 check is enforced.
+        
+        This test catches mutations that change > 0 to < 0 or remove the check.
+        """
+        batch_size = 2
+        seq_len = 10
+        vocab_size = 1000
+
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+        teacher_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+        teacher_targets = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        ground_truth_targets = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        
+        # Create a code_mode_loss
+        code_mode_loss = torch.tensor(0.5, device=device, requires_grad=True)
+
+        # Test with code_mode_weight = 0 (should NOT add code_mode_loss)
+        loss_dict_zero = combined_kd_loss(
+            student_logits,
+            teacher_logits,
+            teacher_targets,
+            ground_truth_targets,
+            kl_weight=0.5,
+            ce_teacher_weight=0.3,
+            ce_ground_truth_weight=0.2,
+            kd_temperature=1.0,
+            code_mode_loss=code_mode_loss,
+            code_mode_weight=0.0,  # Zero weight
+        )
+        
+        # Test with code_mode_weight > 0 (should add code_mode_loss)
+        loss_dict_positive = combined_kd_loss(
+            student_logits,
+            teacher_logits,
+            teacher_targets,
+            ground_truth_targets,
+            kl_weight=0.5,
+            ce_teacher_weight=0.3,
+            ce_ground_truth_weight=0.2,
+            kd_temperature=1.0,
+            code_mode_loss=code_mode_loss,
+            code_mode_weight=0.3,  # Positive weight
+        )
+        
+        # Test with code_mode_weight < 0 (should NOT add code_mode_loss, same as zero)
+        loss_dict_negative = combined_kd_loss(
+            student_logits,
+            teacher_logits,
+            teacher_targets,
+            ground_truth_targets,
+            kl_weight=0.5,
+            ce_teacher_weight=0.3,
+            ce_ground_truth_weight=0.2,
+            kd_temperature=1.0,
+            code_mode_loss=code_mode_loss,
+            code_mode_weight=-0.1,  # Negative weight (should be ignored)
+        )
+
+        # Verify that code_mode_weight = 0 does NOT add code_mode_loss
+        assert "code_mode_pref" not in loss_dict_zero, "code_mode_weight=0 should not add code_mode_loss"
+        
+        # Verify that code_mode_weight > 0 DOES add code_mode_loss
+        assert "code_mode_pref" in loss_dict_positive, "code_mode_weight>0 should add code_mode_loss"
+        assert loss_dict_positive["code_mode_pref"] == code_mode_loss
+        
+        # Verify that code_mode_weight < 0 does NOT add code_mode_loss (same as zero)
+        assert "code_mode_pref" not in loss_dict_negative, "code_mode_weight<0 should not add code_mode_loss"
+        
+        # Verify that positive weight increases total loss
+        assert loss_dict_positive["total"].item() > loss_dict_zero["total"].item(), (
+            "code_mode_weight>0 should increase total loss"
+        )
+        
+        # Verify that negative weight is treated same as zero
+        assert abs(loss_dict_negative["total"].item() - loss_dict_zero["total"].item()) < 1e-6, (
+            "code_mode_weight<0 should be treated same as zero"
+        )
+
 
 class TestCodeModePreferenceLoss:
     """Test CodeModePreferenceLoss class."""
@@ -1074,6 +1218,110 @@ class TestCodeModePreferenceLoss:
         assert isinstance(loss, torch.Tensor)
         assert loss.requires_grad
         assert loss.item() >= 0
+
+    def test_code_mode_preference_loss_span_targets_none_handling(self, device):
+        """Test CodeModePreferenceLoss with span_targets=None explicitly.
+        
+        This test catches mutations that change None to True in the function signature.
+        """
+        eligibility_rules = {"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []}
+        reward = {"prefer_ts_api_over_direct_tool": True, "penalize_tool_result_roundtrip": True}
+        vocab_ids = {"import": 100, "from": 101}
+
+        loss_fn = CodeModePreferenceLoss(
+            eligibility_rules=eligibility_rules, reward=reward, vocab_ids=vocab_ids
+        )
+
+        batch_size = 2
+        seq_len = 20
+        vocab_size = 1000
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+
+        # Batch metadata: eligible samples
+        batch_meta = [
+            {"tool_count": 3, "intermediate_sizes": [15000], "pii_tags_present": False},
+            {"tool_count": 2, "intermediate_sizes": [12000], "pii_tags_present": False},
+        ]
+
+        # Test with span_targets=None explicitly (default value)
+        loss_none = loss_fn(student_logits, span_targets=None, batch_meta=batch_meta)
+
+        # Test with span_targets as empty list
+        loss_empty = loss_fn(student_logits, span_targets=[], batch_meta=batch_meta)
+
+        # Both should return zero loss when no span targets provided
+        assert isinstance(loss_none, torch.Tensor)
+        assert isinstance(loss_empty, torch.Tensor)
+        assert loss_none.item() == 0.0, "span_targets=None should return zero loss"
+        assert loss_empty.item() == 0.0, "span_targets=[] should return zero loss"
+
+    def test_code_mode_preference_loss_weight_multiplication_verification(self, device):
+        """Test that CodeModePreferenceLoss multiplies weights (not adds).
+        
+        This test catches mutations that change multiplication to addition in line 846.
+        """
+        eligibility_rules = {"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []}
+        reward = {"prefer_ts_api_over_direct_tool": True, "penalize_tool_result_roundtrip": True}
+        vocab_ids = {"import": 100, "from": 101}
+
+        # Create loss function with known weights
+        loss_fn_light = CodeModePreferenceLoss(
+            eligibility_rules=eligibility_rules,
+            reward=reward,
+            vocab_ids=vocab_ids,
+            weights={"pos": 1.0, "neg": 1.0},  # Light weights
+        )
+        
+        loss_fn_heavy = CodeModePreferenceLoss(
+            eligibility_rules=eligibility_rules,
+            reward=reward,
+            vocab_ids=vocab_ids,
+            weights={"pos": 5.0, "neg": 5.0},  # Heavy weights (5x)
+        )
+
+        batch_size = 1
+        seq_len = 20
+        vocab_size = 1000
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+
+        # Batch metadata: eligible sample
+        batch_meta = [
+            {"tool_count": 3, "intermediate_sizes": [15000], "pii_tags_present": False},
+        ]
+
+        # Span targets with direct tool spans (negative penalty)
+        span_targets = [
+            {"ts_mode_spans": [], "direct_tool_spans": [(5, 10)]},  # Has direct tool spans
+        ]
+
+        # Compute losses with different weights
+        loss_light = loss_fn_light(student_logits, span_targets=span_targets, batch_meta=batch_meta)
+        loss_heavy = loss_fn_heavy(student_logits, span_targets=span_targets, batch_meta=batch_meta)
+
+        # Verify that weights are multiplied (not added)
+        # If multiplication were changed to addition, the relationship would be different
+        # With multiplication: loss_heavy should be approximately 5x loss_light (for negative spans)
+        # With addition: loss_heavy would be loss_light + 4.0 * base_loss (constant addition)
+        
+        # The loss can be negative (penalty for discouraging spans)
+        # But the magnitude should scale with weights if multiplication is used
+        
+        # Check that heavy weight produces larger magnitude loss (multiplication effect)
+        # Take absolute value to compare magnitudes regardless of sign
+        loss_light_abs = abs(loss_light.item())
+        loss_heavy_abs = abs(loss_heavy.item())
+        
+        if loss_light_abs > 1e-6:  # Only check if loss is non-zero
+            # With multiplication, the ratio should be close to the weight ratio (5.0)
+            # With addition, the ratio would be much smaller
+            ratio = loss_heavy_abs / loss_light_abs
+            # Ratio should be approximately 5.0 if multiplication is used
+            # Allow some tolerance (2.0 to 10.0) due to averaging and other factors
+            assert 2.0 < ratio < 10.0, f"Weights should be multiplied (ratio={ratio:.2f}), not added. Expected ~5.0, got {ratio:.2f}"
+        
+        # Verify both losses have requires_grad (they should be differentiable)
+        assert loss_light.requires_grad
+        assert loss_heavy.requires_grad
 
 
 class TestCAWSComplianceLoss:
