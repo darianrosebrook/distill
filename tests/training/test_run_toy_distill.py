@@ -696,8 +696,11 @@ class TestRunToyDistillMain:
             # Verify checkpoint was saved
             assert mock_save.called, "torch.save should have been called to save checkpoint"
             call_args = mock_save.call_args
-            saved_checkpoint = call_args[0][1]  # Second argument is the checkpoint dict
+            # torch.save(checkpoint, output_path) - first arg is checkpoint dict, second is path
+            saved_checkpoint = call_args[0][0]  # First argument is the checkpoint dict
+            saved_path = call_args[0][1]  # Second argument is the path
 
+            assert isinstance(saved_checkpoint, dict), f"Expected dict, got {type(saved_checkpoint)}"
             assert "model_state_dict" in saved_checkpoint
             assert "config" in saved_checkpoint
             assert "meta" in saved_checkpoint

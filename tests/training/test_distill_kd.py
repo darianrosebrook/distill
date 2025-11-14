@@ -1716,6 +1716,10 @@ class TestTrainingStepExpanded:
         training_config["distillation"]["min_temperature"] = 1.5
         training_config["distillation"]["max_temperature"] = 3.0
         training_config["train"] = {"total_steps": 1000}
+        
+        # Mock adaptive_temperature if it doesn't exist
+        with patch("training.distill_kd.adaptive_temperature", create=True) as mock_adaptive:
+            mock_adaptive.return_value = 2.0
 
         # Move batch to device
         for k, v in sample_batch.items():
