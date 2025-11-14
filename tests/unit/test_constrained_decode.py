@@ -611,9 +611,7 @@ class TestJSONConstrainedDecoder:
 class TestDecoderIntegration:
     """Integration tests for decoder with real tokenizer."""
 
-    @pytest.mark.skipif(
-        "transformers" not in __import__("sys").modules, reason="transformers not available"
-    )
+    @pytest.mark.skip(reason="Requires transformers library and network access")
     def test_with_real_tokenizer(self):
         """Test decoder with real transformers tokenizer."""
         try:

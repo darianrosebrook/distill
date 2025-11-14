@@ -359,3 +359,141 @@ class TestDeepMerge:
 
         assert merged["value"] == 2  # Overridden
         assert merged["list"] == [3, 4]  # Overridden (not merged)
+
+
+class TestConfigFileValidationEdgeCases:
+    """Test edge cases and error paths in config file validation."""
+
+    def test_validate_config_file_json_format(self, tmp_path):
+        """Test validate_config_file with JSON format file."""
+        import json
+        config_file = tmp_path / "config.json"
+        valid_config = create_default_config()
+        with open(config_file, "w") as f:
+            json.dump(valid_config, f)
+
+        errors = validate_config_file(config_file)
+        assert errors == []
+
+    def test_validate_config_file_yaml_parse_error(self, tmp_path):
+        """Test validate_config_file with invalid YAML."""
+        config_file = tmp_path / "invalid.yaml"
+        with open(config_file, "w") as f:
+            f.write("invalid: yaml: content: [unclosed")
+
+        errors = validate_config_file(config_file)
+        assert len(errors) > 0
+        assert "Failed to parse configuration file" in errors[0]
+
+    def test_validate_config_file_json_parse_error(self, tmp_path):
+        """Test validate_config_file with invalid JSON."""
+        import json
+        config_file = tmp_path / "invalid.json"
+        with open(config_file, "w") as f:
+            f.write('{"invalid": json}')
+
+        errors = validate_config_file(config_file)
+        assert len(errors) > 0
+        assert "Failed to parse configuration file" in errors[0]
+
+    def test_validate_config_file_unexpected_error(self, tmp_path, monkeypatch):
+        """Test validate_config_file with unexpected error."""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("valid: yaml")
+
+        # Mock open to raise an unexpected error
+        def mock_open(*args, **kwargs):
+            raise RuntimeError("Unexpected error")
+
+        monkeypatch.setattr("builtins.open", mock_open)
+
+        errors = validate_config_file(config_file)
+        assert len(errors) > 0
+        assert "Unexpected error validating configuration" in errors[0]
+
+    def test_validate_config_file_with_validation_errors(self, tmp_path):
+        """Test validate_config_file with config that has validation errors."""
+        config_file = tmp_path / "invalid_config.yaml"
+        invalid_config = {"invalid": "config", "missing_required": True}
+        with open(config_file, "w") as f:
+            yaml.dump(invalid_config, f)
+
+        errors = validate_config_file(config_file)
+        assert len(errors) > 0  # Should have validation errors
+
+
+class TestSaveConfigTemplate:
+    """Test save_config_template function."""
+
+    def test_save_config_template_yaml(self, tmp_path):
+        """Test save_config_template saves YAML format."""
+        template_path = tmp_path / "template.yaml"
+        save_config_template(template_path)
+
+        assert template_path.exists()
+        with open(template_path, "r") as f:
+            config = yaml.safe_load(f)
+        assert "model" in config
+        assert "training" in config
+
+    def test_save_config_template_json(self, tmp_path):
+        """Test save_config_template saves JSON format."""
+        import json
+        template_path = tmp_path / "template.json"
+        save_config_template(template_path)
+
+        assert template_path.exists()
+        with open(template_path, "r") as f:
+            config = json.load(f)
+        assert "model" in config
+        assert "training" in config
+
+
+class TestMergeConfigsEdgeCases:
+    """Test edge cases in merge_configs function."""
+
+    def test_merge_configs_file_not_found(self):
+        """Test merge_configs raises FileNotFoundError for missing file."""
+        with pytest.raises(FileNotFoundError, match="Configuration file not found"):
+            merge_configs(["nonexistent.yaml"])
+
+    def test_merge_configs_json_format(self, tmp_path):
+        """Test merge_configs with JSON format files."""
+        import json
+        config1 = tmp_path / "config1.json"
+        config2 = tmp_path / "config2.json"
+
+        with open(config1, "w") as f:
+            json.dump({"model": {"d_model": 128}}, f)
+        with open(config2, "w") as f:
+            json.dump({"model": {"n_layers": 4}}, f)
+
+        merged = merge_configs([str(config1), str(config2)])
+        assert merged["model"]["d_model"] == 128
+        assert merged["model"]["n_layers"] == 4
+
+    def test_merge_configs_validate_final_valid(self, tmp_path):
+        """Test merge_configs with validate_final=True and valid config."""
+        config1 = tmp_path / "config1.yaml"
+        config2 = tmp_path / "config2.yaml"
+
+        base_config = create_default_config()
+        with open(config1, "w") as f:
+            yaml.dump(base_config, f)
+
+        update_config = {"training": {"steps": 500}}
+        with open(config2, "w") as f:
+            yaml.dump(update_config, f)
+
+        merged = merge_configs([str(config1), str(config2)], validate_final=True)
+        assert merged["training"]["steps"] == 500
+
+    def test_merge_configs_validate_final_invalid(self, tmp_path):
+        """Test merge_configs with validate_final=True and invalid config."""
+        config_file = tmp_path / "invalid.yaml"
+        invalid_config = {"invalid": "config"}
+        with open(config_file, "w") as f:
+            yaml.dump(invalid_config, f)
+
+        with pytest.raises(ValueError, match="Invalid merged configuration"):
+            merge_configs([str(config_file)], validate_final=True)

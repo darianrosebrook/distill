@@ -57,8 +57,12 @@ class AnswerGenerationDataset(Dataset):
             for line in f:
                 if not line.strip():
                     continue
-                example = json.loads(line)
-                self.examples.append(example)
+                try:
+                    example = json.loads(line)
+                    self.examples.append(example)
+                except json.JSONDecodeError:
+                    # Skip invalid JSON lines
+                    continue
 
         print(f"[AnswerGenerationDataset] Loaded {len(self.examples)} examples from {data_path}")
 

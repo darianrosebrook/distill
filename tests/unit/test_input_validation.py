@@ -370,3 +370,411 @@ class TestSecurityPatterns:
         """Test that pattern detection is case insensitive."""
         text = 'Content <SCRIPT>alert("hack")</SCRIPT> more content'
         assert validator._contains_suspicious_patterns(text)
+
+    def test_contains_suspicious_patterns_non_string(self, validator):
+        """Test that non-string input returns False."""
+        assert not validator._contains_suspicious_patterns(None)
+        assert not validator._contains_suspicious_patterns(123)
+        assert not validator._contains_suspicious_patterns([])
+
+
+class TestInputValidatorNonStrictMode:
+    """Test InputValidator in non-strict mode (warnings instead of errors)."""
+
+    @pytest.fixture
+    def validator(self):
+        """Create non-strict validator fixture."""
+        return InputValidator(strict_mode=False)
+
+    def test_validate_text_input_none_non_strict(self, validator):
+        """Test None input in non-strict mode returns empty string."""
+        result = validator.validate_text_input(None, "test_field")
+        assert result == ""
+
+    def test_validate_text_input_non_string_non_strict(self, validator):
+        """Test non-string input in non-strict mode converts to string."""
+        result = validator.validate_text_input(123, "test_field")
+        assert result == "123"
+        result = validator.validate_text_input([1, 2, 3], "test_field")
+        assert isinstance(result, str)
+
+    def test_validate_text_input_non_string_strict(self):
+        """Test non-string input in strict mode raises error."""
+        validator = InputValidator(strict_mode=True)
+        with pytest.raises(ValidationError, match="must be a string"):
+            validator.validate_text_input(123, "test_field")
+
+    def test_validate_text_input_too_long_non_strict(self, validator):
+        """Test too long input in non-strict mode truncates."""
+        long_text = "x" * (validator.MAX_PROMPT_LENGTH + 100)
+        result = validator.validate_text_input(long_text, "prompt")
+        assert len(result) == validator.MAX_PROMPT_LENGTH
+
+    def test_validate_text_input_suspicious_non_strict(self, validator):
+        """Test suspicious content in non-strict mode sanitizes."""
+        suspicious = '<script>alert("hack")</script>'
+        result = validator.validate_text_input(suspicious, "prompt")
+        # Should sanitize or return empty
+        assert isinstance(result, str)
+
+
+class TestInputValidatorEdgeCases:
+    """Test edge cases and error paths in InputValidator."""
+
+    @pytest.fixture
+    def validator(self):
+        """Create validator fixture."""
+        return InputValidator()
+
+    def test_validate_structured_data_not_dict(self, validator):
+        """Test validate_structured_data with non-dict input."""
+        with pytest.raises(ValidationError, match="must be a dictionary"):
+            validator.validate_structured_data("not a dict")
+
+    def test_validate_structured_data_list_in_data(self, validator):
+        """Test validate_structured_data with list in data."""
+        data = {"prompt": "test", "response": "test", "items": [1, 2, 3]}
+        result = validator.validate_structured_data(data)
+        assert result["items"] == [1, 2, 3]
+
+    def test_validate_structured_data_optional_string_field(self, validator):
+        """Test validate_structured_data with optional string field."""
+        data = {"prompt": "test", "response": "test", "optional_field": "optional value"}
+        result = validator.validate_structured_data(data)
+        assert result["optional_field"] == "optional value"
+
+    def test_validate_structured_data_unexpected_type(self, validator):
+        """Test validate_structured_data with unexpected type."""
+        data = {"prompt": "test", "response": "test", "weird_field": object()}
+        with pytest.raises(ValidationError, match="invalid type"):
+            validator.validate_structured_data(data)
+
+    def test_validate_structured_data_invalid_type_non_required(self, validator):
+        """Test validate_structured_data with invalid type in non-required field."""
+        data = {"prompt": "test", "response": "test", "metadata": 123}
+        # Non-required fields with primitive types are accepted
+        result = validator.validate_structured_data(data)
+        assert result["metadata"] == 123
+
+    def test_validate_tool_call_not_dict(self, validator):
+        """Test validate_tool_call with non-dict input."""
+        with pytest.raises(ValidationError, match="must be a dictionary"):
+            validator.validate_tool_call("not a dict")
+
+    def test_validate_tool_call_missing_arguments(self, validator):
+        """Test validate_tool_call with missing arguments field."""
+        tool_call = {"name": "test.tool"}
+        with pytest.raises(ValidationError, match="missing required field"):
+            validator.validate_tool_call(tool_call)
+
+    def test_validate_tool_call_invalid_name_format(self, validator):
+        """Test validate_tool_call with invalid name format."""
+        tool_call = {"name": "123invalid", "arguments": {}}
+        with pytest.raises(ValidationError, match="Invalid tool name format"):
+            validator.validate_tool_call(tool_call)
+
+    def test_validate_tool_call_arguments_not_dict(self, validator):
+        """Test validate_tool_call with non-dict arguments."""
+        tool_call = {"name": "test.tool", "arguments": "not a dict"}
+        with pytest.raises(ValidationError, match="must be a dictionary"):
+            validator.validate_tool_call(tool_call)
+
+    def test_validate_tools_not_list(self, validator):
+        """Test validate_tools with non-list input."""
+        with pytest.raises(ValidationError, match="must be a list"):
+            validator.validate_tools("not a list")
+
+    def test_validate_tools_tool_not_dict(self, validator):
+        """Test validate_tools with tool that's not a dict."""
+        tools = ["not a dict"]
+        with pytest.raises(ValidationError, match="must be a dictionary"):
+            validator.validate_tools(tools)
+
+    def test_validate_training_example_not_dict(self, validator):
+        """Test validate_training_example with non-dict input."""
+        with pytest.raises(ValidationError, match="must be a dictionary"):
+            validator.validate_training_example("not a dict")
+
+    def test_validate_training_example_missing_response(self, validator):
+        """Test validate_training_example with missing response field."""
+        example = {"prompt": "test"}
+        with pytest.raises(ValidationError, match="missing required field"):
+            validator.validate_training_example(example)
+
+    def test_validate_training_example_cot_steps_not_list(self, validator):
+        """Test validate_training_example with cot_steps that's not a list."""
+        example = {"prompt": "test", "response": "test", "cot_steps": "not a list"}
+        with pytest.raises(ValidationError, match="must be a list"):
+            validator.validate_training_example(example)
+
+    def test_validate_training_example_with_answer_instead_of_response(self, validator):
+        """Test validate_training_example with answer field instead of response."""
+        example = {"prompt": "test", "answer": "test answer"}
+        result = validator.validate_training_example(example)
+        assert result["response"] == "test answer"
+
+    def test_validate_training_example_with_both_answer_and_response(self, validator):
+        """Test validate_training_example with both answer and response fields."""
+        example = {"prompt": "test", "response": "response", "answer": "answer"}
+        result = validator.validate_training_example(example)
+        assert result["response"] == "response"
+        assert result["answer"] == "answer"
+
+    def test_validate_training_example_with_teacher_text(self, validator):
+        """Test validate_training_example with teacher_text field."""
+        example = {"prompt": "test", "response": "test", "teacher_text": "teacher text"}
+        result = validator.validate_training_example(example)
+        assert result["teacher_text"] == "teacher text"
+
+    def test_validate_training_example_with_cot_steps(self, validator):
+        """Test validate_training_example with cot_steps field."""
+        example = {"prompt": "test", "response": "test", "cot_steps": ["step1", "step2"]}
+        result = validator.validate_training_example(example)
+        assert result["cot_steps"] == ["step1", "step2"]
+
+    def test_validate_metadata_not_dict(self, validator):
+        """Test validate_metadata with non-dict input."""
+        with pytest.raises(ValidationError, match="must be a dictionary"):
+            validator.validate_metadata("not a dict")
+
+    def test_validate_metadata_intermediate_sizes_not_list(self, validator):
+        """Test validate_metadata with intermediate_sizes that's not a list."""
+        metadata = {"intermediate_sizes": "not a list"}
+        with pytest.raises(ValidationError, match="must be a list"):
+            validator.validate_metadata(metadata)
+
+    def test_validate_metadata_boolean_field_not_bool(self, validator):
+        """Test validate_metadata with boolean field that's not bool."""
+        metadata = {"pii_tags_present": "not a bool"}
+        with pytest.raises(ValidationError, match="must be a boolean"):
+            validator.validate_metadata(metadata)
+
+    def test_validate_metadata_boolean_fields_valid(self, validator):
+        """Test validate_metadata with valid boolean fields."""
+        metadata = {"pii_tags_present": True, "eligible_for_code_mode": False}
+        result = validator.validate_metadata(metadata)
+        assert result["pii_tags_present"] is True
+        assert result["eligible_for_code_mode"] is False
+
+    def test_validate_batch_not_dict(self, validator):
+        """Test validate_batch with non-dict input."""
+        with pytest.raises(ValidationError, match="must be a dictionary"):
+            validator.validate_batch("not a dict")
+
+    def test_validate_batch_tensor_not_tensor(self, validator):
+        """Test validate_batch with field that's not a tensor."""
+        batch = {"input_ids": "not a tensor"}
+        with pytest.raises(ValidationError, match="must be a tensor"):
+            validator.validate_batch(batch)
+
+    def test_validate_batch_valid_tensors(self, validator):
+        """Test validate_batch with valid tensors."""
+        import torch
+        batch = {
+            "input_ids": torch.tensor([1, 2, 3]),
+            "attention_mask": torch.ones(3),
+            "labels": torch.tensor([1, 2, 3])
+        }
+        result = validator.validate_batch(batch)
+        assert "input_ids" in result
+        assert "attention_mask" in result
+        assert "labels" in result
+
+    def test_sanitize_json_string_removes_null_bytes(self, validator):
+        """Test sanitize_json_string removes null bytes."""
+        json_str = '{"key": "value\x00with\x00nulls"}'
+        result = validator.sanitize_json_string(json_str)
+        assert "\x00" not in result
+
+    def test_sanitize_json_string_truncates_long_string(self, validator):
+        """Test sanitize_json_string truncates strings over 1MB."""
+        long_json = "x" * 2000000  # 2MB
+        result = validator.sanitize_json_string(long_json)
+        assert len(result) == 1000000  # Should be truncated to 1MB
+
+    def test_validate_file_path_invalid_path_traversal(self, validator):
+        """Test validate_file_path with path traversal attempt."""
+        # Note: Current implementation doesn't prevent path traversal
+        # This test verifies the function handles the path without error
+        # (path traversal prevention should be added in a future security improvement)
+        result = validator.validate_file_path("../../../etc/passwd", must_exist=False)
+        assert isinstance(result, str)
+
+    def test_validate_file_path_dangerous_extension(self, validator, tmp_path):
+        """Test validate_file_path with dangerous file extension."""
+        dangerous_file = tmp_path / "test.exe"
+        dangerous_file.write_text("test")
+        with pytest.raises(ValidationError, match="Dangerous file extension"):
+            validator.validate_file_path(str(dangerous_file))
+
+    def test_validate_file_path_must_exist_false(self, validator):
+        """Test validate_file_path with must_exist=False doesn't check existence."""
+        nonexistent = "/nonexistent/file.txt"
+        # Should not raise error if must_exist=False
+        result = validator.validate_file_path(nonexistent, must_exist=False)
+        assert isinstance(result, str)
+
+    def test_validate_tool_trace_not_list(self):
+        """Test validate_tool_trace with non-list input."""
+        with pytest.raises(ValidationError, match="must be a list"):
+            validate_tool_trace("not a list")
+
+    def test_validate_tool_trace_entry_not_dict(self):
+        """Test validate_tool_trace with entry that's not a dict."""
+        trace = ["not a dict"]
+        with pytest.raises(ValidationError, match="must be a dictionary"):
+            validate_tool_trace(trace)
+
+    def test_validate_tool_trace_missing_tool_name(self):
+        """Test validate_tool_trace with missing tool_name."""
+        trace = [{"tool_input": "test", "tool_output": "test"}]
+        with pytest.raises(ValidationError, match="missing required field"):
+            validate_tool_trace(trace)
+
+    def test_validate_training_data_not_list(self):
+        """Test validate_training_data with non-list input."""
+        with pytest.raises(ValidationError):
+            validate_training_data("not a list")
+
+    def test_validate_training_data_invalid_example(self):
+        """Test validate_training_data with invalid example."""
+        data = [{"prompt": "test"}]  # Missing response
+        with pytest.raises(ValidationError):
+            validate_training_data(data)
+
+    def test_validate_numeric_input_valid_int(self, validator):
+        """Test validate_numeric_input with valid integer."""
+        result = validator.validate_numeric_input(42, "test_field")
+        assert result == 42
+
+    def test_validate_numeric_input_valid_float(self, validator):
+        """Test validate_numeric_input with valid float."""
+        result = validator.validate_numeric_input(3.14, "test_field")
+        assert result == 3.14
+
+    def test_validate_numeric_input_string_number(self, validator):
+        """Test validate_numeric_input with string that can be converted."""
+        result = validator.validate_numeric_input("42", "test_field")
+        assert result == 42.0
+
+    def test_validate_numeric_input_invalid_type(self, validator):
+        """Test validate_numeric_input with non-numeric value."""
+        with pytest.raises(ValidationError, match="must be numeric"):
+            validator.validate_numeric_input("not a number", "test_field")
+
+    def test_validate_numeric_input_below_min(self, validator):
+        """Test validate_numeric_input with value below minimum."""
+        with pytest.raises(ValidationError, match="must be >="):
+            validator.validate_numeric_input(5, "test_field", min_val=10)
+
+    def test_validate_numeric_input_above_max(self, validator):
+        """Test validate_numeric_input with value above maximum."""
+        with pytest.raises(ValidationError, match="must be <="):
+            validator.validate_numeric_input(100, "test_field", max_val=50)
+
+    def test_validate_numeric_input_with_bounds(self, validator):
+        """Test validate_numeric_input with both min and max bounds."""
+        result = validator.validate_numeric_input(25, "test_field", min_val=10, max_val=50)
+        assert result == 25
+
+    def test_validate_text_input_suspicious_in_strict_mode(self, validator):
+        """Test validate_text_input with suspicious content in strict mode."""
+        suspicious = '<script>alert("hack")</script>'
+        with pytest.raises(ValidationError, match="contains suspicious content"):
+            validator.validate_text_input(suspicious, "prompt")
+
+    def test_validate_structured_data_required_field_wrong_type(self, validator):
+        """Test validate_structured_data with required field having wrong type."""
+        data = {"prompt": 123, "response": "test"}  # prompt should be string
+        with pytest.raises(ValidationError, match="invalid type"):
+            validator.validate_structured_data(data)
+
+    def test_validate_metadata_tool_count_validation(self, validator):
+        """Test validate_metadata with tool_count validation."""
+        metadata = {"tool_count": 25}
+        result = validator.validate_metadata(metadata)
+        assert result["tool_count"] == 25
+
+    def test_validate_metadata_tool_count_too_high(self, validator):
+        """Test validate_metadata with tool_count exceeding max."""
+        metadata = {"tool_count": validator.MAX_TOOL_COUNT + 1}
+        with pytest.raises(ValidationError, match="must be <="):
+            validator.validate_metadata(metadata)
+
+    def test_validate_metadata_intermediate_sizes_validation(self, validator):
+        """Test validate_metadata with intermediate_sizes validation."""
+        metadata = {"intermediate_sizes": [100, 200, 300]}
+        result = validator.validate_metadata(metadata)
+        assert result["intermediate_sizes"] == [100, 200, 300]
+
+    def test_validate_batch_with_nan(self, validator):
+        """Test validate_batch detects NaN values in tensors."""
+        import torch
+        batch = {
+            "input_ids": torch.tensor([1, 2, 3]),
+            "labels": torch.tensor([1.0, float('nan'), 3.0])
+        }
+        with pytest.raises(ValidationError, match="contains NaN values"):
+            validator.validate_batch(batch)
+
+    def test_validate_batch_with_inf(self, validator):
+        """Test validate_batch detects infinite values in tensors."""
+        import torch
+        batch = {
+            "input_ids": torch.tensor([1, 2, 3]),
+            "labels": torch.tensor([1.0, float('inf'), 3.0])
+        }
+        with pytest.raises(ValidationError, match="contains infinite values"):
+            validator.validate_batch(batch)
+
+    def test_validate_file_path_file_too_large(self, validator, tmp_path):
+        """Test validate_file_path with file that's too large."""
+        large_file = tmp_path / "large.txt"
+        # Create a file larger than MAX_FILE_SIZE_MB
+        large_content = "x" * (validator.MAX_FILE_SIZE_MB * 1024 * 1024 + 1)
+        large_file.write_text(large_content)
+        with pytest.raises(ValidationError, match="file too large"):
+            validator.validate_file_path(str(large_file))
+
+    def test_validate_tool_trace_missing_tool_input(self):
+        """Test validate_tool_trace with missing tool_input."""
+        trace = [{"tool_name": "test", "tool_output": "test"}]
+        with pytest.raises(ValidationError, match="missing required field"):
+            validate_tool_trace(trace)
+
+    def test_validate_tool_trace_missing_tool_output(self):
+        """Test validate_tool_trace with missing tool_output."""
+        trace = [{"tool_name": "test", "tool_input": "test"}]
+        with pytest.raises(ValidationError, match="missing required field"):
+            validate_tool_trace(trace)
+
+    def test_validate_tool_trace_preserves_other_fields(self):
+        """Test validate_tool_trace preserves fields like timestamp."""
+        trace = [{
+            "tool_name": "test",
+            "tool_input": "input",
+            "tool_output": "output",
+            "timestamp": "2024-01-01T00:00:00Z"
+        }]
+        result = validate_tool_trace(trace)
+        assert result[0]["timestamp"] == "2024-01-01T00:00:00Z"
+
+    def test_validate_tool_trace_non_string_input(self):
+        """Test validate_tool_trace with non-string tool_input."""
+        trace = [{
+            "tool_name": "test",
+            "tool_input": {"key": "value"},  # Dict instead of string
+            "tool_output": "output"
+        }]
+        result = validate_tool_trace(trace)
+        assert result[0]["tool_input"] == {"key": "value"}
+
+    def test_validate_tool_trace_non_string_output(self):
+        """Test validate_tool_trace with non-string tool_output."""
+        trace = [{
+            "tool_name": "test",
+            "tool_input": "input",
+            "tool_output": {"result": "data"}  # Dict instead of string
+        }]
+        result = validate_tool_trace(trace)
+        assert result[0]["tool_output"] == {"result": "data"}

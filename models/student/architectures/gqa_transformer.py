@@ -172,14 +172,28 @@ class MHA_GQA(nn.Module):
         scale = 1.0 / math.sqrt(self.d_head)
         attn_scores = torch.matmul(q, k.transpose(-2, -1)) * scale  # [B,H,T,T]
         if attn_mask is not None:
-            # Convert binary mask [B, T] (1=real token, 0=pad) to additive mask [B, 1, 1, T]
-            # Padding positions get -1e4, real tokens get 0
-            # Ensure mask dtype matches attn_scores dtype
             mask_dtype = attn_scores.dtype
-            # attn_mask is [B, T] with 1s for real tokens, 0s for padding
-            # Expand to [B, 1, 1, T] for broadcasting
-            additive_mask = (1.0 - attn_mask.to(mask_dtype)).unsqueeze(1).unsqueeze(2) * -1e4
-            attn_scores = attn_scores + additive_mask
+            mask_shape = attn_mask.shape
+            
+            if len(mask_shape) == 2:
+                # Binary mask [B, T] (1=real token, 0=pad) - convert to additive mask
+                # Padding positions get -1e4, real tokens get 0
+                additive_mask = (1.0 - attn_mask.to(mask_dtype)).unsqueeze(1).unsqueeze(2) * -1e4
+                attn_scores = attn_scores + additive_mask
+            elif len(mask_shape) == 4:
+                # Additive mask [B, n_heads, T, T] or [B, 1, T, T] - use directly
+                # If mask has n_heads dimension, ensure it matches or can broadcast
+                if mask_shape[1] == 1:
+                    # [B, 1, T, T] - broadcast to [B, H, T, T]
+                    additive_mask = attn_mask.to(mask_dtype).expand(-1, self.n_heads, -1, -1)
+                elif mask_shape[1] == self.n_heads:
+                    # [B, H, T, T] - use directly
+                    additive_mask = attn_mask.to(mask_dtype)
+                else:
+                    raise ValueError(f"Mask shape {mask_shape} incompatible with {self.n_heads} heads")
+                attn_scores = attn_scores + additive_mask
+            else:
+                raise ValueError(f"Unsupported mask shape: {mask_shape}")
         attn = F.softmax(attn_scores, dim=-1)
         attn = self.attn_dropout(attn)
         y = torch.matmul(attn, v)  # [B,H,T,Dh]

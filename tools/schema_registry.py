@@ -220,11 +220,26 @@ class ToolSchemaRegistry:
             # Fall back to generic validation
             return self._validate_generic(tool_call)
 
+        # Check if schema is for full tool_call or just arguments
+        # If schema has "name" in required/properties, it's for full tool_call
+        # Otherwise, it's for arguments only
+        schema_required = schema.get("required", [])
+        schema_properties = schema.get("properties", {})
+        is_full_schema = "name" in schema_required or "name" in schema_properties
+
         # Validate against schema
         from coreml.runtime.constrained_decode import SchemaValidator
 
         validator = SchemaValidator(schema)
-        is_valid, error = validator.validate(tool_call)
+        
+        if is_full_schema:
+            # Schema is for full tool_call structure
+            is_valid, error = validator.validate(tool_call)
+        else:
+            # Schema is for arguments only - validate arguments object
+            if "arguments" not in tool_call:
+                return False, "Missing required field: arguments"
+            is_valid, error = validator.validate(tool_call["arguments"])
 
         if not is_valid:
             return False, error

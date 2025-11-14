@@ -85,8 +85,8 @@ class TestAnswerGenerationDataset:
                 "attention_mask": torch.ones(1, seq_len),
             }
 
-        tokenizer.return_value = mock_tokenize
-        tokenizer.__call__ = mock_tokenize
+        # Use side_effect to make the mock callable properly
+        tokenizer.side_effect = mock_tokenize
         return tokenizer
 
     def test_dataset_initialization(self, sample_data, mock_tokenizer, tmp_path):
@@ -207,8 +207,11 @@ class TestAnswerGenerationDataset:
 
     def test_dataset_file_not_found(self, mock_tokenizer):
         """Test dataset raises error for missing file."""
-        with pytest.raises(FileNotFoundError):
-            AnswerGenerationDataset("nonexistent.jsonl", "dummy_path")
+        with patch(
+            "training.dataset_answer_generation.load_tokenizer", return_value=mock_tokenizer
+        ):
+            with pytest.raises(FileNotFoundError):
+                AnswerGenerationDataset("nonexistent.jsonl", "dummy_path")
 
     def test_collate_answer_generation_batch(self):
         """Test batch collation."""
@@ -276,8 +279,8 @@ class TestPostToolDataset:
                 "attention_mask": torch.ones(1, seq_len),
             }
 
-        tokenizer.return_value = mock_tokenize
-        tokenizer.__call__ = mock_tokenize
+        # Use side_effect to make the mock callable properly
+        tokenizer.side_effect = mock_tokenize
         return tokenizer
 
     def test_dataset_initialization(self, post_tool_data, mock_tokenizer, tmp_path):
@@ -411,8 +414,8 @@ class TestToolSelectDataset:
                 "attention_mask": torch.ones(1, seq_len),
             }
 
-        tokenizer.return_value = mock_tokenize
-        tokenizer.__call__ = mock_tokenize
+        # Use side_effect to make the mock callable properly
+        tokenizer.side_effect = mock_tokenize
         return tokenizer
 
     def test_dataset_initialization(self, tool_select_data, mock_tokenizer, tmp_path):
