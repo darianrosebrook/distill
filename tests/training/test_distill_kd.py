@@ -503,14 +503,18 @@ class TestTrainingStep:
         self, small_model, sample_batch, simple_optimizer, training_config, device
     ):
         """Test vocabulary clamping during training step."""
-        # Create batch with out-of-vocab tokens
+        # Create batch with out-of-vocab tokens (maintain batch shape from fixture)
         vocab_size = 1000
-        sample_batch["input_ids"] = torch.tensor(
-            [[vocab_size + 10, vocab_size + 20]], dtype=torch.long
+        batch_size, seq_len = sample_batch["input_ids"].shape
+        # Create out-of-vocab tokens but maintain batch shape
+        sample_batch["input_ids"] = torch.full(
+            (batch_size, seq_len), vocab_size + 10, dtype=torch.long
         ).to(device)
-        sample_batch["labels"] = torch.tensor(
-            [[vocab_size + 10, vocab_size + 20]], dtype=torch.long
+        sample_batch["labels"] = torch.full(
+            (batch_size, seq_len), vocab_size + 20, dtype=torch.long
         ).to(device)
+        # Also update attention_mask to match
+        sample_batch["attention_mask"] = torch.ones(batch_size, seq_len).to(device)
 
         training_config["arch"]["vocab_size"] = vocab_size
 
