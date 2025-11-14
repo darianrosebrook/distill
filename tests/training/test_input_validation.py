@@ -91,6 +91,42 @@ class TestInputValidator:
         with pytest.raises(ValidationError, match="Suspicious content"):
             strict_validator.validate_text_input(malicious_text, "test_field")
 
+    def test_validate_text_input_none_strict(self, strict_validator):
+        """Test validating None input in strict mode."""
+        with pytest.raises(ValidationError, match="cannot be None"):
+            strict_validator.validate_text_input(None, "test_field")
+
+    def test_validate_text_input_none_lenient(self, lenient_validator, capsys):
+        """Test validating None input in lenient mode (line 81-86)."""
+        result = lenient_validator.validate_text_input(None, "test_field")
+        assert result == ""
+        captured = capsys.readouterr()
+        assert "WARNING" in captured.out
+
+    def test_validate_text_input_suspicious_lenient(self, lenient_validator, capsys):
+        """Test suspicious pattern in lenient mode (line 114)."""
+        malicious_text = '<script>alert("xss")</script>'
+        result = lenient_validator.validate_text_input(malicious_text, "test_field")
+        # Should return the text but print warning
+        assert result == malicious_text
+        captured = capsys.readouterr()
+        assert "WARNING" in captured.out
+
+    def test_contains_suspicious_patterns_non_string(self, strict_validator):
+        """Test _contains_suspicious_patterns with non-string input (line 59-60)."""
+        result = strict_validator._contains_suspicious_patterns(123)
+        assert result == False
+
+    def test_contains_suspicious_patterns_matches(self, strict_validator):
+        """Test _contains_suspicious_patterns with matching pattern (line 62-65)."""
+        result = strict_validator._contains_suspicious_patterns('<script>alert("xss")</script>')
+        assert result == True
+
+    def test_contains_suspicious_patterns_no_match(self, strict_validator):
+        """Test _contains_suspicious_patterns with no matching pattern (line 65)."""
+        result = strict_validator._contains_suspicious_patterns("Clean text with no suspicious content")
+        assert result == False
+
     def test_validate_numeric_input_valid(self, strict_validator):
         """Test validating valid numeric input."""
         result = strict_validator.validate_numeric_input(42, "test_num", min_val=0, max_val=100)
@@ -146,6 +182,114 @@ class TestInputValidator:
         with pytest.raises(ValidationError, match="Invalid tool name format"):
             strict_validator.validate_tool_call(tool_call)
 
+    def test_validate_tools_valid(self, strict_validator):
+        """Test validating valid tools list (line 253-283)."""
+        tools = [
+            {"name": "tool1", "description": "First tool"},
+            {"name": "tool2", "description": "Second tool"},
+        ]
+        result = strict_validator.validate_tools(tools)
+        assert len(result) == 2
+        assert result[0]["name"] == "tool1"
+        assert result[1]["name"] == "tool2"
+
+    def test_validate_tools_not_list(self, strict_validator):
+        """Test validating tools that is not a list."""
+        with pytest.raises(ValidationError, match="must be a list"):
+            strict_validator.validate_tools("not a list")
+
+    def test_validate_tools_too_many(self, strict_validator):
+        """Test validating too many tools."""
+        tools = [{"name": f"tool{i}", "description": f"Tool {i}"} for i in range(strict_validator.MAX_TOOL_COUNT + 1)]
+        with pytest.raises(ValidationError, match="too many tools"):
+            strict_validator.validate_tools(tools)
+
+    def test_validate_tools_invalid_tool_type(self, strict_validator):
+        """Test validating tools with invalid tool type."""
+        tools = [{"name": "tool1", "description": "Tool 1"}, "not a dict"]
+        with pytest.raises(ValidationError, match="Tool at index 1"):
+            strict_validator.validate_tools(tools)
+
+    def test_validate_tools_missing_name(self, strict_validator):
+        """Test validating tools with missing name field."""
+        tools = [{"description": "Tool without name"}]
+        with pytest.raises(ValidationError, match="missing required field"):
+            strict_validator.validate_tools(tools)
+
+    def test_validate_tools_missing_description(self, strict_validator):
+        """Test validating tools with missing description field."""
+        tools = [{"name": "tool1"}]
+        with pytest.raises(ValidationError, match="missing required field"):
+            strict_validator.validate_tools(tools)
+
+    def test_validate_structured_data_valid(self, strict_validator):
+        """Test validating structured data (line 171-207)."""
+        data = {"prompt": "Test prompt", "response": "Test response"}
+        result = strict_validator.validate_structured_data(data)
+        assert result["prompt"] == "Test prompt"
+        assert result["response"] == "Test response"
+
+    def test_validate_structured_data_not_dict(self, strict_validator):
+        """Test validating structured data that is not a dict."""
+        with pytest.raises(ValidationError, match="must be a dictionary"):
+            strict_validator.validate_structured_data("not a dict")
+
+    def test_validate_structured_data_missing_required(self, strict_validator):
+        """Test validating structured data missing required field."""
+        data = {"prompt": "Test prompt"}
+        with pytest.raises(ValidationError, match="missing required field"):
+            strict_validator.validate_structured_data(data)
+
+    def test_validate_structured_data_custom_required_fields(self, strict_validator):
+        """Test validating structured data with custom required fields."""
+        data = {"custom_field": "value"}
+        result = strict_validator.validate_structured_data(data, required_fields=["custom_field"])
+        assert result["custom_field"] == "value"
+
+    def test_validate_structured_data_invalid_required_type(self, strict_validator):
+        """Test validating structured data with invalid required field type."""
+        data = {"prompt": 123, "response": "Test response"}
+        with pytest.raises(ValidationError, match="invalid type"):
+            strict_validator.validate_structured_data(data)
+
+    def test_validate_structured_data_nested_dict(self, strict_validator):
+        """Test validating structured data with nested dict."""
+        data = {"prompt": "Test", "response": "Test", "metadata": {"key": "value"}}
+        result = strict_validator.validate_structured_data(data)
+        assert result["metadata"] == {"key": "value"}
+
+    def test_validate_structured_data_primitive_types(self, strict_validator):
+        """Test validating structured data with primitive types."""
+        data = {
+            "prompt": "Test",
+            "response": "Test",
+            "count": 42,
+            "score": 0.95,
+            "active": True,
+            "tags": None,
+            "items": [1, 2, 3],
+        }
+        result = strict_validator.validate_structured_data(data)
+        assert result["count"] == 42
+        assert result["score"] == 0.95
+        assert result["active"] == True
+        assert result["tags"] is None
+        assert result["items"] == [1, 2, 3]
+
+    def test_validate_structured_data_invalid_type(self, strict_validator):
+        """Test validating structured data with invalid type."""
+        class CustomClass:
+            pass
+        data = {"prompt": "Test", "response": "Test", "custom": CustomClass()}
+        with pytest.raises(ValidationError, match="invalid type"):
+            strict_validator.validate_structured_data(data)
+
+    def test_validate_structured_data_optional_string_field(self, strict_validator):
+        """Test validating structured data with optional string field (line 195)."""
+        data = {"prompt": "Test", "response": "Test", "optional_field": "optional value"}
+        result = strict_validator.validate_structured_data(data)
+        assert result["optional_field"] == "optional value"
+
     def test_validate_tool_call_arguments_not_dict(self, strict_validator):
         """Test validating tool call with non-dict arguments."""
         tool_call = {"name": "test_tool", "arguments": "not a dict"}
@@ -172,9 +316,28 @@ class TestInputValidator:
             strict_validator.validate_training_example("not a dict")
 
     def test_validate_training_example_invalid_cot_steps(self, strict_validator):
-        """Test validating training example with invalid cot_steps."""
-        example = {"prompt": "Test", "cot_steps": "not a list"}
+        """Test validating training example with invalid cot_steps (line 334)."""
+        example = {"prompt": "Test prompt", "response": "Test response", "cot_steps": "not a list"}
         with pytest.raises(ValidationError, match="must be a list"):
+            strict_validator.validate_training_example(example)
+
+    def test_validate_training_example_missing_prompt(self, strict_validator):
+        """Test validating training example missing prompt (line 302)."""
+        example = {"response": "Test response"}
+        with pytest.raises(ValidationError, match="missing required field: prompt"):
+            strict_validator.validate_training_example(example)
+
+    def test_validate_training_example_with_answer_alias(self, strict_validator):
+        """Test validating training example with answer alias (line 316)."""
+        example = {"prompt": "Test prompt", "answer": "Test answer"}
+        result = strict_validator.validate_training_example(example)
+        assert "response" in result
+        assert result["response"] == "Test answer"
+
+    def test_validate_training_example_missing_response_and_answer(self, strict_validator):
+        """Test validating training example missing both response and answer (line 322)."""
+        example = {"prompt": "Test prompt"}
+        with pytest.raises(ValidationError, match="missing required field: response"):
             strict_validator.validate_training_example(example)
 
     def test_validate_metadata_valid(self, strict_validator):
@@ -296,7 +459,41 @@ class TestInputValidator:
         """Test validating file path that doesn't exist (optional)."""
         non_existent = tmp_path / "nonexistent.txt"
         result = strict_validator.validate_file_path(non_existent, must_exist=False)
-        assert isinstance(result, Path)
+        assert isinstance(result, str)
+
+    def test_validate_file_path_permission_error(self, strict_validator, tmp_path, monkeypatch):
+        """Test validating file path with permission error (line 479-480)."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test")
+
+        def mock_exists(path):
+            raise PermissionError("Permission denied")
+
+        monkeypatch.setattr("pathlib.Path.exists", mock_exists)
+        with pytest.raises(ValidationError, match="cannot access file"):
+            strict_validator.validate_file_path(test_file)
+
+    def test_validate_file_path_stat_permission_error(self, strict_validator, tmp_path, monkeypatch):
+        """Test validating file path with stat permission error (line 495)."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test")
+
+        original_stat = Path.stat
+        def mock_stat(self):
+            raise PermissionError("Permission denied")
+
+        monkeypatch.setattr(Path, "stat", mock_stat)
+        with pytest.raises(ValidationError, match="cannot access file"):
+            strict_validator.validate_file_path(test_file)
+
+    def test_validate_file_path_invalid_path(self, strict_validator, monkeypatch):
+        """Test validating file path with invalid path (line 469-470)."""
+        def mock_relative_to(self, other):
+            raise ValueError("Invalid path")
+
+        monkeypatch.setattr(Path, "relative_to", mock_relative_to)
+        with pytest.raises(ValidationError, match="Invalid path"):
+            strict_validator.validate_file_path("/invalid/../path")
 
     def test_validate_file_path_dangerous_extension(self, strict_validator, tmp_path):
         """Test validating file path with dangerous extension."""
@@ -337,6 +534,11 @@ class TestValidateTrainingData:
         with pytest.raises(ValidationError, match="Example 1"):
             validate_training_data(data)
 
+    def test_validate_training_data_not_list(self):
+        """Test validating training data that is not a list (line 517)."""
+        with pytest.raises(ValidationError, match="must be a list"):
+            validate_training_data("not a list")
+
     def test_validate_training_data_empty_list(self):
         """Test validating empty training data."""
         result = validate_training_data([])
@@ -364,11 +566,60 @@ class TestValidateToolTrace:
     def test_validate_tool_trace_invalid_tool_call(self):
         """Test validating tool trace with invalid tool call."""
         trace = [
-            {"name": "tool1", "arguments": {"param1": "value1"}},
+            {"tool_name": "tool1", "tool_input": "input1", "tool_output": "output1"},
             {"invalid": "tool call"},
         ]
-        with pytest.raises(ValidationError, match="Tool call 1"):
+        with pytest.raises(ValidationError, match="Tool trace entry 1"):
             validate_tool_trace(trace)
+
+    def test_validate_tool_trace_not_dict(self):
+        """Test validating tool trace entry that is not a dict (line 551)."""
+        trace = ["not a dict"]
+        with pytest.raises(ValidationError, match="must be a dictionary"):
+            validate_tool_trace(trace)
+
+    def test_validate_tool_trace_missing_tool_name(self):
+        """Test validating tool trace missing tool_name (line 557)."""
+        trace = [{"tool_input": "input", "tool_output": "output"}]
+        with pytest.raises(ValidationError, match="missing required field: tool_name"):
+            validate_tool_trace(trace)
+
+    def test_validate_tool_trace_missing_tool_input(self):
+        """Test validating tool trace missing tool_input (line 565)."""
+        trace = [{"tool_name": "tool1", "tool_output": "output"}]
+        with pytest.raises(ValidationError, match="missing required field: tool_input"):
+            validate_tool_trace(trace)
+
+    def test_validate_tool_trace_missing_tool_output(self):
+        """Test validating tool trace missing tool_output (line 576)."""
+        trace = [{"tool_name": "tool1", "tool_input": "input"}]
+        with pytest.raises(ValidationError, match="missing required field: tool_output"):
+            validate_tool_trace(trace)
+
+    def test_validate_tool_trace_non_string_input(self):
+        """Test validating tool trace with non-string tool_input."""
+        trace = [{"tool_name": "tool1", "tool_input": {"json": "object"}, "tool_output": "output"}]
+        result = validate_tool_trace(trace)
+        assert result[0]["tool_input"] == {"json": "object"}
+
+    def test_validate_tool_trace_non_string_output(self):
+        """Test validating tool trace with non-string tool_output."""
+        trace = [{"tool_name": "tool1", "tool_input": "input", "tool_output": {"json": "object"}}]
+        result = validate_tool_trace(trace)
+        assert result[0]["tool_output"] == {"json": "object"}
+
+    def test_validate_tool_trace_preserves_other_fields(self):
+        """Test validating tool trace preserves other fields (line 586-588)."""
+        trace = [{
+            "tool_name": "tool1",
+            "tool_input": "input",
+            "tool_output": "output",
+            "timestamp": "2024-01-01",
+            "duration": 0.5,
+        }]
+        result = validate_tool_trace(trace)
+        assert result[0]["timestamp"] == "2024-01-01"
+        assert result[0]["duration"] == 0.5
 
     def test_validate_tool_trace_empty_list(self):
         """Test validating empty tool trace."""
@@ -387,4 +638,5 @@ class TestGlobalValidator:
     def test_global_validator_strict_mode(self):
         """Test that global validator is in strict mode."""
         assert validator.strict_mode == True
+
 

@@ -244,6 +244,85 @@ class TestFeatureManager:
         assert updated_config["distillation"]["enabled"] == True
         assert updated_config["model"]["name"] == "test"  # Original preserved
 
+    def test_feature_manager_apply_to_config_code_mode(self, manager):
+        """Test applying CODE_MODE feature to configuration."""
+        base_config = {"model": {"name": "test"}}
+        manager.enable_feature(FeatureFlag.CODE_MODE)
+
+        updated_config = manager.apply_to_config(base_config)
+
+        assert "distill" in updated_config
+        assert "code_mode" in updated_config["distill"]
+        assert updated_config["distill"]["code_mode"]["enabled"] == True
+
+    def test_feature_manager_apply_to_config_latent_reasoning(self, manager):
+        """Test applying LATENT_REASONING feature to configuration."""
+        base_config = {"model": {"name": "test"}}
+        manager.enable_feature(FeatureFlag.LATENT_REASONING)
+
+        updated_config = manager.apply_to_config(base_config)
+
+        assert "latent" in updated_config
+        assert updated_config["latent"]["enabled"] == True
+
+    def test_feature_manager_apply_to_config_quantization(self, manager):
+        """Test applying QUANTIZATION feature to configuration."""
+        base_config = {"model": {"name": "test"}}
+        manager.enable_feature(FeatureFlag.QUANTIZATION)
+
+        updated_config = manager.apply_to_config(base_config)
+
+        assert "quant" in updated_config
+        assert updated_config["quant"]["enabled"] == True
+
+    def test_feature_manager_apply_to_config_halt_head(self, manager, capsys):
+        """Test applying HALT_HEAD feature to configuration."""
+        base_config = {"model": {"name": "test"}}
+        # Enable dependency first
+        manager.enable_feature(FeatureFlag.LATENT_REASONING)
+        manager.enable_feature(FeatureFlag.HALT_HEAD)
+
+        updated_config = manager.apply_to_config(base_config)
+
+        # Should print warning
+        captured = capsys.readouterr()
+        assert "WARNING: Halt head requires model architecture modifications" in captured.out
+
+    def test_feature_manager_disable_with_dependents(self, manager, capsys):
+        """Test disabling a feature disables dependent features."""
+        # Enable CAWS_COMPLIANCE and SELF_EVALUATION (which depends on it)
+        manager.enable_feature(FeatureFlag.CAWS_COMPLIANCE)
+        manager.enable_feature(FeatureFlag.SELF_EVALUATION)
+        assert manager.is_enabled(FeatureFlag.SELF_EVALUATION) == True
+
+        # Disable CAWS_COMPLIANCE
+        manager.disable_feature(FeatureFlag.CAWS_COMPLIANCE)
+
+        # Should disable SELF_EVALUATION and print warning
+        assert manager.is_enabled(FeatureFlag.CAWS_COMPLIANCE) == False
+        assert manager.is_enabled(FeatureFlag.SELF_EVALUATION) == False
+        captured = capsys.readouterr()
+        assert "WARNING: Disabling" in captured.out
+        assert "self_evaluation" in captured.out.lower()
+
+    def test_feature_manager_validate_with_errors(self, manager):
+        """Test validation with dependency errors."""
+        # Enable SELF_EVALUATION without its dependency
+        manager.features[FeatureFlag.SELF_EVALUATION].enabled = True
+        manager.features[FeatureFlag.CAWS_COMPLIANCE].enabled = False
+
+        errors = manager.validate_configuration()
+        assert len(errors) > 0
+        assert any("self_evaluation" in error.lower() and "caws_compliance" in error.lower() for error in errors)
+
+    def test_feature_manager_validate_with_conflicts(self, manager):
+        """Test validation with conflict errors."""
+        # Manually set up a conflict scenario if any exist
+        # Since current config has no conflicts, we'll test the code path
+        errors = manager.validate_configuration()
+        # Should have no errors for default config
+        assert isinstance(errors, list)
+
 
 class TestInitializeFeatures:
     """Test initialize_features function."""
@@ -280,6 +359,23 @@ class TestInitializeFeatures:
         except Exception:
             # Should handle gracefully
             pass
+
+    def test_initialize_features_with_validation_errors(self, capsys):
+        """Test initialize_features with validation errors."""
+        from training.feature_flags import feature_manager
+
+        # Manually create a validation error scenario
+        feature_manager.features[FeatureFlag.SELF_EVALUATION].enabled = True
+        feature_manager.features[FeatureFlag.CAWS_COMPLIANCE].enabled = False
+
+        # Should raise ValueError with error messages
+        with pytest.raises(ValueError, match="Invalid feature configuration"):
+            initialize_features()
+
+        # Should have printed error messages
+        captured = capsys.readouterr()
+        assert "Feature configuration errors:" in captured.out
+        assert "ERROR:" in captured.out
 
 
 class TestFeatureInteractions:

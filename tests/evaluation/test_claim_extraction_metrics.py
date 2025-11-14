@@ -224,28 +224,9 @@ class TestClaimExtractionEvaluator:
         student_outputs = ["Student output 1", "Student output 2", "Student output 3"]
         teacher_outputs = ["Teacher output 1", "Teacher output 2"]  # Different length
 
-        with patch(
-            "evaluation.claim_extraction_metrics.compute_claim_extraction_metrics"
-        ) as mock_compute:
-            mock_compute.return_value = {
-                "student_claim_count": 5,
-                "teacher_claim_count": 3,
-                "student_success_rate": 0.6,
-                "teacher_success_rate": 0.8,
-                "claim_ratio": 1.67,
-                "success_rate_ratio": 0.75,
-                "claim_extraction_loss": 0.92,
-            }
-
-            result = evaluator.evaluate(student_outputs, teacher_outputs)
-
-            # Should still work despite length mismatch
-            assert result.student_claim_count == 5
-            assert result.teacher_claim_count == 3
-            # Use approximate comparison for floating point values
-            assert result.claim_ratio == pytest.approx(1.67, abs=0.01)
-            assert result.success_rate_ratio == pytest.approx(0.75, abs=0.01)
-            assert result.claim_extraction_loss == pytest.approx(0.92, abs=0.01)
+        # Function should raise ValueError for mismatched lengths
+        with pytest.raises(ValueError, match="Student and teacher outputs must have same length"):
+            evaluator.evaluate(student_outputs, teacher_outputs)
 
     def test_evaluate_with_none_outputs(self, evaluator):
         """Test evaluation handling None values in outputs."""
@@ -334,7 +315,11 @@ class TestClaimExtractionMetricsIntegration:
             assert result.teacher_success_rate == 0.83
             assert result.claim_ratio == 1.33
             assert result.success_rate_ratio == 0.90
-            assert result.claim_extraction_loss == 0.43
+            # claim_extraction_loss is calculated from ratios, not from mocked value
+            # claim_ratio=1.33 >= 0.5 (min_claim_ratio), so claim_penalty = 0.0
+            # success_rate_ratio=0.90 >= 0.7 (min_success_rate_ratio), so success_penalty = 0.0
+            # loss = 0.6 * 0.0 + 0.4 * 0.0 = 0.0
+            assert result.claim_extraction_loss == 0.0
 
     def test_evaluation_with_realistic_outputs(self):
         """Test evaluation with realistic student/teacher output pairs."""
@@ -377,6 +362,9 @@ class TestClaimExtractionMetricsIntegration:
             assert 0.0 <= result.teacher_success_rate <= 1.0
             assert result.claim_ratio > 0.0
             assert result.success_rate_ratio > 0.0
+            # Loss calculation: if claim_ratio >= 0.5 and success_rate_ratio >= 0.7, loss = 0.0
+            # With typical values above thresholds, loss should be 0.0
+            assert result.claim_extraction_loss >= 0.0
 
     def test_metrics_calculation_edge_cases(self):
         """Test metrics calculation with edge cases."""
@@ -524,3 +512,189 @@ class TestClaimExtractionMetricsIntegration:
 
                 assert isinstance(result, ClaimExtractionEvalResult)
                 assert result.student_claim_count == len(extractor.extract_claims("dummy"))
+
+
+class TestFormatResults:
+    """Test format_results method."""
+
+    def test_format_results_basic(self, evaluator):
+        """Test formatting results as string."""
+        result = ClaimExtractionEvalResult(
+            student_claim_count=10,
+            teacher_claim_count=8,
+            student_success_rate=0.85,
+            teacher_success_rate=0.90,
+            claim_ratio=1.25,
+            success_rate_ratio=0.94,
+            claim_extraction_loss=0.15,
+        )
+
+        formatted = evaluator.format_results(result)
+
+        assert isinstance(formatted, str)
+        assert "Claim Extraction Evaluation Results:" in formatted
+        assert "Student Claims: 10" in formatted
+        assert "Teacher Claims: 8" in formatted
+        assert "Claim Ratio: 125.00%" in formatted
+        assert "Student Success Rate: 85.00%" in formatted
+        assert "Teacher Success Rate: 90.00%" in formatted
+        assert "Success Rate Ratio: 94.00%" in formatted
+        assert "Claim Extraction Loss: 0.1500" in formatted
+
+    def test_format_results_zero_values(self, evaluator):
+        """Test formatting results with zero values."""
+        result = ClaimExtractionEvalResult(
+            student_claim_count=0,
+            teacher_claim_count=0,
+            student_success_rate=0.0,
+            teacher_success_rate=0.0,
+            claim_ratio=0.0,
+            success_rate_ratio=0.0,
+            claim_extraction_loss=1.0,
+        )
+
+        formatted = evaluator.format_results(result)
+
+        assert "Student Claims: 0" in formatted
+        assert "Teacher Claims: 0" in formatted
+        assert "Claim Ratio: 0.00%" in formatted
+
+
+class TestEvaluateFromDataset:
+    """Test evaluate_from_dataset method."""
+
+    @patch("evaluation.claim_extraction_metrics.DataLoader")
+    @patch("evaluation.claim_extraction_metrics.KDDataset")
+    @patch("evaluation.claim_extraction_metrics.torch")
+    def test_evaluate_from_dataset_basic(
+        self, mock_torch, mock_dataset_class, mock_dataloader_class, evaluator
+    ):
+        """Test evaluating from dataset."""
+        # Mock dataset
+        mock_dataset = Mock()
+        mock_dataset.__len__ = Mock(return_value=2)
+        mock_dataset_class.return_value = mock_dataset
+
+        # Mock dataloader
+        mock_dataloader = Mock()
+        mock_dataloader.__iter__ = Mock(
+            return_value=iter(
+                [
+                    {
+                        "input_ids": Mock(),
+                        "attention_mask": None,
+                        "teacher_text": "Teacher output 1",
+                    },
+                    {
+                        "input_ids": Mock(),
+                        "attention_mask": Mock(),
+                        "teacher_text": ["Teacher output 2"],
+                    },
+                ]
+            )
+        )
+        mock_dataloader_class.return_value = mock_dataloader
+
+        # Mock torch operations
+        mock_torch.utils.data.Subset = Mock(return_value=mock_dataset)
+        mock_torch.no_grad = Mock(return_value=Mock(__enter__=Mock(), __exit__=Mock(return_value=None)))
+
+        # Mock model and tokenizer
+        mock_model = Mock()
+        mock_model.eval = Mock()
+        mock_logits = Mock()
+        mock_logits.argmax = Mock(return_value=Mock())
+        mock_model.return_value = mock_logits
+
+        mock_tokenizer = Mock()
+        mock_tokenizer.decode = Mock(side_effect=["Student output 1", "Student output 2"])
+
+        mock_device = "cpu"
+
+        # Mock input_ids.to() and attention_mask.to()
+        mock_input_ids = Mock()
+        mock_input_ids.to = Mock(return_value=mock_input_ids)
+        mock_attention_mask = Mock()
+        mock_attention_mask.to = Mock(return_value=mock_attention_mask)
+
+        # Setup batch mocks
+        def batch_generator():
+            yield {
+                "input_ids": mock_input_ids,
+                "attention_mask": None,
+                "teacher_text": "Teacher output 1",
+            }
+            yield {
+                "input_ids": mock_input_ids,
+                "attention_mask": mock_attention_mask,
+                "teacher_text": ["Teacher output 2"],
+            }
+
+        mock_dataloader.__iter__ = Mock(return_value=batch_generator())
+
+        # Mock argmax result
+        mock_argmax_result = Mock()
+        mock_argmax_result.__getitem__ = Mock(return_value=Mock())
+        mock_argmax_result.__getitem__().cpu = Mock(return_value=Mock())
+        mock_argmax_result.__getitem__().cpu().tolist = Mock(return_value=[1, 2, 3])
+        mock_logits.argmax = Mock(return_value=mock_argmax_result)
+
+        with patch(
+            "evaluation.claim_extraction_metrics.compute_claim_extraction_metrics"
+        ) as mock_compute:
+            mock_compute.return_value = {
+                "student_claim_count": 2,
+                "teacher_claim_count": 2,
+                "student_success_rate": 0.8,
+                "teacher_success_rate": 0.9,
+            }
+
+            result = evaluator.evaluate_from_dataset(
+                dataset_path="test.jsonl",
+                student_model=mock_model,
+                tokenizer=mock_tokenizer,
+                device=mock_device,
+            )
+
+            assert isinstance(result, ClaimExtractionEvalResult)
+            mock_model.eval.assert_called_once()
+
+    @patch("evaluation.claim_extraction_metrics.DataLoader")
+    @patch("evaluation.claim_extraction_metrics.KDDataset")
+    @patch("evaluation.claim_extraction_metrics.torch")
+    def test_evaluate_from_dataset_with_max_samples(
+        self, mock_torch, mock_dataset_class, mock_dataloader_class, evaluator
+    ):
+        """Test evaluating from dataset with max_samples limit."""
+        # Mock dataset
+        mock_dataset = Mock()
+        mock_dataset.__len__ = Mock(return_value=10)
+        mock_dataset_class.return_value = mock_dataset
+
+        # Mock Subset
+        mock_subset = Mock()
+        mock_subset.__len__ = Mock(return_value=5)
+        mock_torch.utils.data.Subset = Mock(return_value=mock_subset)
+
+        # Mock dataloader
+        mock_dataloader = Mock()
+        mock_dataloader.__iter__ = Mock(return_value=iter([]))
+        mock_dataloader_class.return_value = mock_dataloader
+
+        mock_torch.no_grad = Mock(return_value=Mock(__enter__=Mock(), __exit__=Mock(return_value=None)))
+
+        mock_model = Mock()
+        mock_model.eval = Mock()
+        mock_tokenizer = Mock()
+
+        result = evaluator.evaluate_from_dataset(
+            dataset_path="test.jsonl",
+            student_model=mock_model,
+            tokenizer=mock_tokenizer,
+            device="cpu",
+            max_samples=5,
+        )
+
+        # Should have used Subset with max_samples
+        mock_torch.utils.data.Subset.assert_called_once()
+        assert isinstance(result, ClaimExtractionEvalResult)

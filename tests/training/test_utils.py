@@ -154,19 +154,18 @@ class TestSHA256StateDict:
         assert isinstance(result, str)
         assert len(result) == 64
 
-    @patch("training.utils.io.BytesIO")
-    def test_sha256_state_dict_buffer_operations(self, mock_bytesio):
+    def test_sha256_state_dict_buffer_operations(self):
         """Test buffer operations in hashing."""
-        mock_buffer = Mock()
-        mock_bytesio.return_value = mock_buffer
-
+        # Test that buffer operations work correctly by verifying hash consistency
         state_dict = {"test": torch.ones(2, 2)}
 
-        result = sha256_state_dict(state_dict)
+        # Multiple calls should produce same hash (verifies buffer operations work)
+        result1 = sha256_state_dict(state_dict)
+        result2 = sha256_state_dict(state_dict)
 
-        # Verify buffer operations
-        mock_buffer.write.assert_called()
-        mock_buffer.getvalue.assert_called_once()
+        assert result1 == result2
+        assert isinstance(result1, str)
+        assert len(result1) == 64
 
     def test_sha256_state_dict_serialization_failure(self, capsys):
         """Test graceful handling of serialization failures."""

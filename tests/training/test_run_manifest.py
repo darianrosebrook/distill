@@ -14,6 +14,7 @@ from training.run_manifest import (
     PhaseGateStatus,
     MetricThreshold,
     RunManifest,
+    create_run_manifest,
 )
 
 
@@ -347,4 +348,151 @@ class TestRunManifestIntegration:
         # Get phase status
         phase0 = loaded.get_phase_status("phase0")
         assert phase0.status == GateStatus.PASS
+
+
+class TestRunManifestMethods:
+    """Test additional RunManifest methods."""
+
+    def test_all_phases_passed_all_pass(self):
+        """Test all_phases_passed when all phases pass."""
+        manifest = RunManifest(
+            phase_gates=[
+                PhaseGateStatus(phase="phase0", status=GateStatus.PASS),
+                PhaseGateStatus(phase="phase1", status=GateStatus.PASS),
+            ]
+        )
+        assert manifest.all_phases_passed() == True
+
+    def test_all_phases_passed_one_fails(self):
+        """Test all_phases_passed when one phase fails."""
+        manifest = RunManifest(
+            phase_gates=[
+                PhaseGateStatus(phase="phase0", status=GateStatus.PASS),
+                PhaseGateStatus(phase="phase1", status=GateStatus.FAIL),
+            ]
+        )
+        assert manifest.all_phases_passed() == False
+
+    def test_all_phases_passed_pending(self):
+        """Test all_phases_passed with pending status."""
+        manifest = RunManifest(
+            phase_gates=[
+                PhaseGateStatus(phase="phase0", status=GateStatus.PASS),
+                PhaseGateStatus(phase="phase1", status=GateStatus.PENDING),
+            ]
+        )
+        assert manifest.all_phases_passed() == False
+
+    def test_all_phases_passed_empty(self):
+        """Test all_phases_passed with no phases."""
+        manifest = RunManifest()
+        assert manifest.all_phases_passed() == True
+
+    def test_get_failed_gates_no_failures(self):
+        """Test get_failed_gates with no failures."""
+        manifest = RunManifest(
+            phase_gates=[
+                PhaseGateStatus(phase="phase0", status=GateStatus.PASS),
+            ]
+        )
+        failed = manifest.get_failed_gates()
+        assert len(failed) == 0
+
+    def test_get_failed_gates_phase_failure(self):
+        """Test get_failed_gates with phase failure."""
+        manifest = RunManifest(
+            phase_gates=[
+                PhaseGateStatus(phase="phase0", status=GateStatus.FAIL),
+            ]
+        )
+        failed = manifest.get_failed_gates()
+        assert len(failed) == 1
+        assert "phase0: overall" in failed
+
+    def test_get_failed_gates_sub_gate_failure(self):
+        """Test get_failed_gates with sub-gate failure."""
+        manifest = RunManifest(
+            phase_gates=[
+                PhaseGateStatus(
+                    phase="phase0",
+                    status=GateStatus.PASS,
+                    gates={"test": GateStatus.FAIL, "lint": GateStatus.PASS},
+                ),
+            ]
+        )
+        failed = manifest.get_failed_gates()
+        assert len(failed) == 1
+        assert "phase0:test" in failed
+
+    def test_get_failed_gates_multiple_failures(self):
+        """Test get_failed_gates with multiple failures."""
+        manifest = RunManifest(
+            phase_gates=[
+                PhaseGateStatus(
+                    phase="phase0",
+                    status=GateStatus.FAIL,
+                    gates={"test": GateStatus.FAIL},
+                ),
+                PhaseGateStatus(
+                    phase="phase1",
+                    status=GateStatus.PASS,
+                    gates={"lint": GateStatus.FAIL},
+                ),
+            ]
+        )
+        failed = manifest.get_failed_gates()
+        assert len(failed) == 3
+        assert "phase0: overall" in failed
+        assert "phase0:test" in failed
+        assert "phase1:lint" in failed
+
+
+class TestCreateRunManifest:
+    """Test create_run_manifest function."""
+
+    def test_create_run_manifest_basic(self):
+        """Test creating run manifest with basic parameters."""
+        manifest = create_run_manifest(
+            run_id="test-run",
+            config_fingerprint="abc123",
+            dataset_fingerprints=[],
+        )
+        assert manifest.run_id == "test-run"
+        assert manifest.config_fingerprint == "abc123"
+        assert manifest.schema_version == "1.0"
+        assert manifest.created_at != ""
+
+    def test_create_run_manifest_with_dataset_fingerprints(self):
+        """Test creating run manifest with dataset fingerprints."""
+        manifest = create_run_manifest(
+            run_id="test-run",
+            config_fingerprint="abc123",
+            dataset_fingerprints=["fp1", "fp2"],
+        )
+        assert len(manifest.dataset_fingerprints) == 2
+        assert "fp1" in manifest.dataset_fingerprints
+        assert "fp2" in manifest.dataset_fingerprints
+
+    def test_create_run_manifest_with_commit_sha(self):
+        """Test creating run manifest with commit SHA."""
+        manifest = create_run_manifest(
+            run_id="test-run",
+            config_fingerprint="abc123",
+            dataset_fingerprints=[],
+            code_commit_sha="def456",
+        )
+        assert manifest.code_commit_sha == "def456"
+
+    def test_create_run_manifest_environment_versions(self):
+        """Test that environment versions are populated."""
+        manifest = create_run_manifest(
+            run_id="test-run",
+            config_fingerprint="abc123",
+            dataset_fingerprints=[],
+        )
+        assert "python" in manifest.environment_versions
+        assert "platform" in manifest.environment_versions
+        assert manifest.environment_versions["python"] is not None
+        assert manifest.environment_versions["platform"] is not None
+
 

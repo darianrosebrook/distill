@@ -57,6 +57,7 @@ class TestStructuredLogger:
             patch.object(logger.logger, "info") as mock_info,
             patch.object(logger.logger, "warning") as mock_warning,
             patch.object(logger.logger, "error") as mock_error,
+            patch.object(logger.logger, "critical") as mock_critical,
         ):
             # Test debug logging
             logger.debug("Test debug", key1="value1", key2=42)
@@ -73,6 +74,10 @@ class TestStructuredLogger:
             # Test error logging
             logger.error("Test error", code=500)
             mock_error.assert_called_once_with("Test error", extra={"code": 500})
+
+            # Test critical logging
+            logger.critical("Test critical", severity="high")
+            mock_critical.assert_called_once_with("Test critical", extra={"severity": "high"})
 
     def test_structured_logger_propagate_disabled(self):
         """Test that logger doesn't propagate to root."""

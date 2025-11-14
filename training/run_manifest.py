@@ -105,17 +105,39 @@ class RunManifest:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "RunManifest":
         """Create from dictionary."""
-        # Convert string enums back
+        # Convert phase_gates from dicts to PhaseGateStatus objects
+        phase_gates = []
         for phase_gate in data.get("phase_gates", []):
-            if isinstance(phase_gate.get("status"), str):
-                phase_gate["status"] = GateStatus(phase_gate["status"])
-            if "gates" in phase_gate:
-                phase_gate["gates"] = {
-                    k: GateStatus(v) if isinstance(v, str) else v
-                    for k, v in phase_gate["gates"].items()
-                }
+            if isinstance(phase_gate, dict):
+                # Convert status string to enum
+                status = (
+                    GateStatus(phase_gate["status"])
+                    if isinstance(phase_gate.get("status"), str)
+                    else phase_gate.get("status")
+                )
+                # Convert gates dict values to enums
+                gates = {}
+                if "gates" in phase_gate:
+                    gates = {
+                        k: GateStatus(v) if isinstance(v, str) else v
+                        for k, v in phase_gate["gates"].items()
+                    }
+                phase_gates.append(
+                    PhaseGateStatus(
+                        phase=phase_gate.get("phase", ""),
+                        status=status,
+                        gates=gates,
+                        notes=phase_gate.get("notes", ""),
+                    )
+                )
+            else:
+                phase_gates.append(phase_gate)
 
-        return cls(**data)
+        # Create new data dict with converted phase_gates
+        new_data = data.copy()
+        new_data["phase_gates"] = phase_gates
+
+        return cls(**new_data)
 
     def save_json(self, path: Path):
         """Save as JSON."""
@@ -165,6 +187,54 @@ class RunManifest:
                 if gate_status == GateStatus.FAIL:
                     failed.append(f"{pg.phase}:{gate_name}")
         return failed
+
+    def add_phase_gate(
+        self,
+        phase: str,
+        status: GateStatus,
+        gates: Optional[Dict[str, GateStatus]] = None,
+        notes: str = "",
+    ) -> None:
+        """Add a phase gate to the manifest.
+
+        Args:
+            phase: Phase name (e.g., "phase0", "phase1", "phase2")
+            status: Gate status
+            gates: Optional dictionary of sub-gate statuses
+            notes: Optional notes about the phase gate
+        """
+        phase_gate = PhaseGateStatus(
+            phase=phase,
+            status=status,
+            gates=gates or {},
+            notes=notes,
+        )
+        self.phase_gates.append(phase_gate)
+
+    def add_metric(
+        self,
+        name: str,
+        value: float,
+        threshold: float,
+        unit: str = "",
+    ) -> None:
+        """Add a metric to the manifest.
+
+        Args:
+            name: Metric name
+            value: Metric value
+            threshold: Threshold value
+            unit: Optional unit string
+        """
+        passed = value >= threshold
+        metric = MetricThreshold(
+            name=name,
+            value=value,
+            threshold=threshold,
+            unit=unit,
+            passed=passed,
+        )
+        self.key_metrics.append(metric)
 
 
 def create_run_manifest(

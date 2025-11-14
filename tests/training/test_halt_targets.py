@@ -564,3 +564,4 @@ class TestHaltTargetsIntegration:
         result_after = create_halt_targets_batch(batch_metadata, halt_targets, current_step=1500)
         assert result_after is not None
 
+

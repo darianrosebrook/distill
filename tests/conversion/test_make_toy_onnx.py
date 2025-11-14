@@ -205,3 +205,4 @@ class TestMakeToyONNX:
         assert len(model.graph.output) > 0
         assert len(model.graph.node) > 0
 
+

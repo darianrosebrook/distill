@@ -173,24 +173,22 @@ class TestMainFunction:
     """Test main function."""
 
     @patch("conversion.make_toy_block.torch.jit.trace")
-    @patch("conversion.make_toy_block.torch.jit.save")
-    @patch("conversion.make_toy_block.Path")
-    def test_main_success(self, mock_path_class, mock_save, mock_trace, tmp_path):
+    def test_main_success(self, mock_trace, tmp_path):
         """Test successful main function execution."""
         output_path = tmp_path / "toy_block.pt"
 
         mock_traced = Mock()
+        mock_traced.save = Mock()
+        mock_traced.eval = Mock()
         mock_trace.return_value = mock_traced
-
-        mock_path = Mock()
-        mock_path.parent.mkdir = Mock()
-        mock_path_class.return_value = mock_path
 
         with patch("sys.argv", ["make_toy_block", "--out", str(output_path)]):
             main()
 
         mock_trace.assert_called_once()
-        mock_save.assert_called_once_with(mock_traced, str(mock_path))
+        # Check that save was called with the actual path string
+        assert mock_traced.save.called
+        assert str(output_path) in str(mock_traced.save.call_args)
 
     @patch("conversion.make_toy_block.torch.jit.trace")
     @patch("conversion.make_toy_block.torch.jit.save")
@@ -327,4 +325,5 @@ class TestIntegration:
 
         final_out = mlp_out + attn_out + x
         assert final_out.shape == x.shape
+
 

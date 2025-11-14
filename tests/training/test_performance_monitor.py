@@ -101,6 +101,19 @@ class TestPerformanceMonitor:
 
         assert metrics.gpu_memory_mb is None
 
+    @patch("torch.cuda.is_available")
+    @patch("torch.cuda.memory_allocated")
+    def test_get_metrics_gpu_exception(self, mock_memory, mock_available):
+        """Test getting metrics when GPU memory allocation raises exception."""
+        mock_available.return_value = True
+        mock_memory.side_effect = RuntimeError("CUDA error")
+
+        monitor = PerformanceMonitor()
+        metrics = monitor.get_metrics()
+
+        # Should handle exception gracefully and return None
+        assert metrics.gpu_memory_mb is None
+
     def test_reset(self):
         """Test resetting performance monitor."""
         monitor = PerformanceMonitor()
@@ -319,4 +332,5 @@ class TestPerformanceMonitorIntegration:
             profiler.log_step(step=1, loss=0.5, lr=1e-4)
 
         assert len(profiler.step_metrics) == 1
+
 
