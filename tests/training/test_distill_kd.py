@@ -2453,6 +2453,101 @@ class TestTrainingStepExpanded:
             # Verify compliance loss was called
             mock_compliance.assert_called_once()
 
+    @pytest.mark.skip(reason="claim_extraction_loss not yet implemented in training/losses.py")
+    def test_train_step_with_claim_extraction_loss(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test training step with claim extraction loss."""
+        # PLACEHOLDER: claim_extraction_loss function needs to be implemented in training/losses.py
+        # This test will be enabled once the function is implemented
+        pass
+
+    def test_train_step_with_self_evaluation_loss(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test training step with self-evaluation loss."""
+        training_config["distillation"]["use_self_evaluation"] = True
+        training_config["distillation"]["self_evaluation_weight"] = 0.1
+        
+        # Add eval_score and teacher_quality_score to batch
+        sample_batch["eval_score"] = torch.tensor([0.8, 0.9], device=device)
+        sample_batch["teacher_quality_score"] = torch.tensor([0.85, 0.95], device=device)
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+        
+        # Mock model to return eval_score when return_eval_score=True
+        # train_step calls model with return_eval_score=True when use_self_evaluation is True
+        def mock_forward_with_eval(input_ids, attention_mask=None, return_eval_score=False, return_hidden_states=False):
+            batch_size, seq_len = input_ids.shape
+            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            if return_eval_score:
+                # Return tuple (logits, eval_score)
+                eval_score = torch.randn(batch_size, device=device, requires_grad=True)
+                return logits, eval_score
+            return logits
+        
+        small_model.forward = mock_forward_with_eval
+        small_model.use_self_evaluation = True
+        
+        result = train_step(
+            model=small_model,
+            batch=sample_batch,
+            optimizer=simple_optimizer,
+            scaler=None,
+            cfg=training_config,
+            device=device,
+        )
+        
+        assert "total" in result
+        assert "self_evaluation" in result
+
+    def test_train_step_with_early_tool_call_teacher_prefix(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test training step with early tool call loss and teacher prefix IDs."""
+        training_config["distillation"]["use_early_tool_call_loss"] = True
+        training_config["distillation"]["early_tool_weight"] = 0.05
+        training_config["distillation"]["early_tool_N"] = 25
+        training_config["distillation"]["early_tool_warmup_epochs"] = 5
+        training_config["train"] = {"total_epochs": 100, "steps_per_epoch": 1000}
+        training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
+        # Also set at root level for train_step lookup
+        training_config["tokenizer_path"] = "models/student/tokenizer"
+        # Set a flag that triggers needs_tokenizer check (early_tool_call_loss isn't in the check)
+        # We'll use use_caws_compliance to trigger tokenizer loading
+        training_config["distillation"]["use_caws_compliance"] = True
+        
+        sample_batch["tool_should_be_used"] = torch.ones(2, dtype=torch.bool, device=device)
+        sample_batch["teacher_prefix_ids"] = torch.randint(0, 100, (2, 10), device=device)
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+        
+        # Mock tokenizer on model (train_step checks model.tokenizer first)
+        # The tokenizer is needed when use_early_tool_call_loss is True
+        mock_tokenizer = Mock()
+        mock_tokenizer.convert_tokens_to_ids = Mock(return_value=100)
+        small_model.tokenizer = mock_tokenizer
+        
+        result = train_step(
+            model=small_model,
+            batch=sample_batch,
+            optimizer=simple_optimizer,
+            scaler=None,
+            cfg=training_config,
+            device=device,
+            current_step=1000,  # After warmup (epoch 1)
+        )
+        
+        assert "total" in result
+        # Early tool loss should be computed when tool_should_be_used is provided
+        assert "early_tool" in result
+
 
 class TestMainFunction:
     """Test main function initialization and critical paths."""
