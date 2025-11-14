@@ -339,14 +339,14 @@ def evaluate_tool_use(
 
             # Try to load tokenizer from default location
             try:
-                from transformers import AutoTokenizer
+                from training.safe_model_loading import safe_from_pretrained_tokenizer
                 tokenizer_path = "models/student/tokenizer"
                 try:
-                    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+                    tokenizer = safe_from_pretrained_tokenizer(tokenizer_path)
                 except Exception:
                     # Fallback: try to load from checkpoint directory
                     checkpoint_dir = Path(checkpoint_path).parent
-                    tokenizer = AutoTokenizer.from_pretrained(
+                    tokenizer = safe_from_pretrained_tokenizer(
                         str(checkpoint_dir))
             except Exception:
                 raise RuntimeError(
@@ -698,7 +698,8 @@ def main():
             if hasattr(tokenizer_path, '__class__') and 'Mock' in str(type(tokenizer_path)):
                 tokenizer_path = "models/student/tokenizer"
 
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+        from training.safe_model_loading import safe_from_pretrained_tokenizer
+        tokenizer = safe_from_pretrained_tokenizer(tokenizer_path)
     except (ImportError, ValueError, Exception) as e:
         # Handle HFValidationError and other exceptions
         if 'HFValidationError' in str(type(e)) or 'Mock' in str(type(e)):

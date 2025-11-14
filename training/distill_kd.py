@@ -2240,7 +2240,8 @@ def main():
     start_step = 0
     if args.resume:
         print(f"[distill_kd] Resuming from checkpoint: {args.resume}")
-        checkpoint = torch.load(args.resume, map_location=device)
+        from training.safe_checkpoint_loading import safe_load_checkpoint
+        checkpoint = safe_load_checkpoint(args.resume, map_location=str(device))
 
         # Validate config compatibility on resume
         if "config" in checkpoint:
