@@ -582,7 +582,8 @@ class TestCheckpointOperations:
         assert checkpoint_path.exists()
 
         # Load and verify
-        loaded = torch.load(checkpoint_path)
+        from training.safe_checkpoint_loading import safe_load_checkpoint
+        loaded = safe_load_checkpoint(checkpoint_path)
         assert loaded["step"] == 100
         assert loaded["loss"] == 0.5
         assert loaded["config"] == config
@@ -609,7 +610,8 @@ class TestCheckpointOperations:
         checkpoint_files = list(output_dir.glob("checkpoint_step_200_*.pt"))
         assert len(checkpoint_files) == 1
 
-        loaded = torch.load(checkpoint_files[0])
+        from training.safe_checkpoint_loading import safe_load_checkpoint
+        loaded = safe_load_checkpoint(checkpoint_files[0])
         assert loaded["step"] == 200
         assert loaded["loss"] == 0.3
         assert loaded["loss_dict"]["ce"] == 0.2
@@ -1279,7 +1281,8 @@ class TestSaveCheckpointExpanded:
         )
 
         checkpoint_path = output_dir / "checkpoint_step_100.pt"
-        loaded = torch.load(checkpoint_path)
+        from training.safe_checkpoint_loading import safe_load_checkpoint
+        loaded = safe_load_checkpoint(checkpoint_path)
 
         assert "meta" in loaded
         assert "rng_states" in loaded["meta"]
@@ -1302,7 +1305,8 @@ class TestSaveCheckpointExpanded:
         )
 
         checkpoint_path = output_dir / "checkpoint_step_100.pt"
-        loaded = torch.load(checkpoint_path)
+        from training.safe_checkpoint_loading import safe_load_checkpoint
+        loaded = safe_load_checkpoint(checkpoint_path)
 
         assert "meta" in loaded
         assert loaded["meta"]["dataset_fingerprint"] == "abc123"
@@ -1332,7 +1336,8 @@ class TestSaveCheckpointExpanded:
         )
 
         checkpoint_path = output_dir / "checkpoint_step_100.pt"
-        loaded = torch.load(checkpoint_path)
+        from training.safe_checkpoint_loading import safe_load_checkpoint
+        loaded = safe_load_checkpoint(checkpoint_path)
 
         assert "meta" in loaded
         assert "code_mode" in loaded["meta"]

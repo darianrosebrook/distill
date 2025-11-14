@@ -27,7 +27,8 @@ def load_checkpoint(checkpoint_path: Path) -> Dict[str, Any]:
     if not TORCH_AVAILABLE:
         raise ImportError("PyTorch required for checkpoint loading")
 
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    from training.safe_checkpoint_loading import safe_load_checkpoint
+    checkpoint = safe_load_checkpoint(checkpoint_path, map_location="cpu")
 
     # Extract model architecture info
     model_arch = checkpoint.get("model_arch", {})

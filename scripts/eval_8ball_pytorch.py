@@ -15,7 +15,8 @@ from training.dataset import load_tokenizer
 
 def load_model(checkpoint_path):
     """Load PyTorch model from checkpoint."""
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    from training.safe_checkpoint_loading import safe_load_checkpoint
+    checkpoint = safe_load_checkpoint(checkpoint_path, map_location="cpu")
     model = checkpoint["model"]
     model.eval()
     return model

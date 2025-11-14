@@ -26,7 +26,8 @@ def generate_pytorch_probes(model_path: str, example_input: torch.Tensor, output
 
     # Try to load as regular PyTorch model first (supports hooks)
     try:
-        checkpoint = torch.load(model_path, map_location="cpu")
+        from training.safe_checkpoint_loading import safe_load_checkpoint
+        checkpoint = safe_load_checkpoint(model_path, map_location="cpu")
         if "model_state_dict" in checkpoint:
             # Checkpoint format - need model architecture
             # Try to infer from checkpoint config

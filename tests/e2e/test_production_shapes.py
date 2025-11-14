@@ -46,7 +46,8 @@ def load_production_checkpoint(checkpoint_path: Path):
     Returns:
         Tuple of (model, vocab_size, config)
     """
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    from training.safe_checkpoint_loading import safe_load_checkpoint
+    checkpoint = safe_load_checkpoint(checkpoint_path, map_location="cpu")
 
     # Extract config
     config_data = checkpoint.get("config", {})

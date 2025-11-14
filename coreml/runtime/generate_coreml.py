@@ -502,9 +502,10 @@ def main():
         # PyTorch model
         import torch
         from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
+        from training.safe_checkpoint_loading import safe_load_checkpoint
 
         # Load checkpoint and create model
-        checkpoint = torch.load(args.model, map_location="cpu")
+        checkpoint = safe_load_checkpoint(args.model, map_location="cpu")
 
         # Load config from checkpoint if available
         cfg = None

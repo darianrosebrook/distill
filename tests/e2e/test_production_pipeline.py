@@ -99,7 +99,8 @@ def test_production_pipeline_e2e(temp_dir, checkpoint_path):
 
     # Verify checkpoint structure
     print(f"\n[Pre-check] Verifying checkpoint: {checkpoint_path}")
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    from training.safe_checkpoint_loading import safe_load_checkpoint
+    checkpoint = safe_load_checkpoint(checkpoint_path, map_location="cpu")
 
     required_keys = ["model_state_dict", "config"]
     missing_keys = [k for k in required_keys if k not in checkpoint]

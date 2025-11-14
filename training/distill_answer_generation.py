@@ -51,7 +51,8 @@ def create_model(cfg: Dict[str, Any], device: torch.device) -> nn.Module:
     base_checkpoint = init_cfg.get("base_checkpoint")
     if base_checkpoint and Path(base_checkpoint).exists():
         print(f"[distill_answer_generation] Loading checkpoint: {base_checkpoint}")
-        checkpoint = torch.load(base_checkpoint, map_location="cpu")
+        from training.safe_checkpoint_loading import safe_load_checkpoint
+        checkpoint = safe_load_checkpoint(base_checkpoint, map_location="cpu")
         if "model_state_dict" in checkpoint:
             model.load_state_dict(checkpoint["model_state_dict"], strict=False)
         else:

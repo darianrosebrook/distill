@@ -177,7 +177,8 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load model
-    checkpoint = torch.load(args.checkpoint, map_location=device)
+    from training.safe_checkpoint_loading import safe_load_checkpoint
+    checkpoint = safe_load_checkpoint(args.checkpoint, map_location=device)
     if "config" not in checkpoint:
         print("[halt_calibration] ERROR: Checkpoint missing config")
         sys.exit(1)

@@ -448,7 +448,8 @@ def export_to_huggingface_format(checkpoint_path: str, output_dir: Path):
     """Export PyTorch checkpoint to HuggingFace-compatible format."""
     print(f"📦 Loading checkpoint: {checkpoint_path}")
 
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    from training.safe_checkpoint_loading import safe_load_checkpoint
+    checkpoint = safe_load_checkpoint(checkpoint_path, map_location="cpu")
     config = checkpoint["config"]["arch"]
 
     # Create model config

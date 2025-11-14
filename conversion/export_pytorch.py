@@ -249,8 +249,9 @@ def main():
     else:
         print("[export_pytorch] ⚠️  Skipping version check for toy model (testing mode)")
 
-    # Load model
-    checkpoint = torch.load(args.checkpoint, map_location="cpu")
+    # Load model safely with structure validation
+    from training.safe_checkpoint_loading import safe_load_checkpoint
+    checkpoint = safe_load_checkpoint(args.checkpoint, map_location="cpu")
 
     # Load config from checkpoint - required for correct architecture
     if "config" not in checkpoint:

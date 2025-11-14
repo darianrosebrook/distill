@@ -12,7 +12,8 @@ from training.dataset import load_tokenizer
 
 def main():
     # Load model
-    checkpoint = torch.load("outputs/8ball_demo/model.pt", map_location="cpu")
+    from training.safe_checkpoint_loading import safe_load_checkpoint
+    checkpoint = safe_load_checkpoint("outputs/8ball_demo/model.pt", map_location="cpu")
     model = checkpoint["model"]
     model.eval()
 

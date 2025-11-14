@@ -401,7 +401,8 @@ class TestToyTrainingIntegration:
         assert config["arch"]["d_model"] == 64
 
         # Verify checkpoint
-        checkpoint = torch.load(checkpoint_path)
+        from training.safe_checkpoint_loading import safe_load_checkpoint
+        checkpoint = safe_load_checkpoint(checkpoint_path)
         assert "model_state_dict" in checkpoint
         assert "config" in checkpoint
 
@@ -448,7 +449,8 @@ class TestToyTrainingIntegration:
         )
 
         # Load checkpoint
-        checkpoint = torch.load(checkpoint_path)
+        from training.safe_checkpoint_loading import safe_load_checkpoint
+        checkpoint = safe_load_checkpoint(checkpoint_path)
         assert "model_state_dict" in checkpoint
         assert "config" in checkpoint
 
@@ -459,4 +461,5 @@ class TestToyTrainingIntegration:
         # Models should have same parameters
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             assert torch.allclose(p1, p2)
+
 

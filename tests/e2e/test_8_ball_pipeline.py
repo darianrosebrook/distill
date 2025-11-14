@@ -107,7 +107,8 @@ def test_8_ball_pipeline_e2e(temp_dir):
         print(f"   Training output: {result.stdout[-500:]}")  # Last 500 chars
 
     # Verify checkpoint structure
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    from training.safe_checkpoint_loading import safe_load_checkpoint
+    checkpoint = safe_load_checkpoint(checkpoint_path, map_location="cpu")
     assert "model_state_dict" in checkpoint
     assert "config" in checkpoint
     assert "meta" in checkpoint

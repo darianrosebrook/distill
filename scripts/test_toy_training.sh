@@ -252,7 +252,8 @@ try:
     
     # Load into new model
     model2 = StudentLM(cfg)
-    checkpoint = torch.load(checkpoint_path)
+    from training.safe_checkpoint_loading import safe_load_checkpoint
+    checkpoint = safe_load_checkpoint(checkpoint_path)
     model2.load_state_dict(checkpoint["model_state_dict"])
     
     # Verify weights match

@@ -303,7 +303,8 @@ class TestKDTrainingIntegration:
         )
 
         # Load checkpoint
-        checkpoint = torch.load(checkpoint_path, map_location=device)
+        from training.safe_checkpoint_loading import safe_load_checkpoint
+        checkpoint = safe_load_checkpoint(checkpoint_path, map_location=device)
         model2 = StudentLM(small_model_cfg).to(device)
         model2.load_state_dict(checkpoint["model_state_dict"])
 

@@ -22,7 +22,8 @@ from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
 
 def compute_checkpoint_hash(checkpoint_path: Path) -> str:
     """Compute SHA-256 hash of checkpoint model state dict."""
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    from training.safe_checkpoint_loading import safe_load_checkpoint
+    checkpoint = safe_load_checkpoint(checkpoint_path, map_location="cpu")
 
     if "model_state_dict" in checkpoint:
         state_dict = checkpoint["model_state_dict"]

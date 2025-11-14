@@ -86,8 +86,9 @@ def main():
     )
     args = ap.parse_args()
 
-    # Load model
-    checkpoint = torch.load(args.checkpoint, map_location="cpu")
+    # Load model safely with structure validation
+    from training.safe_checkpoint_loading import safe_load_checkpoint
+    checkpoint = safe_load_checkpoint(args.checkpoint, map_location="cpu")
 
     # Try to load config from checkpoint
     cfg = None

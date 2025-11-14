@@ -321,7 +321,8 @@ def test_toy_pipeline_with_code_mode(temp_dir):
     print(f"✅ Export complete: {prefill_model}")
 
     # Verify checkpoint can be loaded (structure test)
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    from training.safe_checkpoint_loading import safe_load_checkpoint
+    checkpoint = safe_load_checkpoint(checkpoint_path, map_location="cpu")
     assert "model_state_dict" in checkpoint
     assert "config" in checkpoint
     assert "meta" in checkpoint
@@ -425,7 +426,8 @@ def test_toy_pipeline_with_latent_mode(temp_dir):
     print(f"✅ Export complete: {prefill_model}")
 
     # Verify checkpoint can be loaded (structure test)
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    from training.safe_checkpoint_loading import safe_load_checkpoint
+    checkpoint = safe_load_checkpoint(checkpoint_path, map_location="cpu")
     assert "model_state_dict" in checkpoint
     assert "config" in checkpoint
     assert "meta" in checkpoint
@@ -534,7 +536,8 @@ def test_toy_pipeline_with_both_features(temp_dir):
     print(f"✅ Export complete: {prefill_model}")
 
     # Verify checkpoint can be loaded (structure test)
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    from training.safe_checkpoint_loading import safe_load_checkpoint
+    checkpoint = safe_load_checkpoint(checkpoint_path, map_location="cpu")
     assert "model_state_dict" in checkpoint
     assert "config" in checkpoint
     assert "meta" in checkpoint
