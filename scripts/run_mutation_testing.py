@@ -16,6 +16,31 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
+# Auto-apply patch for Python 3.11 compatibility
+try:
+    import mutatest
+    mutatest_path = Path(mutatest.__file__).parent
+    run_py = mutatest_path / "run.py"
+    
+    # Check if patch is needed
+    if run_py.exists():
+        with open(run_py, "r") as f:
+            content = f.read()
+        
+        # Apply patch if needed (random.sample doesn't work with sets in Python 3.11)
+        if "random.sample(mutant_operations, k=1)" in content and "list(mutant_operations)" not in content:
+            print("🔧 Applying mutatest patch for Python 3.11 compatibility...")
+            patched_content = content.replace(
+                "current_mutation = random.sample(mutant_operations, k=1)[0]",
+                "current_mutation = random.sample(list(mutant_operations), k=1)[0]"
+            )
+            with open(run_py, "w") as f:
+                f.write(patched_content)
+            print("✅ Patch applied successfully")
+except (ImportError, Exception):
+    # mutatest not installed or patch failed - continue anyway
+    pass
+
 
 # Critical modules that should have high mutation scores (70%+)
 CRITICAL_MODULES = [
