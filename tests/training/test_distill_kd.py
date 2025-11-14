@@ -1826,6 +1826,101 @@ class TestTrainingStepExpanded:
         assert "total" in result
         assert "intermediate_layer" in result
 
+    def test_train_step_with_intermediate_layers_default_mapping(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test training step with intermediate layers and default layer mapping."""
+        training_config["distillation"]["use_intermediate_layers"] = True
+        training_config["distillation"]["intermediate_layer_weight"] = 0.1
+        # No explicit layer_mapping - should use default
+        
+        # Add teacher hidden states to batch
+        batch_size, seq_len = sample_batch["input_ids"].shape
+        d_model = 128
+        sample_batch["teacher_hidden_states"] = [
+            torch.randn(batch_size, seq_len, d_model) for _ in range(5)  # 5 teacher layers
+        ]
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+            elif isinstance(v, list):
+                sample_batch[k] = [t.to(device) if isinstance(t, torch.Tensor) else t for t in v]
+        
+        # Mock model to return hidden states
+        def mock_forward_with_hidden(input_ids, attention_mask=None, return_hidden_states=False):
+            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            if return_hidden_states:
+                hidden_states = [
+                    torch.randn(batch_size, seq_len, d_model, device=device, requires_grad=True) for _ in range(3)  # 3 student layers
+                ]
+                return logits, hidden_states
+            return logits
+        
+        small_model.forward = mock_forward_with_hidden
+        
+        result = train_step(
+            model=small_model,
+            batch=sample_batch,
+            optimizer=simple_optimizer,
+            scaler=None,
+            cfg=training_config,
+            device=device,
+        )
+        
+        assert "total" in result
+        assert "intermediate_layer" in result
+
+    def test_train_step_with_intermediate_layers_projection_creation(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test training step with intermediate layers requiring projection layer creation."""
+        training_config["distillation"]["use_intermediate_layers"] = True
+        training_config["distillation"]["intermediate_layer_weight"] = 0.1
+        training_config["distillation"]["layer_mapping"] = {0: 0, 1: 2}
+        
+        # Add teacher hidden states with different d_model
+        batch_size, seq_len = sample_batch["input_ids"].shape
+        student_d_model = 128
+        teacher_d_model = 256  # Different dimension
+        sample_batch["teacher_hidden_states"] = [
+            torch.randn(batch_size, seq_len, teacher_d_model) for _ in range(3)
+        ]
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+            elif isinstance(v, list):
+                sample_batch[k] = [t.to(device) if isinstance(t, torch.Tensor) else t for t in v]
+        
+        # Mock model to return hidden states with different d_model
+        def mock_forward_with_hidden(input_ids, attention_mask=None, return_hidden_states=False):
+            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            if return_hidden_states:
+                hidden_states = [
+                    torch.randn(batch_size, seq_len, student_d_model, device=device, requires_grad=True) for _ in range(2)
+                ]
+                return logits, hidden_states
+            return logits
+        
+        small_model.forward = mock_forward_with_hidden
+        # Model doesn't have projection_layers - should create on-the-fly
+        small_model.projection_layers = None
+        
+        result = train_step(
+            model=small_model,
+            batch=sample_batch,
+            optimizer=simple_optimizer,
+            scaler=None,
+            cfg=training_config,
+            device=device,
+        )
+        
+        assert "total" in result
+        assert "intermediate_layer" in result
+
     def test_train_step_with_entropy_scheduling(
         self, small_model, sample_batch, simple_optimizer, training_config, device
     ):
@@ -2016,6 +2111,185 @@ class TestTrainingStepExpanded:
         )
 
         assert "total" in result
+
+    def test_train_step_with_halt_targets_derivation(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test training step with halt targets derivation from metadata."""
+        training_config["latent"]["halt_head_enabled"] = True
+        training_config["latent"]["halt_weight"] = 0.05
+        training_config["latent"]["halt_targets"] = {
+            "judge_score_threshold": 0.8,
+            "delta_shrinking_threshold": 0.05,
+            "caws_tier": "Tier-2",
+            "warmup_steps": 1000,
+        }
+        
+        # Add halt logits to model output
+        def mock_forward_with_halt(input_ids, attention_mask=None, return_halt_logits=False):
+            batch_size, seq_len = input_ids.shape
+            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            if return_halt_logits:
+                halt_logits = torch.randn(batch_size, 2, device=device, requires_grad=True)
+                return logits, halt_logits
+            return logits
+        
+        small_model.forward = mock_forward_with_halt
+        small_model.use_halt_head = True
+        
+        # Add batch metadata for halt target derivation
+        sample_batch["metadata"] = [
+            {
+                "loop_index": 0,
+                "max_loops": 2,
+                "judge_score": 0.9,
+                "prev_score": 0.85,
+                "curriculum_stage": 1,
+            },
+            {
+                "loop_index": 1,
+                "max_loops": 2,
+                "judge_score": 0.7,
+                "prev_score": 0.75,
+                "curriculum_stage": 1,
+            },
+        ]
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+        
+        # Mock halt targets import (imported inside train_step)
+        with patch("training.halt_targets.HaltHeadTargets") as mock_halt_class:
+            with patch("training.halt_targets.create_halt_targets_batch") as mock_create_halt:
+                mock_halt_instance = Mock()
+                mock_halt_instance.warmup_steps = 1000
+                mock_halt_class.return_value = mock_halt_instance
+                
+                # Mock halt targets (after warmup)
+                mock_create_halt.return_value = torch.tensor([0, 1], device=device)  # First continue, second halt
+                
+                result = train_step(
+                    model=small_model,
+                    batch=sample_batch,
+                    optimizer=simple_optimizer,
+                    scaler=None,
+                    cfg=training_config,
+                    device=device,
+                    current_step=2000,  # After warmup
+                )
+                
+                assert "total" in result
+                assert "halt_head" in result
+
+    def test_train_step_with_halt_targets_warmup(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test training step with halt targets during warmup (no loss)."""
+        training_config["latent"]["halt_head_enabled"] = True
+        training_config["latent"]["halt_weight"] = 0.05
+        training_config["latent"]["halt_targets"] = {
+            "judge_score_threshold": 0.8,
+            "delta_shrinking_threshold": 0.05,
+            "caws_tier": "Tier-2",
+            "warmup_steps": 1000,
+        }
+        
+        def mock_forward_with_halt(input_ids, attention_mask=None, return_halt_logits=False):
+            batch_size, seq_len = input_ids.shape
+            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            if return_halt_logits:
+                halt_logits = torch.randn(batch_size, 2, device=device, requires_grad=True)
+                return logits, halt_logits
+            return logits
+        
+        small_model.forward = mock_forward_with_halt
+        small_model.use_halt_head = True
+        
+        sample_batch["metadata"] = [
+            {"loop_index": 0, "max_loops": 2, "judge_score": 0.9},
+            {"loop_index": 1, "max_loops": 2, "judge_score": 0.7},
+        ]
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+        
+        with patch("training.halt_targets.HaltHeadTargets") as mock_halt_class:
+            with patch("training.halt_targets.create_halt_targets_batch") as mock_create_halt:
+                mock_halt_instance = Mock()
+                mock_halt_instance.warmup_steps = 1000
+                mock_halt_class.return_value = mock_halt_instance
+                
+                # During warmup, create_halt_targets_batch returns None
+                mock_create_halt.return_value = None
+                
+                result = train_step(
+                    model=small_model,
+                    batch=sample_batch,
+                    optimizer=simple_optimizer,
+                    scaler=None,
+                    cfg=training_config,
+                    device=device,
+                    current_step=500,  # During warmup
+                )
+                
+                assert "total" in result
+                # Halt loss should not be applied during warmup
+                assert "halt_head" not in result or result.get("halt_head", 0.0) == 0.0
+
+    def test_train_step_with_code_mode_loss_fallback_init(
+        self, small_model, sample_batch, simple_optimizer, training_config, device
+    ):
+        """Test training step with code-mode loss fallback initialization."""
+        training_config["distill"] = {
+            "code_mode": {
+                "enabled": True,
+                "weight": 0.3,
+                "code_mode_pref": {
+                    "eligibility_rules": {"min_tools": 2},
+                    "reward": {"prefer_ts_api_over_direct_tool": True},
+                    "weights": {"pos": 1.0, "neg": 1.0},
+                },
+            }
+        }
+        training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
+        
+        # Add batch metadata
+        sample_batch["meta"] = [
+            {"tool_count": 3, "span_targets": {"ts_mode_spans": [(5, 10)], "direct_tool_spans": []}},
+            {"tool_count": 2, "span_targets": {"ts_mode_spans": [], "direct_tool_spans": [(0, 3)]}},
+        ]
+        
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+        
+        # Clear any existing code_mode_loss_module attribute
+        if hasattr(train_step, "_code_mode_loss_module"):
+            delattr(train_step, "_code_mode_loss_module")
+        
+        with patch("training.distill_kd.load_tokenizer") as mock_load:
+            mock_tokenizer = Mock()
+            mock_tokenizer.convert_tokens_to_ids = Mock(return_value=100)
+            mock_load.return_value = mock_tokenizer
+            
+            result = train_step(
+                model=small_model,
+                batch=sample_batch,
+                optimizer=simple_optimizer,
+                scaler=None,
+                cfg=training_config,
+                device=device,
+                current_step=6000,
+            )
+            
+            assert "total" in result
+            # Code-mode loss should be computed (fallback initialization)
+            assert "code_mode_pref" in result or "code_mode_weight" in result
 
 
 class TestMainFunction:
