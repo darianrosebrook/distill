@@ -2379,6 +2379,8 @@ class TestTrainingStepExpanded:
         training_config["distillation"]["use_caws_compliance"] = True
         training_config["distillation"]["caws_compliance_weight"] = 0.05
         training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
+        # Also set tokenizer_path at top level for train_step lookup
+        training_config["tokenizer_path"] = "models/student/tokenizer"
         
         # Add teacher_text to batch
         sample_batch["teacher_text"] = "Test teacher output"
@@ -2388,12 +2390,13 @@ class TestTrainingStepExpanded:
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
         
-        # Mock tokenizer on model
+        # Mock tokenizer on model (train_step checks model.tokenizer first)
         mock_tokenizer = Mock()
         mock_tokenizer.decode = Mock(return_value="Test student output")
         small_model.tokenizer = mock_tokenizer
         
-        with patch("training.losses.caws_compliance_loss") as mock_compliance:
+        # The function is imported at module level, so patch it where it's used
+        with patch("training.distill_kd.caws_compliance_loss") as mock_compliance:
             mock_compliance.return_value = torch.tensor(0.1, device=device, requires_grad=True)
             
             result = train_step(
@@ -2407,7 +2410,9 @@ class TestTrainingStepExpanded:
             
             assert "total" in result
             # CAWS compliance loss should be added if tokenizer is available
-            # Check if it was called (might not be in result if exception occurred)
+            # The tokenizer is found via model.tokenizer, so compliance should be called
+            # Verify tokenizer was used (decode was called) and compliance loss was computed
+            assert mock_tokenizer.decode.called, "Tokenizer should be used for decoding student output"
             mock_compliance.assert_called_once()
 
     def test_train_step_with_caws_compliance_loss_from_metadata(
@@ -2426,29 +2431,27 @@ class TestTrainingStepExpanded:
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
         
-        with patch("training.distill_kd.load_tokenizer") as mock_load:
-            mock_tokenizer = Mock()
-            mock_tokenizer.decode = Mock(return_value="Test student output")
-            mock_load.return_value = mock_tokenizer
+        # Mock tokenizer on model (train_step checks model.tokenizer first)
+        mock_tokenizer = Mock()
+        mock_tokenizer.decode = Mock(return_value="Test student output")
+        small_model.tokenizer = mock_tokenizer
+        
+        # The function is imported at module level, so patch it where it's used
+        with patch("training.distill_kd.caws_compliance_loss") as mock_compliance:
+            mock_compliance.return_value = torch.tensor(0.1, device=device, requires_grad=True)
             
-            # Mock the tokenizer path lookup in train_step
-            training_config["tokenizer_path"] = "models/student/tokenizer"
+            result = train_step(
+                model=small_model,
+                batch=sample_batch,
+                optimizer=simple_optimizer,
+                scaler=None,
+                cfg=training_config,
+                device=device,
+            )
             
-            with patch("training.losses.caws_compliance_loss") as mock_compliance:
-                mock_compliance.return_value = torch.tensor(0.1, device=device, requires_grad=True)
-                
-                result = train_step(
-                    model=small_model,
-                    batch=sample_batch,
-                    optimizer=simple_optimizer,
-                    scaler=None,
-                    cfg=training_config,
-                    device=device,
-                )
-                
-                assert "total" in result
-                # Verify compliance loss was called
-                mock_compliance.assert_called_once()
+            assert "total" in result
+            # Verify compliance loss was called
+            mock_compliance.assert_called_once()
 
 
 class TestMainFunction:
