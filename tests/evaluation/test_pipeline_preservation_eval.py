@@ -381,6 +381,7 @@ class TestPipelinePreservationEvalMain:
         mock_open,
         mock_load_config,
         mock_config,
+        tmp_path,
     ):
         """Test main function finds default questions from config module."""
         mock_load_config.return_value = mock_config
@@ -401,6 +402,7 @@ class TestPipelinePreservationEvalMain:
                 "--pytorch-model", "model.pt",
                 "--tokenizer", "tokenizer",
                 "--config", "evaluation.toy.eight_ball.EIGHT_BALL_CONFIG",
+                "--output-dir", str(tmp_path / "output"),
             ]),
             patch(
                 "evaluation.pipeline_preservation_eval.evaluate_pytorch_model", return_value=[]),
@@ -429,6 +431,7 @@ class TestPipelinePreservationEvalMain:
         mock_open,
         mock_load_config,
         mock_config,
+        tmp_path,
     ):
         """Test main function falls back to default questions when module not found."""
         mock_load_config.return_value = mock_config
@@ -439,6 +442,7 @@ class TestPipelinePreservationEvalMain:
                 "--pytorch-model", "model.pt",
                 "--tokenizer", "tokenizer",
                 "--config", "test.config",
+                "--output-dir", str(tmp_path / "output"),
             ]),
             patch(
                 "evaluation.pipeline_preservation_eval.evaluate_pytorch_model", return_value=[]),
@@ -517,6 +521,7 @@ class TestPipelinePreservationEvalMain:
         mock_load_config,
         mock_config,
         mock_pytorch_results,
+        tmp_path,
     ):
         """Test main function saves PyTorch predictions to JSON."""
         mock_load_config.return_value = mock_config
@@ -563,6 +568,7 @@ class TestPipelinePreservationEvalMain:
         mock_config,
         mock_pytorch_results,
         mock_coreml_results,
+        tmp_path,
     ):
         """Test main function saves comparison metrics."""
         mock_load_config.return_value = mock_config
@@ -612,6 +618,7 @@ class TestPipelinePreservationEvalMain:
         mock_eval_pytorch,
         mock_load_config,
         mock_config,
+        tmp_path,
     ):
         """Test main function handles predictions without class probabilities."""
         results_no_probs = [
@@ -666,6 +673,7 @@ class TestPipelinePreservationEvalIntegration:
         mock_eval_coreml,
         mock_eval_pytorch,
         mock_load_config,
+        tmp_path,
     ):
         """Test complete pipeline comparison workflow."""
         mock_config = Mock(spec=ClassificationConfig)

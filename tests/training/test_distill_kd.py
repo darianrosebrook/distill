@@ -1031,6 +1031,92 @@ class TestComputeRequiredFieldsPresent:
         assert isinstance(result, torch.Tensor)
         assert result.dtype == torch.bool
 
+    def test_compute_required_fields_present_gold_json_path(self, device):
+        """Test gold_json_ids path (lines 124-133)."""
+        batch_size = 2
+        seq_len = 10
+        json_len = 8
+        
+        # The gold_json path requires input_ids to determine batch size
+        batch = {
+            "input_ids": torch.randint(0, 100, (batch_size, seq_len)),
+            "gold_json_text_ids": torch.randint(0, 100, (batch_size, json_len)),
+            "mask_valid_json_tokens": torch.ones(batch_size, json_len, dtype=torch.bool),
+            "attention_mask": torch.ones(batch_size, seq_len),
+        }
+
+        mock_tokenizer = Mock()
+        result = compute_required_fields_present(batch, mock_tokenizer, device)
+        
+        assert isinstance(result, torch.Tensor)
+        assert result.dtype == torch.bool
+        assert result.shape == (batch_size,)
+        # Should return True when student covers JSON (attention_mask has ones)
+        assert torch.all(result)
+
+    def test_compute_required_fields_present_gold_json_no_mask(self, device):
+        """Test gold_json_ids path without mask_valid_json_tokens."""
+        batch_size = 2
+        seq_len = 10
+        json_len = 8
+        
+        batch = {
+            "gold_json_text_ids": torch.randint(0, 100, (batch_size, json_len)),
+            # No mask_valid_json_tokens - should not use this path
+            "attention_mask": torch.ones(batch_size, seq_len),
+        }
+
+        mock_tokenizer = Mock()
+        result = compute_required_fields_present(batch, mock_tokenizer, device)
+        
+        assert isinstance(result, torch.Tensor)
+        assert result.dtype == torch.bool
+
+    def test_compute_required_fields_present_schema_registry_exception(self, device, mock_tokenizer):
+        """Test exception handling in schema registry import (lines 142-144)."""
+        batch_size = 2
+        seq_len = 10
+        vocab_size = 1000
+
+        batch = {
+            "input_ids": torch.randint(0, vocab_size, (batch_size, seq_len)),
+            "student_logits": torch.randn(batch_size, seq_len, vocab_size),
+            "validated_arguments": [{"arguments": {"key": "value"}}],
+            "tool_names": ["test_tool"],
+        }
+
+        # Mock schema registry to raise exception on import
+        with patch("tools.schema_registry.ToolSchemaRegistry", side_effect=ImportError("Not available")):
+            result = compute_required_fields_present(batch, mock_tokenizer, device)
+            
+            # Should fall back to generic validation
+            assert isinstance(result, torch.Tensor)
+            assert result.dtype == torch.bool
+
+    def test_compute_required_fields_present_error_handling(self, device, mock_tokenizer):
+        """Test error handling path in compute_required_fields_present (lines 268-278)."""
+        batch_size = 2
+        seq_len = 10
+        vocab_size = 1000
+
+        batch = {
+            "input_ids": torch.randint(0, vocab_size, (batch_size, seq_len)),
+            "student_logits": torch.randn(batch_size, seq_len, vocab_size),
+            "validated_arguments": [{"arguments": {"key": "value"}}],
+            "tool_names": ["test_tool"],
+        }
+
+        # Mock tokenizer to raise exception during decode
+        mock_tokenizer.decode = Mock(side_effect=Exception("Decode error"))
+        
+        with patch("builtins.print"):  # Suppress error print
+            result = compute_required_fields_present(batch, mock_tokenizer, device)
+            
+            # Should handle error gracefully and return False for incomplete
+            assert isinstance(result, torch.Tensor)
+            assert result.dtype == torch.bool
+            assert result.shape == (batch_size,)
+
 
 class TestMergeConfigsEnvOverrides:
     """Test merge_configs with environment variable overrides."""
