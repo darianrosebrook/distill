@@ -7,6 +7,7 @@ Author: @darianrosebrook
 import json
 import os
 import hashlib
+import shlex
 import subprocess
 from typing import Dict, Any, Optional
 
@@ -24,9 +25,15 @@ def sha256_file(path: str) -> Optional[str]:
 
 
 def run_cmd(cmd: str) -> str:
-    """Run command and return output."""
+    """Run command and return output.
+    
+    SECURITY: Uses shlex.split() to safely parse command string.
+    Commands should be system-controlled, not user input.
+    """
     try:
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=True)
+        # Use shlex.split() to safely parse command (avoids shell injection)
+        cmd_parts = shlex.split(cmd)
+        result = subprocess.run(cmd_parts, capture_output=True, text=True, check=True)
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
         return f"ERROR: {e.stderr.strip()}"

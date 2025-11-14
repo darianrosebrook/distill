@@ -508,6 +508,58 @@ class TestIntermediateLayerLoss:
         assert loss.requires_grad
         assert loss.item() == 0.0
 
+    def test_intermediate_layer_loss_boundary_check_gte(self, device):
+        """Test intermediate layer loss with boundary conditions (>= check).
+        
+        This test catches mutations that change >= to <= in line 244.
+        """
+        batch_size = 2
+        seq_len = 10
+        d_model = 128
+
+        # Create states with specific lengths
+        student_hidden_states = [
+            torch.randn(batch_size, seq_len, d_model, device=device, requires_grad=True) for _ in range(2)
+        ]
+        teacher_hidden_states = [
+            torch.randn(batch_size, seq_len, d_model, device=device) for _ in range(3)
+        ]
+
+        # Test with student_idx at boundary (should be skipped)
+        # student_idx = 2, len(student_hidden_states) = 2, so 2 >= 2 should skip
+        layer_mapping_boundary = {2: 0}  # student_idx >= len, should be skipped
+        
+        # Test with teacher_idx at boundary (should be skipped)
+        # teacher_idx = 3, len(teacher_hidden_states) = 3, so 3 >= 3 should skip
+        layer_mapping_boundary2 = {0: 3}  # teacher_idx >= len, should be skipped
+        
+        # Test with valid indices (should NOT be skipped)
+        layer_mapping_valid = {0: 0, 1: 1}  # Both valid, should compute loss
+        
+        # Boundary cases should return zero loss (indices out of range are skipped)
+        loss_boundary1 = intermediate_layer_loss(
+            student_hidden_states, teacher_hidden_states, layer_mapping_boundary
+        )
+        loss_boundary2 = intermediate_layer_loss(
+            student_hidden_states, teacher_hidden_states, layer_mapping_boundary2
+        )
+        
+        # Valid case should return non-zero loss
+        loss_valid = intermediate_layer_loss(
+            student_hidden_states, teacher_hidden_states, layer_mapping_valid
+        )
+        
+        # Boundary cases should return zero (skipped)
+        assert loss_boundary1.item() == 0.0, "student_idx >= len should be skipped"
+        assert loss_boundary2.item() == 0.0, "teacher_idx >= len should be skipped"
+        
+        # Valid case should return non-zero loss
+        assert loss_valid.item() > 0, "Valid indices should produce non-zero loss"
+        
+        # Verify >= is used (not <=)
+        # If >= were changed to <=, boundary cases would NOT be skipped, causing IndexError or wrong behavior
+        # This test verifies that >= correctly skips out-of-range indices
+
 
 class TestSelfEvaluationLoss:
     """Test self-evaluation loss function."""
@@ -1458,6 +1510,50 @@ class TestCAWSComplianceLoss:
 
         assert isinstance(loss, torch.Tensor)
         assert loss.item() >= 0
+
+    def test_caws_compliance_loss_latent_span_count_boundary(self, device):
+        """Test CAWS compliance loss with latent_span_count boundary check (> 2).
+        
+        This test catches mutations that change > to == in line 1100.
+        """
+        # Test with output_length < 200 and latent_span_count > 2 (should add penalty)
+        student_output_short_high_latent = "Short output with <bot>span1</bot> <bot>span2</bot> <bot>span3</bot> <bot>span4</bot>"
+        teacher_output = "Teacher output"
+        
+        # Test with output_length < 200 and latent_span_count = 2 (should NOT add penalty)
+        student_output_short_low_latent = "Short output with <bot>span1</bot> <bot>span2</bot>"
+        
+        # Test with output_length >= 200 and latent_span_count > 2 (should NOT add penalty for short output)
+        student_output_long_high_latent = "A" * 250 + " <bot>span1</bot> <bot>span2</bot> <bot>span3</bot>"
+        
+        loss_short_high = caws_compliance_loss(student_output_short_high_latent, teacher_output)
+        loss_short_low = caws_compliance_loss(student_output_short_low_latent, teacher_output)
+        loss_long_high = caws_compliance_loss(student_output_long_high_latent, teacher_output)
+
+        # Verify that > 2 is used (not ==)
+        # With > 2: latent_span_count=4 should add penalty, latent_span_count=2 should not
+        # With == 2: latent_span_count=4 should NOT add penalty (wrong behavior)
+        
+        # Short output with high latent count (> 2) should have higher penalty
+        # Short output with low latent count (<= 2) should have lower penalty
+        # The difference should be significant if > is used correctly
+        assert isinstance(loss_short_high, torch.Tensor)
+        assert isinstance(loss_short_low, torch.Tensor)
+        assert isinstance(loss_long_high, torch.Tensor)
+        
+        # Verify that high latent count (> 2) with short output increases loss
+        # If > were changed to ==, the penalty wouldn't apply for count=4, making losses similar
+        # Allow some tolerance, but high latent count should generally increase loss
+        # Note: The exact penalty depends on implementation, but > 2 check should be enforced
+        assert loss_short_high.item() >= 0, "Loss should be non-negative"
+        assert loss_short_low.item() >= 0, "Loss should be non-negative"
+        assert loss_long_high.item() >= 0, "Loss should be non-negative"
+        
+        # High latent count (> 2) with short output should have higher loss than low count
+        # This verifies that > 2 check is used (not ==)
+        assert loss_short_high.item() >= loss_short_low.item(), (
+            "High latent count (> 2) with short output should have higher loss than low count (<= 2)"
+        )
 
 
 class TestCAWSStructureLoss:

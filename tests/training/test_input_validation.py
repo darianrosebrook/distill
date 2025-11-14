@@ -76,19 +76,19 @@ class TestInputValidator:
     def test_validate_text_input_suspicious_script_tag(self, strict_validator):
         """Test detecting suspicious script tags."""
         malicious_text = '<script>alert("xss")</script>'
-        with pytest.raises(ValidationError, match="Suspicious content"):
+        with pytest.raises(ValidationError, match="contains suspicious content"):
             strict_validator.validate_text_input(malicious_text, "test_field")
 
     def test_validate_text_input_suspicious_javascript_url(self, strict_validator):
         """Test detecting suspicious JavaScript URLs."""
         malicious_text = 'Click here: <a href="javascript:alert(1)">link</a>'
-        with pytest.raises(ValidationError, match="Suspicious content"):
+        with pytest.raises(ValidationError, match="contains suspicious content"):
             strict_validator.validate_text_input(malicious_text, "test_field")
 
     def test_validate_text_input_suspicious_event_handler(self, strict_validator):
         """Test detecting suspicious event handlers."""
         malicious_text = '<div onclick="alert(1)">Click me</div>'
-        with pytest.raises(ValidationError, match="Suspicious content"):
+        with pytest.raises(ValidationError, match="contains suspicious content"):
             strict_validator.validate_text_input(malicious_text, "test_field")
 
     def test_validate_text_input_none_strict(self, strict_validator):

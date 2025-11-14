@@ -8,6 +8,7 @@ import json
 import os
 import hashlib
 import platform
+import shlex
 import subprocess
 import glob
 from typing import Any, Dict, Optional
@@ -26,9 +27,15 @@ def sha256p(path: str) -> Optional[str]:
 
 
 def maybe(cmd: str) -> str:
-    """Run command and return output or error message."""
+    """Run command and return output or error message.
+    
+    SECURITY: Uses shlex.split() to safely parse command string.
+    Commands are hardcoded system commands (not user input).
+    """
     try:
-        out = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.STDOUT)
+        # Use shlex.split() to safely parse command (avoids shell injection)
+        cmd_parts = shlex.split(cmd)
+        out = subprocess.check_output(cmd_parts, text=True, stderr=subprocess.STDOUT)
         return out.strip()
     except subprocess.CalledProcessError as e:
         return f"ERROR: {e.output.strip()}"
