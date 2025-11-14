@@ -517,6 +517,23 @@ class TestClaimExtractionMetricsIntegration:
 class TestFormatResults:
     """Test format_results method."""
 
+    @pytest.fixture
+    def mock_extractor(self):
+        """Create mock claim extractor."""
+        extractor = Mock()
+        extractor.extract_claims = Mock(
+            return_value=[
+                {"text": "claim1", "confidence": 0.9},
+                {"text": "claim2", "confidence": 0.8},
+            ]
+        )
+        return extractor
+
+    @pytest.fixture
+    def evaluator(self, mock_extractor):
+        """Create ClaimExtractionEvaluator instance."""
+        return ClaimExtractionEvaluator(mock_extractor)
+
     def test_format_results_basic(self, evaluator):
         """Test formatting results as string."""
         result = ClaimExtractionEvalResult(
@@ -563,11 +580,29 @@ class TestFormatResults:
 class TestEvaluateFromDataset:
     """Test evaluate_from_dataset method."""
 
-    @patch("evaluation.claim_extraction_metrics.DataLoader")
-    @patch("evaluation.claim_extraction_metrics.KDDataset")
-    @patch("evaluation.claim_extraction_metrics.torch")
+    @pytest.fixture
+    def mock_extractor(self):
+        """Create mock claim extractor."""
+        extractor = Mock()
+        extractor.extract_claims = Mock(
+            return_value=[
+                {"text": "claim1", "confidence": 0.9},
+                {"text": "claim2", "confidence": 0.8},
+            ]
+        )
+        return extractor
+
+    @pytest.fixture
+    def evaluator(self, mock_extractor):
+        """Create ClaimExtractionEvaluator instance."""
+        return ClaimExtractionEvaluator(mock_extractor)
+
+    @patch("torch.utils.data.DataLoader")
+    @patch("training.dataset.KDDataset")
+    @patch("builtins.open", create=True)
+    @patch("torch.utils.data.Subset")
     def test_evaluate_from_dataset_basic(
-        self, mock_torch, mock_dataset_class, mock_dataloader_class, evaluator
+        self, mock_subset, mock_open, mock_dataset_class, mock_dataloader_class, evaluator
     ):
         """Test evaluating from dataset."""
         # Mock dataset
@@ -596,8 +631,7 @@ class TestEvaluateFromDataset:
         mock_dataloader_class.return_value = mock_dataloader
 
         # Mock torch operations
-        mock_torch.utils.data.Subset = Mock(return_value=mock_dataset)
-        mock_torch.no_grad = Mock(return_value=Mock(__enter__=Mock(), __exit__=Mock(return_value=None)))
+        mock_subset.return_value = mock_dataset
 
         # Mock model and tokenizer
         mock_model = Mock()
@@ -639,16 +673,19 @@ class TestEvaluateFromDataset:
         mock_argmax_result.__getitem__().cpu().tolist = Mock(return_value=[1, 2, 3])
         mock_logits.argmax = Mock(return_value=mock_argmax_result)
 
-        with patch(
-            "evaluation.claim_extraction_metrics.compute_claim_extraction_metrics"
-        ) as mock_compute:
+        with (
+            patch("evaluation.claim_extraction_metrics.compute_claim_extraction_metrics") as mock_compute,
+            patch("torch.no_grad") as mock_no_grad,
+        ):
             mock_compute.return_value = {
                 "student_claim_count": 2,
                 "teacher_claim_count": 2,
                 "student_success_rate": 0.8,
                 "teacher_success_rate": 0.9,
             }
-
+            mock_no_grad.return_value.__enter__ = Mock()
+            mock_no_grad.return_value.__exit__ = Mock(return_value=None)
+            
             result = evaluator.evaluate_from_dataset(
                 dataset_path="test.jsonl",
                 student_model=mock_model,
@@ -659,11 +696,12 @@ class TestEvaluateFromDataset:
             assert isinstance(result, ClaimExtractionEvalResult)
             mock_model.eval.assert_called_once()
 
-    @patch("evaluation.claim_extraction_metrics.DataLoader")
-    @patch("evaluation.claim_extraction_metrics.KDDataset")
-    @patch("evaluation.claim_extraction_metrics.torch")
+    @patch("torch.utils.data.DataLoader")
+    @patch("training.dataset.KDDataset")
+    @patch("builtins.open", create=True)
+    @patch("torch.utils.data.Subset")
     def test_evaluate_from_dataset_with_max_samples(
-        self, mock_torch, mock_dataset_class, mock_dataloader_class, evaluator
+        self, mock_subset, mock_open, mock_dataset_class, mock_dataloader_class, evaluator
     ):
         """Test evaluating from dataset with max_samples limit."""
         # Mock dataset
@@ -672,29 +710,41 @@ class TestEvaluateFromDataset:
         mock_dataset_class.return_value = mock_dataset
 
         # Mock Subset
-        mock_subset = Mock()
-        mock_subset.__len__ = Mock(return_value=5)
-        mock_torch.utils.data.Subset = Mock(return_value=mock_subset)
+        mock_subset_obj = Mock()
+        mock_subset_obj.__len__ = Mock(return_value=5)
+        mock_subset.return_value = mock_subset_obj
 
         # Mock dataloader
         mock_dataloader = Mock()
         mock_dataloader.__iter__ = Mock(return_value=iter([]))
         mock_dataloader_class.return_value = mock_dataloader
 
-        mock_torch.no_grad = Mock(return_value=Mock(__enter__=Mock(), __exit__=Mock(return_value=None)))
-
         mock_model = Mock()
         mock_model.eval = Mock()
         mock_tokenizer = Mock()
+        mock_model.return_value = Mock()
 
-        result = evaluator.evaluate_from_dataset(
-            dataset_path="test.jsonl",
-            student_model=mock_model,
-            tokenizer=mock_tokenizer,
-            device="cpu",
-            max_samples=5,
-        )
+        with (
+            patch("evaluation.claim_extraction_metrics.compute_claim_extraction_metrics") as mock_compute,
+            patch("torch.no_grad") as mock_no_grad,
+        ):
+            mock_compute.return_value = {
+                "student_claim_count": 0,
+                "teacher_claim_count": 0,
+                "student_success_rate": 0.0,
+                "teacher_success_rate": 0.0,
+            }
+            mock_no_grad.return_value.__enter__ = Mock()
+            mock_no_grad.return_value.__exit__ = Mock(return_value=None)
 
-        # Should have used Subset with max_samples
-        mock_torch.utils.data.Subset.assert_called_once()
-        assert isinstance(result, ClaimExtractionEvalResult)
+            result = evaluator.evaluate_from_dataset(
+                dataset_path="test.jsonl",
+                student_model=mock_model,
+                tokenizer=mock_tokenizer,
+                device="cpu",
+                max_samples=5,
+            )
+
+            # Should have used Subset with max_samples
+            mock_subset.assert_called_once()
+            assert isinstance(result, ClaimExtractionEvalResult)
