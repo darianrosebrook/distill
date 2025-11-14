@@ -622,6 +622,12 @@ Examples:
         except Exception:
             try:
                 # Try loading as ExportedProgram
+                # SECURITY NOTE: pickle.load() is required for ExportedProgram format.
+                # This is acceptable because:
+                # 1. Files are user-generated from export_pytorch.py (not arbitrary)
+                # 2. ExportedProgram is the official PyTorch export format
+                # 3. Users control the export process and should trust their exports
+                # For production, prefer TorchScript (.pt) which uses torch.jit.load() safely
                 import pickle
 
                 with open(args.input_path, "rb") as f:
