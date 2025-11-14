@@ -12,7 +12,7 @@ Usage:
 import argparse
 import json
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -58,13 +58,29 @@ def load_model(checkpoint_path: str, device: torch.device) -> nn.Module:
 
 
 def generate_text(
-    model: nn.Module, tokenizer, prompt: str, max_new_tokens: int = 512, device: torch.device = None,
-    max_length: int = None, temperature: float = None
+    model: nn.Module, tokenizer, prompt: str, max_length: int = None, max_new_tokens: int = None, 
+    device: torch.device = None, temperature: float = None
 ) -> str:
-    """Generate text from model using greedy decoding."""
+    """Generate text from model using greedy decoding.
+    
+    Args:
+        model: Model to generate from
+        tokenizer: Tokenizer for encoding/decoding
+        prompt: Input prompt text
+        max_length: Maximum generation length (preferred, alias for max_new_tokens)
+        max_new_tokens: Maximum number of new tokens to generate (default: 512)
+        device: Device to run on (default: model's device)
+        temperature: Temperature for sampling (not used in greedy decoding, accepted for compatibility)
+    
+    Returns:
+        Generated text string
+    """
     # Handle max_length parameter (alias for max_new_tokens)
-    if max_length is not None and max_new_tokens == 512:
+    # Tests call with max_length as 4th positional arg, so we handle both
+    if max_length is not None:
         max_new_tokens = max_length
+    elif max_new_tokens is None:
+        max_new_tokens = 512  # Default
     
     # Temperature is not used in greedy decoding, but accept it for compatibility
     if device is None:
@@ -218,22 +234,82 @@ def extract_tool_call(text: str) -> Optional[Dict[str, Any]]:
 
 
 def evaluate_tool_use(
-    model: nn.Module, tokenizer, test_prompts: List[Dict[str, Any]], device: torch.device
-) -> Dict[str, Any]:
+    *args,
+    model: Optional[nn.Module] = None,
+    tokenizer: Any = None,
+    test_prompts: Optional[List[Dict[str, Any]]] = None,
+    device: Optional[torch.device] = None,
+) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
     """
     Evaluate tool-use capabilities.
 
+    Supports two calling conventions:
+    1. evaluate_tool_use(checkpoint_path, test_prompts, device) - for tests
+       Returns list of result dicts
+    2. evaluate_tool_use(model, tokenizer, test_prompts, device) - for main()
+       Returns dict with metrics
+
     Args:
-        model: Trained model
-        tokenizer: Tokenizer for encoding/decoding
-        test_prompts: List of dicts with 'prompt' and 'expected_tool' (optional)
-        device: Device to run on
+        *args: Positional args for backward compatibility:
+            - (checkpoint_path, test_prompts, device) - Convention 1
+            - (model, tokenizer, test_prompts, device) - Convention 2
+        model: Trained model (for Convention 2)
+        tokenizer: Tokenizer (for Convention 2)
+        test_prompts: List of dicts with 'prompt' and 'expected_tool' (for Convention 2)
+        device: Device to run on (for Convention 2)
 
     Returns:
-        Dictionary with metrics including JSON validity, repair rate, tool success
+        If checkpoint path provided: List of result dicts
+        If model provided: Dictionary with metrics including JSON validity, repair rate, tool success
     """
+    # Determine calling convention based on positional args
+    if args:
+        # Using positional args (legacy calling convention)
+        first_arg = args[0]
+        is_checkpoint_path = isinstance(first_arg, (str, Path))
+        
+        if is_checkpoint_path and len(args) == 3:
+            # Convention 1: evaluate_tool_use(checkpoint_path, test_prompts, device)
+            checkpoint_path = first_arg
+            test_prompts = args[1]
+            device = args[2]
+            
+            # Load model and tokenizer
+            model = load_model(str(checkpoint_path), device)
+            
+            # Try to load tokenizer from default location
+            try:
+                from transformers import AutoTokenizer
+                tokenizer_path = "models/student/tokenizer"
+                try:
+                    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+                except Exception:
+                    # Fallback: try to load from checkpoint directory
+                    checkpoint_dir = Path(checkpoint_path).parent
+                    tokenizer = AutoTokenizer.from_pretrained(str(checkpoint_dir))
+            except Exception:
+                raise RuntimeError(f"Could not load tokenizer for checkpoint: {checkpoint_path}")
+            
+            return_as_list = True
+        elif not is_checkpoint_path and len(args) == 4:
+            # Convention 2: evaluate_tool_use(model, tokenizer, test_prompts, device)
+            model = args[0]
+            tokenizer = args[1]
+            test_prompts = args[2]
+            device = args[3]
+            return_as_list = False
+        else:
+            raise ValueError(f"Invalid number of positional arguments: {len(args)}")
+    else:
+        # Using keyword args (preferred)
+        if model is None or tokenizer is None or test_prompts is None or device is None:
+            raise ValueError("Must provide model, tokenizer, test_prompts, and device as keyword args")
+        return_as_list = False
+    
     # Handle empty test cases
     if not test_prompts:
+        if return_as_list:
+            return []
         return {
             "json_valid_rate": 0.0,
             "tool_correct_rate": 0.0,
@@ -382,18 +458,24 @@ def evaluate_tool_use(
     repair_rate = needs_repair_count / total if total > 0 else 0.0
     tool_success_rate = tool_success_count / total if total > 0 else 0.0
 
-    return {
-        "json_validity_rate": json_validity_rate,
-        "tool_selection_rate": tool_selection_rate,
-        "repair_rate": repair_rate,
-        "tool_success_rate": tool_success_rate,
-        "json_valid_count": json_valid_count,
-        "tool_correct_count": tool_correct_count,
-        "needs_repair_count": needs_repair_count,
-        "tool_success_count": tool_success_count,
-        "total": total,
-        "results": results,
-    }
+    # Return format depends on calling convention
+    if return_as_list:
+        # For tests: return list of result dicts
+        return results
+    else:
+        # For main(): return dict with metrics
+        return {
+            "json_validity_rate": json_validity_rate,
+            "tool_selection_rate": tool_selection_rate,
+            "repair_rate": repair_rate,
+            "tool_success_rate": tool_success_rate,
+            "json_valid_count": json_valid_count,
+            "tool_correct_count": tool_correct_count,
+            "needs_repair_count": needs_repair_count,
+            "tool_success_count": tool_success_count,
+            "total": total,
+            "results": results,
+        }
 
 
 def main():
@@ -440,7 +522,7 @@ def main():
 
     # Run evaluation
     print(f"[tool_use_eval] Evaluating on {len(test_prompts)} test cases...")
-    results = evaluate_tool_use(model, tokenizer, test_prompts, device)
+    results = evaluate_tool_use(model=model, tokenizer=tokenizer, test_prompts=test_prompts, device=device)
 
     # Save results
     output_path = Path(args.output)

@@ -58,7 +58,8 @@ class TestEightBallConstants:
         assert len(ID_TO_ANSWER) == 20
         assert ID_TO_ANSWER[200] == "It is certain"
         assert ID_TO_ANSWER[219] == "Very doubtful"
-        assert ID_TO_ANSWER[210] == "Signs point to yes"
+        assert ID_TO_ANSWER[209] == "Signs point to yes"  # Index 9
+        assert ID_TO_ANSWER[210] == "Reply hazy, try again"  # Index 10
 
     def test_id_to_answer_coverage(self):
         """Test that all token IDs are mapped."""
@@ -307,26 +308,26 @@ class TestEvaluateOllamaModel:
             mock_process = Mock()
             mock_process.returncode = 1
             mock_process.stderr = "Ollama error"
+            mock_process.stdout = ""  # Add stdout to make Mock iterable
             mock_run.return_value = mock_process
 
-            with pytest.raises(Exception):
+            # The function should raise Exception for subprocess failures
+            with pytest.raises(Exception, match="Error evaluating question"):
                 evaluate_ollama_model("test_model", questions)
 
     def test_evaluate_ollama_model_invalid_json(self):
         """Test Ollama evaluation with invalid JSON output."""
         questions = ["Test question"]
 
-        with (
-            patch("subprocess.run") as mock_run,
-            patch("json.loads", side_effect=json.JSONDecodeError("Invalid JSON", "", 0)),
-        ):
+        with patch("subprocess.run") as mock_run:
             mock_process = Mock()
-            mock_process.stdout = "invalid json"
+            mock_process.stdout = "invalid json"  # Not valid JSON
             mock_process.stderr = ""
             mock_process.returncode = 0
             mock_run.return_value = mock_process
 
-            with pytest.raises(json.JSONDecodeError):
+            # The function converts JSONDecodeError to Exception
+            with pytest.raises(Exception, match="Invalid JSON"):
                 evaluate_ollama_model("test_model", questions)
 
 

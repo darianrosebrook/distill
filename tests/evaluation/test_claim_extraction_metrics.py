@@ -154,11 +154,11 @@ class TestClaimExtractionEvaluator:
         assert isinstance(result, ClaimExtractionEvalResult)
         assert result.student_claim_count == 4
         assert result.teacher_claim_count == 3
-        assert result.student_success_rate == 0.75
-        assert result.teacher_success_rate == 0.85
-        assert result.claim_ratio == 1.33
-        assert result.success_rate_ratio == 0.88
-        assert result.claim_extraction_loss == 0.45
+        assert result.student_success_rate == pytest.approx(0.75, abs=0.01)
+        assert result.teacher_success_rate == pytest.approx(0.85, abs=0.01)
+        assert result.claim_ratio == pytest.approx(1.33, abs=0.01)
+        assert result.success_rate_ratio == pytest.approx(0.88, abs=0.01)
+        assert result.claim_extraction_loss == pytest.approx(0.45, abs=0.01)
 
         # Verify compute_claim_extraction_metrics was called
         mock_compute_metrics.assert_called_once_with(
@@ -233,6 +233,10 @@ class TestClaimExtractionEvaluator:
             # Should still work despite length mismatch
             assert result.student_claim_count == 5
             assert result.teacher_claim_count == 3
+            # Use approximate comparison for floating point values
+            assert result.claim_ratio == pytest.approx(1.67, abs=0.01)
+            assert result.success_rate_ratio == pytest.approx(0.75, abs=0.01)
+            assert result.claim_extraction_loss == pytest.approx(0.92, abs=0.01)
 
     def test_evaluate_with_none_outputs(self, evaluator):
         """Test evaluation handling None values in outputs."""

@@ -64,6 +64,8 @@ class EvaluationMetrics:
     mean_l2_drift: Optional[float] = None
     mean_kl_divergence: Optional[float] = None
     per_class_accuracy: Optional[Dict[int, float]] = None
+    class_distribution: Optional[List[int]] = None  # Count per class for compatibility with tests
+    prediction_confidence: Optional[float] = None  # For compatibility with tests
 
 
 def load_classification_config(config_path: str) -> ClassificationConfig:
