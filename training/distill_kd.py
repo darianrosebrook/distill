@@ -1081,13 +1081,16 @@ def train_step(
 
         # Compute loss
 
-        # Get tokenizer for process-step supervision, CAWS compliance, and claim extraction
+        # Get tokenizer for process-step supervision, CAWS compliance, claim extraction,
+        # length-aware KD, and early tool call loss
         tokenizer = None
         needs_tokenizer = (
             kd_cfg.get("w_tool", 0.0) > 0
             or kd_cfg.get("w_args", 0.0) > 0
             or kd_cfg.get("use_caws_compliance", False)
             or kd_cfg.get("use_claim_extraction", False)
+            or kd_cfg.get("use_length_aware_kd", False)
+            or kd_cfg.get("use_early_tool_call_loss", False)
         )
         if needs_tokenizer:
             # Try to get tokenizer from model or config
@@ -1399,12 +1402,23 @@ def train_step(
                 teacher_attn_mask = teacher_attn_mask.to(device)
 
                 # Compute required_fields_present
-                required_fields = compute_required_fields_present(
-                    batch=batch,
-                    tokenizer=tokenizer,
-                    device=device,
-                    student_logits=student_logits,
-                )
+                # If tokenizer is None or compute_required_fields_present fails, default to all fields present
+                try:
+                    if tokenizer is not None:
+                        required_fields = compute_required_fields_present(
+                            batch=batch,
+                            tokenizer=tokenizer,
+                            device=device,
+                            student_logits=student_logits,
+                        )
+                    else:
+                        # No tokenizer available - assume all fields present (conservative)
+                        B = student_attn_mask.size(0)
+                        required_fields = torch.ones(B, dtype=torch.bool, device=device)
+                except Exception:
+                    # Fallback: assume all fields present (conservative - no penalty)
+                    B = student_attn_mask.size(0)
+                    required_fields = torch.ones(B, dtype=torch.bool, device=device)
 
                 # Compute length-aware KD loss
                 length_kd_loss, length_diags = length_aware_kd_loss(

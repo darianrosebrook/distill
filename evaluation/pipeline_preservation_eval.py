@@ -14,6 +14,7 @@ Author: @darianrosebrook
 
 import json
 import sys
+import tempfile
 from pathlib import Path
 from evaluation.classification_eval import (
     load_classification_config,
@@ -57,10 +58,18 @@ def main():
     )
     ap.add_argument(
         "--output-dir",
-        default="/tmp/pipeline_comparison",
-        help="Output directory for results",
+        default=None,  # Will use tempfile.mkdtemp() if not provided
+        help="Output directory for results (default: temporary directory)",
     )
     args = ap.parse_args()
+
+    # Use tempfile for security (avoids hardcoded /tmp/ paths)
+    if args.output_dir is None:
+        output_dir = Path(tempfile.mkdtemp(prefix="pipeline_comparison_"))
+        print(f"Using temporary directory: {output_dir}")
+    else:
+        output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Load classification config
     try:

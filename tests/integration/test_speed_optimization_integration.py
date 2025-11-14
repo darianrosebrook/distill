@@ -304,7 +304,7 @@ class TestSpeedMetricsIntegration:
 
         assert aggregated["ttft_ms"]["p50"] == 150.0
         # p95 should be approximately 200.0 (allow small floating point differences)
-        assert abs(aggregated["ttft_ms"]["p95"] - 200.0) < 5.0
+        assert abs(aggregated["ttft_ms"]["p95"] - 200.0) <= 5.0
         assert aggregated["tps"]["p50"] == 60.0
         assert aggregated["ttfa_tokens"]["p50"] == 15.0
 

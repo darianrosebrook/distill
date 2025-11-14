@@ -9,6 +9,8 @@ Loads the CoreML model created by the 8-ball workflow and tests it with
 from training.dataset import load_tokenizer
 from coreml.runtime.generate_coreml import load_coreml_model
 import sys
+import tempfile
+import os
 from pathlib import Path
 import json
 from typing import List, Dict, Any
@@ -236,13 +238,16 @@ def run_comprehensive_evaluation(model_path: str = None, output_file: str = None
     Returns:
         Dictionary with evaluation results and benchmarks
     """
+    # Use tempfile for security (avoids hardcoded /tmp/ paths)
     if model_path is None:
-        model_path = "/tmp/8_ball_T128.mlpackage"
+        temp_dir = Path(tempfile.gettempdir())
+        model_path = str(temp_dir / "8_ball_T128.mlpackage")
 
     if output_file is None:
         import time
 
-        output_file = f"/tmp/8_ball_eval_{int(time.time())}.json"
+        temp_dir = Path(tempfile.gettempdir())
+        output_file = str(temp_dir / f"8_ball_eval_{int(time.time())}.json")
 
     print("🔬 Running comprehensive evaluation...")
     print(f"   Model: {model_path}")
@@ -315,8 +320,9 @@ def main():
     print("🎱 Testing 8-ball CoreML Model 🎱")
     print("=" * 60)
 
-    # Model and tokenizer paths
-    model_path = "/tmp/8_ball_T128.mlpackage"
+    # Model and tokenizer paths (use tempfile for security)
+    temp_dir = Path(tempfile.gettempdir())
+    model_path = str(temp_dir / "8_ball_T128.mlpackage")
     tokenizer_path = "models/student/tokenizer"
 
     # Check if model exists
@@ -575,8 +581,9 @@ def main():
 
     print(f"\n{assessment}")
 
-    # Save detailed results
-    output_file = "/tmp/8_ball_test_results.json"
+    # Save detailed results (use tempfile for security)
+    temp_dir = Path(tempfile.gettempdir())
+    output_file = str(temp_dir / "8_ball_test_results.json")
     with open(output_file, "w") as f:
         json.dump(
             {
@@ -672,8 +679,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--regression", type=str, help="Run regression test against baseline results file"
     )
+    # Use tempfile for security (avoids hardcoded /tmp/ paths)
+    default_model_path = str(Path(tempfile.gettempdir()) / "8_ball_T128.mlpackage")
     parser.add_argument(
-        "--model-path", type=str, default="/tmp/8_ball_T128.mlpackage", help="Path to CoreML model"
+        "--model-path", type=str, default=default_model_path, help="Path to CoreML model"
     )
     parser.add_argument(
         "--output", type=str, help="Output file for results (auto-generated if not specified)"

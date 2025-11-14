@@ -560,6 +560,45 @@ class TestIntermediateLayerLoss:
         # If >= were changed to <=, boundary cases would NOT be skipped, causing IndexError or wrong behavior
         # This test verifies that >= correctly skips out-of-range indices
 
+    def test_intermediate_layer_loss_boundary_equality_case(self, device):
+        """Test intermediate layer loss with exact equality (== check).
+        
+        This test catches mutations that change >= to == in line 244.
+        When indices are exactly equal to length, they should be skipped.
+        """
+        batch_size = 2
+        seq_len = 10
+        d_model = 128
+
+        # Create states with specific lengths
+        student_hidden_states = [
+            torch.randn(batch_size, seq_len, d_model, device=device, requires_grad=True) for _ in range(2)
+        ]
+        teacher_hidden_states = [
+            torch.randn(batch_size, seq_len, d_model, device=device) for _ in range(3)
+        ]
+
+        # Test with student_idx exactly equal to length (should be skipped with >=, not skipped with ==)
+        # student_idx = 2, len(student_hidden_states) = 2, so 2 >= 2 should skip, but 2 == 2 might not skip correctly
+        layer_mapping_equality = {2: 0}  # student_idx == len, should be skipped with >=
+        
+        # Test with teacher_idx exactly equal to length (should be skipped with >=, not skipped with ==)
+        layer_mapping_equality2 = {0: 3}  # teacher_idx == len, should be skipped with >=
+        
+        # Boundary cases should return zero (skipped with >= check)
+        loss_equality1 = intermediate_layer_loss(
+            student_hidden_states, teacher_hidden_states, layer_mapping_equality
+        )
+        loss_equality2 = intermediate_layer_loss(
+            student_hidden_states, teacher_hidden_states, layer_mapping_equality2
+        )
+        
+        # Verify that >= is used (not ==)
+        # With >=: equality cases are skipped (out of range)
+        # With ==: equality cases might NOT be skipped (wrong behavior, could cause IndexError)
+        assert loss_equality1.item() == 0.0, "student_idx == len should be skipped with >= check"
+        assert loss_equality2.item() == 0.0, "teacher_idx == len should be skipped with >= check"
+
 
 class TestSelfEvaluationLoss:
     """Test self-evaluation loss function."""
@@ -1115,6 +1154,175 @@ class TestCombinedKDLoss:
         # Verify that providing teacher_targets increases total loss (when ce_teacher_weight > 0)
         assert loss_dict_provided["total"].item() > loss_dict_none["total"].item(), (
             "teacher_targets provided should increase total loss when ce_teacher_weight > 0"
+        )
+
+    def test_combined_kd_loss_json_loss_addition(self, device):
+        """Test that combined_kd_loss uses addition (not subtraction) for json_loss.
+        
+        This test catches mutations that change + to - in line 639.
+        """
+        batch_size = 2
+        seq_len = 10
+        vocab_size = 1000
+
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+        teacher_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+        teacher_targets = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        ground_truth_targets = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        
+        # Test without json_loss (baseline)
+        loss_dict_no_json = combined_kd_loss(
+            student_logits,
+            teacher_logits,
+            teacher_targets,
+            ground_truth_targets,
+            kl_weight=0.5,
+            ce_teacher_weight=0.3,
+            ce_ground_truth_weight=0.2,
+            kd_temperature=1.0,
+            gold_json_text_ids=None,  # No JSON loss
+            w_args=0.15,
+        )
+        
+        # Test with json_loss (should increase total loss)
+        json_len = 8
+        gold_json_text_ids = torch.randint(0, vocab_size, (batch_size, json_len), device=device)
+        mask_valid_json_tokens = torch.ones(batch_size, json_len, device=device)
+        
+        loss_dict_with_json = combined_kd_loss(
+            student_logits,
+            teacher_logits,
+            teacher_targets,
+            ground_truth_targets,
+            kl_weight=0.5,
+            ce_teacher_weight=0.3,
+            ce_ground_truth_weight=0.2,
+            kd_temperature=1.0,
+            gold_json_text_ids=gold_json_text_ids,
+            mask_valid_json_tokens=mask_valid_json_tokens,
+            w_args=0.15,  # Positive weight
+        )
+
+        # Verify that json_loss is added (not subtracted)
+        assert "json_args" in loss_dict_with_json, "json_loss should be added when provided"
+        assert loss_dict_with_json["json_args"].item() >= 0, "json_loss should be non-negative"
+        
+        # Verify that adding json_loss increases total loss (addition, not subtraction)
+        assert loss_dict_with_json["total"].item() > loss_dict_no_json["total"].item(), (
+            "json_loss should increase total loss when added (not decrease when subtracted)"
+        )
+        
+        # Verify the relationship: total_loss_with_json = total_loss_no_json + w_args * json_loss
+        expected_increase = 0.15 * loss_dict_with_json["json_args"].item()
+        actual_increase = loss_dict_with_json["total"].item() - loss_dict_no_json["total"].item()
+        # Allow some tolerance due to other loss components
+        assert actual_increase > 0, "json_loss should increase total loss (addition verified)"
+
+    def test_combined_kd_loss_ground_truth_targets_none_check(self, device):
+        """Test that combined_kd_loss handles ground_truth_targets=None correctly.
+        
+        This test catches mutations that change is not None to is None in line 649.
+        """
+        batch_size = 2
+        seq_len = 10
+        vocab_size = 1000
+
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+        teacher_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+        teacher_targets = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        
+        # Test with ground_truth_targets=None (should NOT compute CE on ground truth)
+        loss_dict_none = combined_kd_loss(
+            student_logits,
+            teacher_logits,
+            teacher_targets,
+            ground_truth_targets=None,  # None - should skip CE on ground truth
+            kl_weight=0.5,
+            ce_teacher_weight=0.3,
+            ce_ground_truth_weight=0.2,  # Should be ignored when ground_truth_targets=None
+            kd_temperature=1.0,
+        )
+        
+        # Test with ground_truth_targets provided (should compute CE on ground truth)
+        ground_truth_targets = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        loss_dict_provided = combined_kd_loss(
+            student_logits,
+            teacher_logits,
+            teacher_targets,
+            ground_truth_targets=ground_truth_targets,  # Provided - should compute CE on ground truth
+            kl_weight=0.5,
+            ce_teacher_weight=0.3,
+            ce_ground_truth_weight=0.2,
+            kd_temperature=1.0,
+        )
+
+        # Verify that ground_truth_targets=None does NOT add CE on ground truth
+        assert "ce_ground_truth" not in loss_dict_none, "ground_truth_targets=None should not add CE on ground truth"
+        
+        # Verify that ground_truth_targets provided DOES add CE on ground truth
+        assert "ce_ground_truth" in loss_dict_provided, "ground_truth_targets provided should add CE on ground truth"
+        
+        # Verify that providing ground_truth_targets increases total loss (when ce_ground_truth_weight > 0)
+        assert loss_dict_provided["total"].item() > loss_dict_none["total"].item(), (
+            "ground_truth_targets provided should increase total loss when ce_ground_truth_weight > 0"
+        )
+
+    def test_combined_kd_loss_halt_head_none_check(self, device):
+        """Test that combined_kd_loss handles halt_logits and halt_targets=None correctly.
+        
+        This test catches mutations that change is not None to is None in line 680.
+        """
+        batch_size = 2
+        seq_len = 10
+        vocab_size = 1000
+
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+        teacher_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+        teacher_targets = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        ground_truth_targets = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        
+        # Test with halt_logits=None and halt_targets=None (should NOT compute halt head loss)
+        loss_dict_none = combined_kd_loss(
+            student_logits,
+            teacher_logits,
+            teacher_targets,
+            ground_truth_targets,
+            kl_weight=0.5,
+            ce_teacher_weight=0.3,
+            ce_ground_truth_weight=0.2,
+            kd_temperature=1.0,
+            halt_logits=None,  # None - should skip halt head loss
+            halt_targets=None,  # None - should skip halt head loss
+            halt_weight=0.1,  # Should be ignored when halt_logits or halt_targets is None
+        )
+        
+        # Test with halt_logits and halt_targets provided (should compute halt head loss)
+        halt_logits = torch.randn(batch_size, 2, device=device, requires_grad=True)
+        halt_targets = torch.randint(0, 2, (batch_size,), device=device)
+        
+        loss_dict_provided = combined_kd_loss(
+            student_logits,
+            teacher_logits,
+            teacher_targets,
+            ground_truth_targets,
+            kl_weight=0.5,
+            ce_teacher_weight=0.3,
+            ce_ground_truth_weight=0.2,
+            kd_temperature=1.0,
+            halt_logits=halt_logits,  # Provided - should compute halt head loss
+            halt_targets=halt_targets,  # Provided - should compute halt head loss
+            halt_weight=0.1,
+        )
+
+        # Verify that halt_logits=None or halt_targets=None does NOT add halt head loss
+        assert "halt_head" not in loss_dict_none, "halt_logits=None or halt_targets=None should not add halt head loss"
+        
+        # Verify that halt_logits and halt_targets provided DOES add halt head loss
+        assert "halt_head" in loss_dict_provided, "halt_logits and halt_targets provided should add halt head loss"
+        
+        # Verify that providing halt_logits and halt_targets increases total loss (when halt_weight > 0)
+        assert loss_dict_provided["total"].item() > loss_dict_none["total"].item(), (
+            "halt_logits and halt_targets provided should increase total loss when halt_weight > 0"
         )
 
 

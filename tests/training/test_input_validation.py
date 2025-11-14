@@ -436,10 +436,18 @@ class TestInputValidator:
         assert "\x00" not in result
 
     def test_sanitize_json_string_too_long(self, strict_validator):
-        """Test sanitizing JSON string that is too long."""
+        """Test sanitizing JSON string that is too long (line 446-447)."""
         long_json = '{"key": "' + "x" * 2000000 + '"}'
         result = strict_validator.sanitize_json_string(long_json)
         assert len(result) <= 1000000
+        # Test exact boundary: exactly 1000000 chars should pass through
+        exact_boundary = "x" * 1000000
+        result_exact = strict_validator.sanitize_json_string(exact_boundary)
+        assert len(result_exact) == 1000000
+        # Test one over boundary: should be truncated
+        over_boundary = "x" * 1000001
+        result_over = strict_validator.sanitize_json_string(over_boundary)
+        assert len(result_over) == 1000000
 
     def test_validate_file_path_valid(self, strict_validator, tmp_path):
         """Test validating valid file path."""
@@ -604,10 +612,14 @@ class TestValidateToolTrace:
         assert result[0]["tool_input"] == {"json": "object"}
 
     def test_validate_tool_trace_non_string_output(self):
-        """Test validating tool trace with non-string tool_output."""
+        """Test validating tool trace with non-string tool_output (line 578)."""
         trace = [{"tool_name": "tool1", "tool_input": "input", "tool_output": {"json": "object"}}]
         result = validate_tool_trace(trace)
         assert result[0]["tool_output"] == {"json": "object"}
+        # Test with string output to ensure isinstance check works (line 578)
+        trace_str = [{"tool_name": "tool1", "tool_input": "input", "tool_output": "string output"}]
+        result_str = validate_tool_trace(trace_str)
+        assert result_str[0]["tool_output"] == "string output"
 
     def test_validate_tool_trace_preserves_other_fields(self):
         """Test validating tool trace preserves other fields (line 586-588)."""

@@ -10,6 +10,7 @@ from training.dataset import load_tokenizer
 from coreml.runtime.generate_coreml import load_coreml_model
 import sys
 import random
+import tempfile
 from pathlib import Path
 import json
 from typing import List
@@ -336,8 +337,9 @@ def main():
 
     print(f"\n{assessment}")
 
-    # Save detailed results
-    output_file = "/tmp/toy_test_results.json"
+    # Save detailed results (use tempfile for security)
+    temp_dir = Path(tempfile.gettempdir())
+    output_file = str(temp_dir / "toy_test_results.json")
     with open(output_file, "w") as f:
         json.dump(
             {

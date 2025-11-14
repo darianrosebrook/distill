@@ -10,6 +10,7 @@ Author: @darianrosebrook
 """
 
 import json
+import tempfile
 from pathlib import Path
 from evaluation.eight_ball_eval import (
     evaluate_pytorch_model,
@@ -47,12 +48,17 @@ def main():
     )
     ap.add_argument(
         "--output-dir",
-        default="/tmp/8ball_pipeline_comparison",
-        help="Output directory for results",
+        default=None,  # Will use tempfile.mkdtemp() if not provided
+        help="Output directory for results (default: temporary directory)",
     )
     args = ap.parse_args()
 
-    output_dir = Path(args.output_dir)
+    # Use tempfile for security (avoids hardcoded /tmp/ paths)
+    if args.output_dir is None:
+        output_dir = Path(tempfile.mkdtemp(prefix="8ball_pipeline_comparison_"))
+        print(f"Using temporary directory: {output_dir}")
+    else:
+        output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Load questions
