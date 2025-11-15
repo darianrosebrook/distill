@@ -2917,7 +2917,8 @@ def main():
 
                             # Force garbage collection
                             collected = gc.collect()
-                            print(f"[distill_kd] Garbage collection freed {collected} objects")
+                            print(
+                                f"[distill_kd] Garbage collection freed {collected} objects")
 
                             # Clear any cached tensors in model components
                             if hasattr(model, 'clear_cache'):
@@ -2932,7 +2933,8 @@ def main():
                                 torch.cuda.empty_cache()
                                 torch.cuda.synchronize()
 
-                            print("[distill_kd] Enhanced memory cleanup completed for large model")
+                            print(
+                                "[distill_kd] Enhanced memory cleanup completed for large model")
 
                     except Exception as cache_e:
                         print(
@@ -2984,9 +2986,11 @@ def main():
                     if torch.cuda.is_available():
                         torch.cuda.empty_cache()
 
-                    print("[distill_kd] Cleared optimizer state and GPU cache after error")
+                    print(
+                        "[distill_kd] Cleared optimizer state and GPU cache after error")
                 except Exception as cleanup_e:
-                    print(f"[distill_kd] WARN: Failed to clean up after error: {cleanup_e}")
+                    print(
+                        f"[distill_kd] WARN: Failed to clean up after error: {cleanup_e}")
 
                 # Continue to next step instead of crashing
                 step += 1

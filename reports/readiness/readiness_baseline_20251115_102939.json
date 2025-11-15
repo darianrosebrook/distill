@@ -1,0 +1,683 @@
+{
+  "timestamp": "2025-11-15T10:29:04.001322",
+  "version": "1.0",
+  "git": {
+    "commit": "515baa4c31ee69dd311ff1dee7cb087a224260f3",
+    "branch": "main",
+    "dirty": true
+  },
+  "test_status": {
+    "unit": {
+      "total": 0,
+      "passed": 0,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0,
+      "failures": [],
+      "duration_seconds": 0.0
+    },
+    "integration": {
+      "total": 0,
+      "passed": 0,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0,
+      "failures": [],
+      "duration_seconds": 0.0
+    },
+    "mutation": {
+      "modules_tested": 5,
+      "scores": {},
+      "survivors": {},
+      "timeouts": 0,
+      "targets_met": 0,
+      "targets_missed": []
+    }
+  },
+  "coverage": {
+    "overall": {
+      "line_percent": 36.90685413005272,
+      "branch_percent": 0.0,
+      "lines_covered": 3360,
+      "lines_total": 9104,
+      "branches_covered": 0,
+      "branches_total": 0
+    },
+    "by_module": {
+      "conversion/convert_coreml.py": {
+        "line_percent": 22.857142857142858,
+        "branch_percent": 0.0,
+        "lines_covered": 72,
+        "lines_total": 315
+      },
+      "conversion/export_onnx.py": {
+        "line_percent": 98.57142857142857,
+        "branch_percent": 0.0,
+        "lines_covered": 69,
+        "lines_total": 70
+      },
+      "conversion/export_pytorch.py": {
+        "line_percent": 55.921052631578945,
+        "branch_percent": 0.0,
+        "lines_covered": 85,
+        "lines_total": 152
+      },
+      "conversion/judge_export_coreml.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 36
+      },
+      "conversion/judge_export_onnx.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 43
+      },
+      "conversion/make_toy_block.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 74
+      },
+      "conversion/make_toy_onnx.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 35
+      },
+      "conversion/make_toy_torch.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 55
+      },
+      "conversion/onnx_surgery.py": {
+        "line_percent": 58.62068965517241,
+        "branch_percent": 0.0,
+        "lines_covered": 68,
+        "lines_total": 116
+      },
+      "conversion/shape_validator.py": {
+        "line_percent": 56.666666666666664,
+        "branch_percent": 0.0,
+        "lines_covered": 34,
+        "lines_total": 60
+      },
+      "conversion/validators.py": {
+        "line_percent": 100.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 0
+      },
+      "evaluation/8ball_eval.py": {
+        "line_percent": 34.806629834254146,
+        "branch_percent": 0.0,
+        "lines_covered": 63,
+        "lines_total": 181
+      },
+      "evaluation/__init__.py": {
+        "line_percent": 100.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 0
+      },
+      "evaluation/caws_eval.py": {
+        "line_percent": 47.337278106508876,
+        "branch_percent": 0.0,
+        "lines_covered": 80,
+        "lines_total": 169
+      },
+      "evaluation/claim_extraction_metrics.py": {
+        "line_percent": 61.19402985074627,
+        "branch_percent": 0.0,
+        "lines_covered": 41,
+        "lines_total": 67
+      },
+      "evaluation/classification_eval.py": {
+        "line_percent": 30.94170403587444,
+        "branch_percent": 0.0,
+        "lines_covered": 69,
+        "lines_total": 223
+      },
+      "evaluation/compare_8ball_pipelines.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 78
+      },
+      "evaluation/long_ctx_eval.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 4
+      },
+      "evaluation/perf_mem_eval.py": {
+        "line_percent": 36.13053613053613,
+        "branch_percent": 0.0,
+        "lines_covered": 155,
+        "lines_total": 429
+      },
+      "evaluation/performance_benchmarks.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 89
+      },
+      "evaluation/pipeline_preservation_eval.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 100
+      },
+      "evaluation/reasoning_eval.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 106
+      },
+      "evaluation/tool_use_eval.py": {
+        "line_percent": 38.07106598984772,
+        "branch_percent": 0.0,
+        "lines_covered": 75,
+        "lines_total": 197
+      },
+      "evaluation/toy/__init__.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 1
+      },
+      "evaluation/toy/binary_classifier.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 24
+      },
+      "evaluation/toy/eight_ball.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 30
+      },
+      "evaluation/toy/eight_ball_config.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 22
+      },
+      "evaluation/toy/ternary_classifier.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 24
+      },
+      "evaluation/toy_contracts.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 151
+      },
+      "models/student/architectures/gqa_transformer.py": {
+        "line_percent": 94.39655172413794,
+        "branch_percent": 0.0,
+        "lines_covered": 219,
+        "lines_total": 232
+      },
+      "models/student/tokenizer/constants.py": {
+        "line_percent": 100.0,
+        "branch_percent": 0.0,
+        "lines_covered": 7,
+        "lines_total": 7
+      },
+      "models/teacher/teacher_client.py": {
+        "line_percent": 57.407407407407405,
+        "branch_percent": 0.0,
+        "lines_covered": 248,
+        "lines_total": 432
+      },
+      "training/assertions.py": {
+        "line_percent": 29.761904761904763,
+        "branch_percent": 0.0,
+        "lines_covered": 25,
+        "lines_total": 84
+      },
+      "training/caws_context.py": {
+        "line_percent": 19.11764705882353,
+        "branch_percent": 0.0,
+        "lines_covered": 26,
+        "lines_total": 136
+      },
+      "training/caws_structure.py": {
+        "line_percent": 87.8048780487805,
+        "branch_percent": 0.0,
+        "lines_covered": 36,
+        "lines_total": 41
+      },
+      "training/claim_extraction.py": {
+        "line_percent": 68.47826086956522,
+        "branch_percent": 0.0,
+        "lines_covered": 63,
+        "lines_total": 92
+      },
+      "training/config_validation.py": {
+        "line_percent": 66.66666666666667,
+        "branch_percent": 0.0,
+        "lines_covered": 54,
+        "lines_total": 81
+      },
+      "training/dataloader.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 6
+      },
+      "training/dataset.py": {
+        "line_percent": 69.1699604743083,
+        "branch_percent": 0.0,
+        "lines_covered": 175,
+        "lines_total": 253
+      },
+      "training/dataset_answer_generation.py": {
+        "line_percent": 92.98245614035088,
+        "branch_percent": 0.0,
+        "lines_covered": 53,
+        "lines_total": 57
+      },
+      "training/dataset_post_tool.py": {
+        "line_percent": 90.9090909090909,
+        "branch_percent": 0.0,
+        "lines_covered": 50,
+        "lines_total": 55
+      },
+      "training/dataset_tool_select.py": {
+        "line_percent": 94.64285714285714,
+        "branch_percent": 0.0,
+        "lines_covered": 53,
+        "lines_total": 56
+      },
+      "training/distill_answer_generation.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 93
+      },
+      "training/distill_intermediate.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 24
+      },
+      "training/distill_kd.py": {
+        "line_percent": 27.897681854516385,
+        "branch_percent": 0.0,
+        "lines_covered": 349,
+        "lines_total": 1251
+      },
+      "training/distill_post_tool.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 93
+      },
+      "training/distill_process.py": {
+        "line_percent": 37.01657458563536,
+        "branch_percent": 0.0,
+        "lines_covered": 67,
+        "lines_total": 181
+      },
+      "training/distill_tool_select.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 142
+      },
+      "training/examples_priority3_integration.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 122
+      },
+      "training/export_student.py": {
+        "line_percent": 71.60493827160494,
+        "branch_percent": 0.0,
+        "lines_covered": 58,
+        "lines_total": 81
+      },
+      "training/extractors.py": {
+        "line_percent": 76.0,
+        "branch_percent": 0.0,
+        "lines_covered": 95,
+        "lines_total": 125
+      },
+      "training/feature_flags.py": {
+        "line_percent": 62.20472440944882,
+        "branch_percent": 0.0,
+        "lines_covered": 79,
+        "lines_total": 127
+      },
+      "training/halt_targets.py": {
+        "line_percent": 19.565217391304348,
+        "branch_percent": 0.0,
+        "lines_covered": 9,
+        "lines_total": 46
+      },
+      "training/input_validation.py": {
+        "line_percent": 53.01204819277108,
+        "branch_percent": 0.0,
+        "lines_covered": 88,
+        "lines_total": 166
+      },
+      "training/json_repair.py": {
+        "line_percent": 81.31868131868131,
+        "branch_percent": 0.0,
+        "lines_covered": 74,
+        "lines_total": 91
+      },
+      "training/logging_utils.py": {
+        "line_percent": 79.3103448275862,
+        "branch_percent": 0.0,
+        "lines_covered": 46,
+        "lines_total": 58
+      },
+      "training/losses.py": {
+        "line_percent": 73.40425531914893,
+        "branch_percent": 0.0,
+        "lines_covered": 207,
+        "lines_total": 282
+      },
+      "training/make_toy_training.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 68
+      },
+      "training/monitoring.py": {
+        "line_percent": 36.64921465968586,
+        "branch_percent": 0.0,
+        "lines_covered": 70,
+        "lines_total": 191
+      },
+      "training/performance_monitor.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 91
+      },
+      "training/process_losses.py": {
+        "line_percent": 50.0,
+        "branch_percent": 0.0,
+        "lines_covered": 87,
+        "lines_total": 174
+      },
+      "training/prompt_templates.py": {
+        "line_percent": 45.45454545454545,
+        "branch_percent": 0.0,
+        "lines_covered": 55,
+        "lines_total": 121
+      },
+      "training/quality_scoring.py": {
+        "line_percent": 85.21739130434783,
+        "branch_percent": 0.0,
+        "lines_covered": 98,
+        "lines_total": 115
+      },
+      "training/quant_qat_int8.py": {
+        "line_percent": 14.624505928853756,
+        "branch_percent": 0.0,
+        "lines_covered": 37,
+        "lines_total": 253
+      },
+      "training/run_manifest.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 110
+      },
+      "training/run_toy_distill.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 185
+      },
+      "training/speed_metrics.py": {
+        "line_percent": 89.23076923076923,
+        "branch_percent": 0.0,
+        "lines_covered": 58,
+        "lines_total": 65
+      },
+      "training/teacher_cache.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 102
+      },
+      "training/teacher_stub_toy.py": {
+        "line_percent": 0.0,
+        "branch_percent": 0.0,
+        "lines_covered": 0,
+        "lines_total": 99
+      },
+      "training/tokenizer_migration.py": {
+        "line_percent": 9.473684210526315,
+        "branch_percent": 0.0,
+        "lines_covered": 9,
+        "lines_total": 95
+      },
+      "training/tracing.py": {
+        "line_percent": 18.88111888111888,
+        "branch_percent": 0.0,
+        "lines_covered": 27,
+        "lines_total": 143
+      },
+      "training/utils.py": {
+        "line_percent": 100.0,
+        "branch_percent": 0.0,
+        "lines_covered": 27,
+        "lines_total": 27
+      }
+    },
+    "thresholds": {
+      "line": 80.0,
+      "branch": 90.0
+    },
+    "meets_thresholds": false,
+    "critical_modules_below_threshold": [
+      "conversion/convert_coreml.py",
+      "conversion/export_onnx.py",
+      "training/distill_kd.py",
+      "training/losses.py"
+    ]
+  },
+  "todos": {
+    "total": 4507,
+    "blocking": 5,
+    "critical": 5,
+    "high_confidence": 4504,
+    "in_training_path": [
+      {
+        "file": "training/examples_priority3_integration.py",
+        "line": "187",
+        "text": "Compute quality score for teacher output. Supports multiple scoring methods: - \"heuristic\": Structure-based heuristic scoring (fast, no dependencies) - \"bleu\": BLEU score computation (requires nltk fo",
+        "confidence": 1.0
+      },
+      {
+        "file": "training/examples_priority3_integration.py",
+        "line": "229",
+        "text": "This is a simplified BLEU approximation without nltk",
+        "confidence": 0.94
+      },
+      {
+        "file": "training/examples_priority3_integration.py",
+        "line": "236",
+        "text": "Unigram precision (simplified BLEU-1)",
+        "confidence": 1.0
+      },
+      {
+        "file": "training/examples_priority3_integration.py",
+        "line": "244",
+        "text": "Brevity penalty (simplified)",
+        "confidence": 1.0
+      },
+      {
+        "file": "training/examples_priority3_integration.py",
+        "line": "250",
+        "text": "Simplified BLEU score (unigram precision with brevity penalty)",
+        "confidence": 1.0
+      },
+      {
+        "file": "training/claim_extraction.py",
+        "line": "15",
+        "text": "Claim extraction utilities for training dataset generation and loss computation. Provides simplified claim extraction for training purposes, focusing on: - Verifiable content detection - Atomic claim ",
+        "confidence": 0.85
+      },
+      {
+        "file": "training/claim_extraction.py",
+        "line": "24",
+        "text": "Simplified claim representation for training.",
+        "confidence": 1.0
+      },
+      {
+        "file": "training/claim_extraction.py",
+        "line": "46",
+        "text": "Simplified claim extractor for training purposes. This is an intentionally simplified implementation optimized for training speed. It uses heuristic-based detection rather than full NLP parsing, makin",
+        "confidence": 1.0
+      },
+      {
+        "file": "training/claim_extraction.py",
+        "line": "160",
+        "text": "Check if sentence has factual structure (simplified).",
+        "confidence": 1.0
+      }
+    ],
+    "in_conversion_path": [
+      {
+        "file": "coreml/ane_checks.py",
+        "line": "82",
+        "text": "Check for placeholder marker",
+        "confidence": 1.0
+      },
+      {
+        "file": "conversion/convert_coreml.py",
+        "line": "11",
+        "text": "Convert ONNX \u2192 CoreML (mlprogram). Uses public MIL converter API. Usage: python -m conversion.convert_coreml \\ --backend onnx \\ --in onnx/toy.sanitized.onnx \\ --out coreml/artifacts/toy/model.mlpackag",
+        "confidence": 1.0
+      },
+      {
+        "file": "conversion/convert_coreml.py",
+        "line": "80",
+        "text": "Convert PyTorch model (TorchScript or ExportedProgram) to CoreML. Args: pytorch_model: TorchScript module or torch.export.ExportedProgram output_path: Output path for .mlpackage compute_units: \"all\", ",
+        "confidence": 1.0
+      },
+      {
+        "file": "conversion/convert_coreml.py",
+        "line": "477",
+        "text": "Convert ONNX model to CoreML using public MIL converter API. Args: onnx_path: Path to ONNX model file output_path: Output path for .mlpackage compute_units: \"all\", \"cpuandgpu\", or \"cpuonly\" target: De",
+        "confidence": 1.0
+      },
+      {
+        "file": "conversion/convert_coreml.py",
+        "line": "591",
+        "text": "Create a placeholder .mlpackage for smoke tests.",
+        "confidence": 1.0
+      },
+      {
+        "file": "conversion/convert_coreml.py",
+        "line": "595",
+        "text": "Create .placeholder marker",
+        "confidence": 1.0
+      },
+      {
+        "file": "conversion/convert_coreml.py",
+        "line": "630",
+        "text": "Smoke test (creates placeholder on failure):",
+        "confidence": 1.0
+      },
+      {
+        "file": "conversion/make_toy_block.py",
+        "line": "53",
+        "text": "Simplified attention for parity testing. This is intentionally simplified for parity testing purposes: - No GQA (Grouped Query Attention) - uses standard multi-head attention - No RoPE (Rotary Positio",
+        "confidence": 1.0
+      },
+      {
+        "file": "conversion/judge_export_coreml.py",
+        "line": "45",
+        "text": "Convert Judge ONNX model to CoreML with INT8 quantization. IMPORTANT: CoreMLTools does not natively support ONNX\u2192CoreML conversion. This function attempts conversion but may create a placeholder if co",
+        "confidence": 1.0
+      },
+      {
+        "file": "coreml/probes/compare_probes.py",
+        "line": "40",
+        "text": "Run CoreML model inference. Note: Placeholder check should be performed in main() before calling this function. This function assumes a valid CoreML model (not a placeholder).",
+        "confidence": 1.0
+      },
+      {
+        "file": "coreml/probes/compare_probes.py",
+        "line": "65",
+        "text": "Check for placeholder marker",
+        "confidence": 1.0
+      },
+      {
+        "file": "coreml/runtime/ane_monitor.py",
+        "line": "127",
+        "text": "For now, we'll use a simplified approach:",
+        "confidence": 1.0
+      },
+      {
+        "file": "coreml/runtime/ane_monitor.py",
+        "line": "131",
+        "text": "NOTE: This is an intentional fallback implementation, not a placeholder.",
+        "confidence": 0.94
+      },
+      {
+        "file": "coreml/runtime/constrained_decode.py",
+        "line": "151",
+        "text": "This FSM is intentionally simplified: we enforce key/value separators, brackets balance,",
+        "confidence": 0.94
+      }
+    ],
+    "placeholders": 28,
+    "mock_data": 1
+  },
+  "readiness": {
+    "status": "blocked",
+    "score": 42.1,
+    "blockers": [
+      {
+        "category": "coverage",
+        "description": "Coverage below thresholds (line: 36.9%, branch: 0.0%)",
+        "severity": "medium"
+      },
+      {
+        "category": "coverage",
+        "description": "Critical modules below threshold: conversion/convert_coreml.py, conversion/export_onnx.py, training/distill_kd.py",
+        "severity": "high"
+      },
+      {
+        "category": "todos",
+        "description": "5 blocking TODO(s) found",
+        "severity": "critical"
+      },
+      {
+        "category": "todos",
+        "description": "9 TODO(s) in training path",
+        "severity": "high"
+      },
+      {
+        "category": "todos",
+        "description": "14 TODO(s) in conversion path",
+        "severity": "high"
+      }
+    ],
+    "warnings": [],
+    "recommendations": [
+      "Increase line coverage from 36.9% to 80%",
+      "Resolve blocking TODOs in critical paths"
+    ]
+  },
+  "metadata": {
+    "python_version": "3.13.7",
+    "platform": "Darwin",
+    "assessment_duration_seconds": 609.254646
+  }
+}

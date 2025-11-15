@@ -1,541 +1,20 @@
 {
-  "timestamp": "2025-11-15T09:37:03.869422",
+  "timestamp": "2025-11-15T10:29:04.001322",
   "version": "1.0",
   "git": {
-    "commit": "30d3fc9ebeb0853bbc245f0c0a8eca23c054aec0",
+    "commit": "515baa4c31ee69dd311ff1dee7cb087a224260f3",
     "branch": "main",
-    "dirty": false
+    "dirty": true
   },
   "test_status": {
     "unit": {
-      "total": 3145,
-      "passed": 3009,
-      "failed": 102,
-      "skipped": 32,
-      "errors": 2,
-      "failures": [
-        {
-          "test": "tests/integration/test_training_pipeline.py::TestKDTrainingIntegration::test_kd_training_step",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/test_tokenizer_contract.py::test_special_token_ids_match_constants",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/test_tokenizer_contract.py::test_special_tokens_are_single_tokens",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/test_tokenizer_contract.py::test_round_trip_stability",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_dataset.py::TestKDDatasetBranchCoverage::test_kd_dataset_getitem_teacher_target_ids_padding_branch",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_dataset.py::TestKDDatasetBranchCoverage::test_kd_dataset_getitem_teacher_logits_dim2_padding_branch",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_json_repair.py::TestRepairJSON::test_repair_json_with_jsonrepair",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_json_repair.py::TestCheckJSONRepairNeeded::test_check_json_repair_needed_invalid_json",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_json_repair.py::TestCheckJSONRepairNeeded::test_check_json_repair_needed_repairable_json",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_json_repair.py::TestBatchCheckJSONRepair::test_batch_check_json_repair_mixed",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_json_repair.py::TestJSONRepairIntegration::test_repair_workflow",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_latent_curriculum.py::TestLatentCurriculum::test_curriculum_applies_latent_slots",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_latent_curriculum.py::TestLatentCurriculum::test_curriculum_creates_loss_mask",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_latent_curriculum.py::TestLatentCurriculum::test_loss_mask_masks_latent_spans",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_loss_mask_correctness.py::TestLossMaskCorrectness::test_loss_mask_excludes_latent_spans_from_supervision",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestMetricsCollector::test_metrics_collector_initialization",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestMetricsCollector::test_add_metric",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestMetricsCollector::test_add_metric_eviction",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestMetricsCollector::test_get_metrics_by_name",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestMetricsCollector::test_get_metrics_by_tags",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestMetricsCollector::test_get_latest_metric",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestMetricsCollector::test_get_metric_statistics",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestMetricsCollector::test_clear_metrics",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestMetricsCollector::test_thread_safety",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestHealthChecker::test_health_checker_initialization",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestHealthChecker::test_add_check",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestHealthChecker::test_run_check",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestHealthChecker::test_run_check_not_found",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestHealthChecker::test_run_all_checks",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestHealthChecker::test_get_component_status",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestHealthChecker::test_get_overall_health",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestSystemHealthChecks::test_system_health_checks_initialization",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestSystemHealthChecks::test_cpu_usage_check",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestSystemHealthChecks::test_memory_usage_check",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestSystemHealthChecks::test_gpu_check_no_gpu",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestSystemHealthChecks::test_gpu_check_with_gpu",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestSystemHealthChecks::test_disk_usage_check",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestSystemHealthChecks::test_network_connectivity_check",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestSystemHealthChecks::test_run_system_checks",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestTrainingMonitor::test_training_monitor_initialization",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestTrainingMonitor::test_start_monitoring",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestTrainingMonitor::test_stop_monitoring",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestTrainingMonitor::test_log_metric",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestTrainingMonitor::test_log_training_step",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestTrainingMonitor::test_log_validation_metrics",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestTrainingMonitor::test_get_monitoring_stats",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestTrainingMonitor::test_save_load_metrics",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestTrainingMonitor::test_alert_on_condition",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestConcurrencyAndPerformance::test_concurrent_metric_logging",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestConcurrencyAndPerformance::test_monitoring_performance",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring.py::TestSystemHealthChecksEdgeCases::test_check_gpu_memory_exception",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring_actual.py::TestMetricsCollectorActual::test_metrics_collector_initialization",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring_actual.py::TestSystemHealthChecks::test_check_gpu_memory_no_gpu",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring_actual.py::TestTrainingMonitorActual::test_get_status",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_monitoring_actual.py::TestInitializeMonitoring::test_initialize_monitoring",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_process_losses.py::TestJSONValidityLoss::test_json_validity_loss_valid_json",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_process_losses.py::TestToolSelectionLoss::test_tool_selection_loss_basic",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_process_losses.py::TestToolSelectionLossFromIDs::test_tool_selection_loss_from_ids_basic",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_process_losses.py::TestJSONValidityLossFromIDs::test_json_validity_loss_from_ids_basic",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quality_scoring.py::TestHeuristicQualityScore::test_compute_heuristic_quality_score_word_count_50_to_500",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quality_scoring.py::TestHeuristicQualityScore::test_compute_heuristic_quality_score_word_count_20_to_50",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quality_scoring.py::TestHeuristicQualityScore::test_compute_heuristic_quality_score_ground_truth_full_overlap",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quality_scoring.py::TestJSONValidityScore::test_compute_json_validity_score_mixed_valid_invalid",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quant_qat_int8.py::TestMinMaxObserver::test_min_max_observer_forward_2d",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quant_qat_int8.py::TestMinMaxObserver::test_min_max_observer_forward_multiple_observations",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quant_qat_int8.py::TestMinMaxObserver::test_min_max_observer_1d_tensor",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quant_qat_int8.py::TestFakeQuantize::test_fake_quantize_forward_training",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quant_qat_int8.py::TestFakeQuantize::test_fake_quantize_forward_eval",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quant_qat_int8.py::TestFakeQuantize::test_fake_quantize_signed_quantization",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quant_qat_int8.py::TestFakeQuantize::test_fake_quantize_unsigned_quantization",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quant_qat_int8.py::TestQuantizedLinear::test_quantized_linear_forward",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quant_qat_int8.py::TestQuantizedLinear::test_quantized_linear_different_bits",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quant_qat_int8.py::TestQuantizedAttention::test_quantized_attention_forward",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quant_qat_int8.py::TestQuantizedAttention::test_quantized_attention_with_mask",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quant_qat_int8.py::TestQuantizedAttention::test_quantized_attention_clamp_pre_softmax",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quant_qat_int8.py::TestQuantizedAttention::test_quantized_attention_no_clamp",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quant_qat_int8.py::TestLoadModelFromCheckpoint::test_load_model_from_checkpoint_success",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quant_qat_int8.py::TestLoadModelFromCheckpoint::test_load_model_from_checkpoint_no_config",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quant_qat_int8.py::TestQuantizationIntegration::test_observer_to_fake_quant_workflow",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quant_qat_int8.py::TestQuantizationIntegration::test_quantized_linear_workflow",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_quant_qat_int8.py::TestQuantizationIntegration::test_quantized_model_forward",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_teacher_stub_toy.py::TestTeacherLogits::test_teacher_logits_hot_tokens",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_tokenizer_migration.py::TestVerifyTokenIDs::test_verify_token_ids_matching",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_tokenizer_migration.py::TestResizeModelEmbeddings::test_resize_model_embeddings_basic",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_tokenizer_migration.py::TestResizeModelEmbeddings::test_resize_model_embeddings_with_new_vocab_size",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_tokenizer_migration.py::TestResizeModelEmbeddings::test_resize_model_embeddings_tokenizer_len",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_tracing.py::TestTrainingTracerInit::test_tracer_init_basic",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_tracing.py::TestTrainingTracerInit::test_tracer_init_with_wandb",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_tracing.py::TestTrainingTracerLogMetrics::test_log_metrics_tensorboard",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_tracing.py::TestTrainingTracerLogMetrics::test_log_metrics_wandb",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_tracing.py::TestTrainingTracerLogHparams::test_log_hparams_tensorboard",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_tracing.py::TestTrainingTracerLogHparams::test_log_hparams_wandb",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_tracing.py::TestTrainingTracerLogModelGraph::test_log_model_graph_tensorboard",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_tracing.py::TestTrainingTracerLogModelGraph::test_log_model_graph_wandb",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_tracing.py::TestTrainingTracerLogText::test_log_text_tensorboard",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_tracing.py::TestTrainingTracerLogImage::test_log_image_tensorboard",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_tracing.py::TestTrainingTracerLogHistogram::test_log_histogram_tensorboard",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_tracing.py::TestTrainingTracerClose::test_close_tensorboard",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_tracing.py::TestTrainingTracerClose::test_close_wandb",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_tracing.py::TestCreateTracerFromConfig::test_create_tracer_from_config_wandb",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/unit/test_config_validation.py::TestConfigMerging::test_merge_configs_empty_list",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/unit/test_enumerated_shapes.py::TestSampleEnumeratedShape::test_custom_shape_probs",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_teacher_cache.py::TestTeacherCacheIntegration::test_complete_cache_workflow",
-          "error": "ERROR",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_teacher_cache.py::TestTeacherCacheIntegration::test_cache_with_version_upgrade",
-          "error": "ERROR",
-          "message": ""
-        }
-      ],
-      "duration_seconds": 146.35
+      "total": 0,
+      "passed": 0,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0,
+      "failures": [],
+      "duration_seconds": 0.0
     },
     "integration": {
       "total": 0,
@@ -547,7 +26,7 @@
       "duration_seconds": 0.0
     },
     "mutation": {
-      "modules_tested": 0,
+      "modules_tested": 5,
       "scores": {},
       "survivors": {},
       "timeouts": 0,
@@ -1011,98 +490,62 @@
     ]
   },
   "todos": {
-    "total": 4505,
-    "blocking": 0,
-    "critical": 0,
-    "high_confidence": 4502,
+    "total": 4507,
+    "blocking": 5,
+    "critical": 5,
+    "high_confidence": 4504,
     "in_training_path": [
       {
-        "file": "training/quant_qat_int8.py",
-        "line": "279",
-        "text": "For now, we'll use a simple approach: quantize the embedding weights",
-        "confidence": 1.0
-      },
-      {
-        "file": "training/quant_qat_int8.py",
-        "line": "284",
-        "text": "For now, we'll leave it as-is and document the trade-off",
-        "confidence": 1.0
-      },
-      {
-        "file": "training/run_toy_distill.py",
-        "line": "178",
-        "text": "For now, assume 8-ball datasets may have them",
-        "confidence": 1.0
-      },
-      {
-        "file": "training/run_toy_distill.py",
-        "line": "313",
-        "text": "For now, weight all positions equally but this could be improved",
+        "file": "training/examples_priority3_integration.py",
+        "line": "187",
+        "text": "Compute quality score for teacher output. Supports multiple scoring methods: - \"heuristic\": Structure-based heuristic scoring (fast, no dependencies) - \"bleu\": BLEU score computation (requires nltk fo",
         "confidence": 1.0
       },
       {
         "file": "training/examples_priority3_integration.py",
-        "line": "183",
-        "text": "Compute quality score for teacher output. This is a placeholder - in practice, you would use: - Human evaluation scores - Automated metrics (BLEU, ROUGE, etc.) - Model-based evaluation - Task-specific",
-        "confidence": 1.0
-      },
-      {
-        "file": "training/examples_priority3_integration.py",
-        "line": "225",
+        "line": "229",
         "text": "This is a simplified BLEU approximation without nltk",
         "confidence": 0.94
       },
       {
         "file": "training/examples_priority3_integration.py",
-        "line": "232",
+        "line": "236",
         "text": "Unigram precision (simplified BLEU-1)",
         "confidence": 1.0
       },
       {
         "file": "training/examples_priority3_integration.py",
-        "line": "239",
+        "line": "244",
         "text": "Brevity penalty (simplified)",
         "confidence": 1.0
       },
       {
         "file": "training/examples_priority3_integration.py",
-        "line": "244",
+        "line": "250",
         "text": "Simplified BLEU score (unigram precision with brevity penalty)",
         "confidence": 1.0
       },
       {
-        "file": "training/losses.py",
-        "line": "892",
-        "text": "Combine penalties (sum with equal weights for now)",
-        "confidence": 1.0
-      },
-      {
-        "file": "training/distill_kd.py",
-        "line": "1277",
-        "text": "For now, check if it exists as a closure variable or use fallback",
-        "confidence": 1.0
-      },
-      {
         "file": "training/claim_extraction.py",
-        "line": "11",
+        "line": "15",
         "text": "Claim extraction utilities for training dataset generation and loss computation. Provides simplified claim extraction for training purposes, focusing on: - Verifiable content detection - Atomic claim ",
         "confidence": 0.85
       },
       {
         "file": "training/claim_extraction.py",
-        "line": "20",
+        "line": "24",
         "text": "Simplified claim representation for training.",
         "confidence": 1.0
       },
       {
         "file": "training/claim_extraction.py",
-        "line": "36",
-        "text": "Simplified claim extractor for training purposes. Detects verifiable claims using heuristics: - Factual indicators (dates, quantities, code references) - Structured content (code blocks, lists, JSON) ",
+        "line": "46",
+        "text": "Simplified claim extractor for training purposes. This is an intentionally simplified implementation optimized for training speed. It uses heuristic-based detection rather than full NLP parsing, makin",
         "confidence": 1.0
       },
       {
         "file": "training/claim_extraction.py",
-        "line": "148",
+        "line": "160",
         "text": "Check if sentence has factual structure (simplified).",
         "confidence": 1.0
       }
@@ -1112,54 +555,6 @@
         "file": "coreml/ane_checks.py",
         "line": "82",
         "text": "Check for placeholder marker",
-        "confidence": 1.0
-      },
-      {
-        "file": "coreml/probes/compare_probes.py",
-        "line": "36",
-        "text": "Run CoreML model inference. Assumes placeholder check already done in main().",
-        "confidence": 1.0
-      },
-      {
-        "file": "coreml/probes/compare_probes.py",
-        "line": "60",
-        "text": "Check for placeholder marker",
-        "confidence": 1.0
-      },
-      {
-        "file": "coreml/runtime/ane_monitor.py",
-        "line": "127",
-        "text": "For now, we'll use a simplified approach:",
-        "confidence": 1.0
-      },
-      {
-        "file": "coreml/runtime/ane_monitor.py",
-        "line": "131",
-        "text": "NOTE: This is an intentional fallback implementation, not a placeholder.",
-        "confidence": 0.94
-      },
-      {
-        "file": "coreml/runtime/ane_monitor.py",
-        "line": "189",
-        "text": "This is a simplified heuristic - production would use more sophisticated analysis",
-        "confidence": 0.94
-      },
-      {
-        "file": "coreml/runtime/constrained_decode.py",
-        "line": "150",
-        "text": "This FSM is deliberately simplified: we enforce key/value separators, brackets balance,",
-        "confidence": 0.94
-      },
-      {
-        "file": "coreml/runtime/speculative_decode.py",
-        "line": "410",
-        "text": "Simplified threshold-based acceptance (fallback)",
-        "confidence": 1.0
-      },
-      {
-        "file": "conversion/export_pytorch.py",
-        "line": "108",
-        "text": "For now, keep returning tensor directly - CoreML will name it",
         "confidence": 1.0
       },
       {
@@ -1176,59 +571,78 @@
       },
       {
         "file": "conversion/convert_coreml.py",
-        "line": "419",
+        "line": "477",
         "text": "Convert ONNX model to CoreML using public MIL converter API. Args: onnx_path: Path to ONNX model file output_path: Output path for .mlpackage compute_units: \"all\", \"cpuandgpu\", or \"cpuonly\" target: De",
         "confidence": 1.0
       },
       {
         "file": "conversion/convert_coreml.py",
-        "line": "473",
-        "text": "ONNX is not a supported production path - always create placeholder",
-        "confidence": 1.0
-      },
-      {
-        "file": "conversion/convert_coreml.py",
-        "line": "505",
+        "line": "591",
         "text": "Create a placeholder .mlpackage for smoke tests.",
         "confidence": 1.0
       },
       {
         "file": "conversion/convert_coreml.py",
-        "line": "509",
+        "line": "595",
         "text": "Create .placeholder marker",
         "confidence": 1.0
       },
       {
         "file": "conversion/convert_coreml.py",
-        "line": "543",
+        "line": "630",
         "text": "Smoke test (creates placeholder on failure):",
         "confidence": 1.0
       },
       {
         "file": "conversion/make_toy_block.py",
-        "line": "45",
-        "text": "Simplified attention for parity testing (no GQA, no RoPE).",
+        "line": "53",
+        "text": "Simplified attention for parity testing. This is intentionally simplified for parity testing purposes: - No GQA (Grouped Query Attention) - uses standard multi-head attention - No RoPE (Rotary Positio",
         "confidence": 1.0
       },
       {
         "file": "conversion/judge_export_coreml.py",
-        "line": "40",
-        "text": "Convert Judge ONNX model to CoreML with INT8 quantization. Note: CoreMLTools does not natively support ONNX\u2192CoreML conversion. For production, convert ONNX\u2192PyTorch first, then use PyTorch\u2192CoreML. INT8",
+        "line": "45",
+        "text": "Convert Judge ONNX model to CoreML with INT8 quantization. IMPORTANT: CoreMLTools does not natively support ONNX\u2192CoreML conversion. This function attempts conversion but may create a placeholder if co",
         "confidence": 1.0
+      },
+      {
+        "file": "coreml/probes/compare_probes.py",
+        "line": "40",
+        "text": "Run CoreML model inference. Note: Placeholder check should be performed in main() before calling this function. This function assumes a valid CoreML model (not a placeholder).",
+        "confidence": 1.0
+      },
+      {
+        "file": "coreml/probes/compare_probes.py",
+        "line": "65",
+        "text": "Check for placeholder marker",
+        "confidence": 1.0
+      },
+      {
+        "file": "coreml/runtime/ane_monitor.py",
+        "line": "127",
+        "text": "For now, we'll use a simplified approach:",
+        "confidence": 1.0
+      },
+      {
+        "file": "coreml/runtime/ane_monitor.py",
+        "line": "131",
+        "text": "NOTE: This is an intentional fallback implementation, not a placeholder.",
+        "confidence": 0.94
+      },
+      {
+        "file": "coreml/runtime/constrained_decode.py",
+        "line": "151",
+        "text": "This FSM is intentionally simplified: we enforce key/value separators, brackets balance,",
+        "confidence": 0.94
       }
     ],
-    "placeholders": 29,
+    "placeholders": 28,
     "mock_data": 1
   },
   "readiness": {
-    "status": "partial",
-    "score": 53.6,
+    "status": "blocked",
+    "score": 42.1,
     "blockers": [
-      {
-        "category": "tests",
-        "description": "102 unit test(s) failing",
-        "severity": "high"
-      },
       {
         "category": "coverage",
         "description": "Coverage below thresholds (line: 36.9%, branch: 0.0%)",
@@ -1241,24 +655,29 @@
       },
       {
         "category": "todos",
-        "description": "15 TODO(s) in training path",
+        "description": "5 blocking TODO(s) found",
+        "severity": "critical"
+      },
+      {
+        "category": "todos",
+        "description": "9 TODO(s) in training path",
         "severity": "high"
       },
       {
         "category": "todos",
-        "description": "18 TODO(s) in conversion path",
+        "description": "14 TODO(s) in conversion path",
         "severity": "high"
       }
     ],
     "warnings": [],
     "recommendations": [
-      "Fix failing unit tests before proceeding",
-      "Increase line coverage from 36.9% to 80%"
+      "Increase line coverage from 36.9% to 80%",
+      "Resolve blocking TODOs in critical paths"
     ]
   },
   "metadata": {
-    "python_version": "3.11.13",
+    "python_version": "3.13.7",
     "platform": "Darwin",
-    "assessment_duration_seconds": 437.541468
+    "assessment_duration_seconds": 609.254646
   }
 }

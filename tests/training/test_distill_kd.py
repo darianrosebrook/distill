@@ -15,6 +15,7 @@ import torch
 import torch.nn as nn
 from torch.optim import AdamW
 
+from models.student.architectures.gqa_transformer import StudentLM
 from training.distill_kd import (
     load_config,
     merge_configs,
@@ -77,19 +78,18 @@ class TestUtilityFunctions:
         """Test sample_enumerated_shape function."""
         from training.distill_kd import sample_enumerated_shape
 
-        shapes = [(128, 1000), (256, 1000), (512, 1000)]
+        seq_lengths = [128, 256, 512]
         step = 1000
-        total_steps = 10000
 
-        shape = sample_enumerated_shape(step, shapes, total_steps)
+        shape = sample_enumerated_shape(seq_lengths, None, step)
 
-        assert shape in shapes
+        assert shape in seq_lengths
 
     def test_should_enable_qat_basic(self):
         """Test should_enable_qat function."""
         from training.distill_kd import should_enable_qat
 
-        qat_cfg = {"start_step": 1000, "total_steps": 10000}
+        qat_cfg = {"enabled": True, "start_step": 1000, "total_steps": 10000}
 
         # Before start
         assert not should_enable_qat(500, 10000, qat_cfg)
