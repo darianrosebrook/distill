@@ -15,6 +15,13 @@ import tempfile
 import json
 from pathlib import Path
 
+# Import pytest-timeout for custom timeouts
+try:
+    import pytest_timeout
+    HAS_TIMEOUT = True
+except ImportError:
+    HAS_TIMEOUT = False
+
 
 @pytest.fixture
 def temp_dir():
@@ -24,6 +31,7 @@ def temp_dir():
 
 
 @pytest.mark.slow
+@pytest.mark.timeout(300)  # 5 minutes for full E2E pipeline
 def test_toy_pipeline_e2e(temp_dir):
     """Test full toy pipeline end-to-end."""
     # Paths
@@ -39,6 +47,7 @@ def test_toy_pipeline_e2e(temp_dir):
         [sys.executable, "-m", "data.make_toy_kd", "--out", str(dataset_path), "--n", "128"],
         capture_output=True,
         text=True,
+        timeout=60,  # 1 minute for dataset generation
     )
     assert result.returncode == 0, f"Dataset generation failed: {result.stderr}"
     assert dataset_path.exists(), "Dataset file not created"
@@ -62,6 +71,7 @@ def test_toy_pipeline_e2e(temp_dir):
         ],
         capture_output=True,
         text=True,
+        timeout=120,  # 2 minutes for training
     )
     assert result.returncode == 0, f"Training failed: {result.stderr}"
     assert checkpoint_path.exists(), "Checkpoint file not created"
@@ -91,6 +101,7 @@ def test_toy_pipeline_e2e(temp_dir):
         ],
         capture_output=True,
         text=True,
+        timeout=120,  # 2 minutes for export
     )
     assert result.returncode == 0, f"Export failed: {result.stderr}"
 
@@ -125,6 +136,7 @@ def test_toy_pipeline_e2e(temp_dir):
         ],
         capture_output=True,
         text=True,
+        timeout=180,  # 3 minutes for CoreML conversion
     )
 
     # Allow conversion to fail if CoreML not available (skip test)
@@ -161,6 +173,7 @@ def test_toy_pipeline_e2e(temp_dir):
                     ],
                     capture_output=True,
                     check=True,
+                    timeout=180,  # 3 minutes for additional CoreML conversions
                 )
             except subprocess.CalledProcessError:
                 maybe_multi = False
@@ -188,6 +201,7 @@ def test_toy_pipeline_e2e(temp_dir):
         args,
         capture_output=True,
         text=True,
+        timeout=180,  # 3 minutes timeout for verification step
     )
 
     # Allow verification to fail if CoreML not available
@@ -225,6 +239,7 @@ def test_toy_pipeline_e2e(temp_dir):
 
 
 @pytest.mark.slow
+@pytest.mark.timeout(300)  # 5 minutes for full E2E pipeline
 def test_toy_pipeline_with_code_mode(temp_dir):
     """Test full toy pipeline with code-mode enabled."""
     import os
@@ -247,6 +262,7 @@ def test_toy_pipeline_with_code_mode(temp_dir):
         capture_output=True,
         text=True,
         env=env,
+        timeout=60,  # 1 minute for dataset generation
     )
     assert result.returncode == 0, f"Dataset generation failed: {result.stderr}"
     assert dataset_path.exists(), "Dataset file not created"
@@ -271,6 +287,7 @@ def test_toy_pipeline_with_code_mode(temp_dir):
         capture_output=True,
         text=True,
         env=env,
+        timeout=120,  # 2 minutes for training
     )
     assert result.returncode == 0, f"Training failed: {result.stderr}"
     assert checkpoint_path.exists(), "Checkpoint file not created"
@@ -330,6 +347,7 @@ def test_toy_pipeline_with_code_mode(temp_dir):
 
 
 @pytest.mark.slow
+@pytest.mark.timeout(300)  # 5 minutes for full E2E pipeline
 def test_toy_pipeline_with_latent_mode(temp_dir):
     """Test full toy pipeline with latent mode enabled."""
     import os
@@ -435,6 +453,7 @@ def test_toy_pipeline_with_latent_mode(temp_dir):
 
 
 @pytest.mark.slow
+@pytest.mark.timeout(300)  # 5 minutes for full E2E pipeline
 def test_toy_pipeline_with_both_features(temp_dir):
     """Test full toy pipeline with both code-mode and latent mode enabled."""
     import os
