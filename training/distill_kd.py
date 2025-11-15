@@ -10,6 +10,7 @@ Usage:
     python -m training.distill_kd --config configs/worker_9b.yaml configs/kd_recipe.yaml
 """
 
+from infra.version_gate import check_training_versions
 import argparse
 import math
 import os
@@ -58,7 +59,8 @@ def compute_distillation_quality_metrics(student_logits, teacher_logits, teacher
     try:
         # KL divergence (already computed in loss, but let's recompute for logging)
         from training.losses import kl_divergence
-        kl_div = kl_divergence(student_logits, teacher_logits, temperature=temperature)
+        kl_div = kl_divergence(
+            student_logits, teacher_logits, temperature=temperature)
         metrics["kl_divergence"] = float(kl_div.item())
 
         # Student-teacher prediction agreement (exact token match)
@@ -69,7 +71,8 @@ def compute_distillation_quality_metrics(student_logits, teacher_logits, teacher
             # Compute agreement rate (ignoring padding tokens)
             valid_mask = (teacher_targets != -100) & (teacher_targets != 0)
             if valid_mask.any():
-                agreement = (student_preds == teacher_targets)[valid_mask].float().mean()
+                agreement = (student_preds == teacher_targets)[
+                    valid_mask].float().mean()
                 metrics["teacher_agreement"] = float(agreement.item())
             else:
                 metrics["teacher_agreement"] = 0.0
@@ -82,7 +85,8 @@ def compute_distillation_quality_metrics(student_logits, teacher_logits, teacher
         # Student prediction entropy (lower entropy = more confident predictions)
         student_probs = torch.softmax(student_logits / temperature, dim=-1)
         # Compute entropy: -sum(p * log(p))
-        student_entropy = -(student_probs * torch.log(student_probs + 1e-8)).sum(dim=-1).mean()
+        student_entropy = - \
+            (student_probs * torch.log(student_probs + 1e-8)).sum(dim=-1).mean()
         metrics["student_entropy"] = float(student_entropy.item())
 
         # Logits variance (measure of student certainty vs teacher)
@@ -105,8 +109,6 @@ def compute_distillation_quality_metrics(student_logits, teacher_logits, teacher
 
     return metrics
 
-
-from infra.version_gate import check_training_versions
 
 # Latent curriculum import (optional)
 try:

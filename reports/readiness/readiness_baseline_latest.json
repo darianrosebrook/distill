@@ -1,20 +1,691 @@
 {
-  "timestamp": "2025-11-15T10:38:22.229485",
+  "timestamp": "2025-11-15T11:04:28.318111",
   "version": "1.0",
   "git": {
-    "commit": "c61f15b0da009ef894f960ce0e5516bdb6d80b55",
+    "commit": "b60494fc0bc8944227493f6122a2f648f7686c1b",
     "branch": "main",
     "dirty": true
   },
   "test_status": {
     "unit": {
-      "total": 0,
-      "passed": 0,
-      "failed": 0,
-      "skipped": 0,
-      "errors": 0,
-      "failures": [],
-      "duration_seconds": 0.0
+      "total": 3207,
+      "passed": 3042,
+      "failed": 129,
+      "skipped": 31,
+      "errors": 5,
+      "failures": [
+        {
+          "test": "tests/integration/test_training_pipeline.py::TestKDTrainingIntegration::test_kd_training_step",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_generate_coreml.py::TestGenerateToolCall::test_generate_tool_call_coreml_success",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_generate_coreml.py::TestGenerateToolCall::test_generate_tool_call_pytorch_success",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_generate_coreml.py::TestGenerateToolCall::test_generate_tool_call_no_torch",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_generate_coreml.py::TestGenerateToolCall::test_generate_tool_call_with_halt_logits",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_generate_coreml.py::TestGenerateTextStreaming::test_generate_text_streaming_basic",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_generate_coreml.py::TestGenerateTextStreaming::test_generate_text_streaming_constrained",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_generate_coreml.py::TestGenerateTextStreaming::test_generate_text_streaming_with_tools",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_generate_coreml.py::TestMainFunction::test_main_tool_call_mode",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_generate_coreml.py::TestMainFunction::test_main_text_generation_mode",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_generate_coreml.py::TestErrorHandling::test_generate_tool_call_model_error",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_generate_coreml.py::TestIntegrationScenarios::test_full_tool_call_workflow",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_generate_coreml.py::TestIntegrationScenarios::test_full_text_generation_workflow",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_kv_cache_optimized.py::TestOptimizedKVCacheOperations::test_update_multiple_positions",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_kv_cache_optimized.py::TestOptimizedKVCacheOperations::test_update_out_of_bounds",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_kv_cache_optimized.py::TestOptimizedKVCacheOperations::test_get_slice",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_kv_cache_optimized.py::TestOptimizedKVCacheOperations::test_get_slice_beyond_current_len",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_kv_cache_optimized.py::TestOptimizedKVCacheOperations::test_reset",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_kv_cache_optimized.py::TestOptimizedKVCachePerformance::test_memory_contiguity",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_kv_cache_optimized.py::TestOptimizedKVCachePerformance::test_cache_alignment",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_kv_cache_optimized.py::TestOptimizedKVCacheTorch::test_torch_tensor_operations",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_kv_cache_optimized.py::TestOptimizedKVCacheTorch::test_torch_slice_operations",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_kv_cache_optimized.py::TestOptimizedKVCacheEdgeCases::test_update_at_max_capacity",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/test_tokenizer_contract.py::test_special_token_ids_match_constants",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/test_tokenizer_contract.py::test_special_tokens_are_single_tokens",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/test_tokenizer_contract.py::test_round_trip_stability",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_dataset.py::TestKDDatasetBranchCoverage::test_kd_dataset_getitem_teacher_target_ids_padding_branch",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_dataset.py::TestKDDatasetBranchCoverage::test_kd_dataset_getitem_teacher_logits_dim2_padding_branch",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_distill_kd.py::TestMainFunction::test_baseline_outputs_tuple_handling",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_distill_kd.py::TestMainFunction::test_rng_states_none_handling",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_distill_kd.py::TestMainFunction::test_ddp_model_handling",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_distill_kd.py::TestMainFunction::test_optimizer_param_groups_check",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_distill_kd.py::TestMainFunction::test_checkpoint_frequency_calculation",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_json_repair.py::TestRepairJSON::test_repair_json_with_jsonrepair",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_json_repair.py::TestCheckJSONRepairNeeded::test_check_json_repair_needed_invalid_json",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_json_repair.py::TestCheckJSONRepairNeeded::test_check_json_repair_needed_repairable_json",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_json_repair.py::TestBatchCheckJSONRepair::test_batch_check_json_repair_mixed",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_json_repair.py::TestJSONRepairIntegration::test_repair_workflow",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_latent_curriculum.py::TestLatentCurriculum::test_curriculum_applies_latent_slots",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_latent_curriculum.py::TestLatentCurriculum::test_curriculum_creates_loss_mask",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_latent_curriculum.py::TestLatentCurriculum::test_loss_mask_masks_latent_spans",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_loss_mask_correctness.py::TestLossMaskCorrectness::test_loss_mask_excludes_latent_spans_from_supervision",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestMetricsCollector::test_metrics_collector_initialization",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestMetricsCollector::test_add_metric",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestMetricsCollector::test_add_metric_eviction",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestMetricsCollector::test_get_metrics_by_name",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestMetricsCollector::test_get_metrics_by_tags",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestMetricsCollector::test_get_latest_metric",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestMetricsCollector::test_get_metric_statistics",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestMetricsCollector::test_clear_metrics",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestMetricsCollector::test_thread_safety",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestHealthChecker::test_health_checker_initialization",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestHealthChecker::test_add_check",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestHealthChecker::test_run_check",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestHealthChecker::test_run_check_not_found",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestHealthChecker::test_run_all_checks",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestHealthChecker::test_get_component_status",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestHealthChecker::test_get_overall_health",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestSystemHealthChecks::test_system_health_checks_initialization",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestSystemHealthChecks::test_cpu_usage_check",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestSystemHealthChecks::test_memory_usage_check",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestSystemHealthChecks::test_gpu_check_no_gpu",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestSystemHealthChecks::test_gpu_check_with_gpu",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestSystemHealthChecks::test_disk_usage_check",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestSystemHealthChecks::test_network_connectivity_check",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestSystemHealthChecks::test_run_system_checks",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestTrainingMonitor::test_training_monitor_initialization",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestTrainingMonitor::test_start_monitoring",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestTrainingMonitor::test_stop_monitoring",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestTrainingMonitor::test_log_metric",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestTrainingMonitor::test_log_training_step",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestTrainingMonitor::test_log_validation_metrics",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestTrainingMonitor::test_get_monitoring_stats",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestTrainingMonitor::test_save_load_metrics",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestTrainingMonitor::test_alert_on_condition",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestConcurrencyAndPerformance::test_concurrent_metric_logging",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestConcurrencyAndPerformance::test_monitoring_performance",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring.py::TestSystemHealthChecksEdgeCases::test_check_gpu_memory_exception",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring_actual.py::TestMetricsCollectorActual::test_metrics_collector_initialization",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring_actual.py::TestSystemHealthChecks::test_check_gpu_memory_no_gpu",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring_actual.py::TestTrainingMonitorActual::test_get_status",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_monitoring_actual.py::TestInitializeMonitoring::test_initialize_monitoring",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_process_losses.py::TestJSONValidityLoss::test_json_validity_loss_valid_json",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_process_losses.py::TestToolSelectionLoss::test_tool_selection_loss_basic",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_process_losses.py::TestToolSelectionLossFromIDs::test_tool_selection_loss_from_ids_basic",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_process_losses.py::TestJSONValidityLossFromIDs::test_json_validity_loss_from_ids_basic",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quality_scoring.py::TestHeuristicQualityScore::test_compute_heuristic_quality_score_word_count_50_to_500",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quality_scoring.py::TestHeuristicQualityScore::test_compute_heuristic_quality_score_word_count_20_to_50",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quality_scoring.py::TestHeuristicQualityScore::test_compute_heuristic_quality_score_ground_truth_full_overlap",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quality_scoring.py::TestJSONValidityScore::test_compute_json_validity_score_mixed_valid_invalid",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quant_qat_int8.py::TestMinMaxObserver::test_min_max_observer_forward_2d",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quant_qat_int8.py::TestMinMaxObserver::test_min_max_observer_forward_multiple_observations",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quant_qat_int8.py::TestMinMaxObserver::test_min_max_observer_1d_tensor",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quant_qat_int8.py::TestFakeQuantize::test_fake_quantize_forward_training",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quant_qat_int8.py::TestFakeQuantize::test_fake_quantize_forward_eval",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quant_qat_int8.py::TestFakeQuantize::test_fake_quantize_signed_quantization",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quant_qat_int8.py::TestFakeQuantize::test_fake_quantize_unsigned_quantization",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quant_qat_int8.py::TestQuantizedLinear::test_quantized_linear_forward",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quant_qat_int8.py::TestQuantizedLinear::test_quantized_linear_different_bits",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quant_qat_int8.py::TestQuantizedAttention::test_quantized_attention_forward",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quant_qat_int8.py::TestQuantizedAttention::test_quantized_attention_with_mask",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quant_qat_int8.py::TestQuantizedAttention::test_quantized_attention_clamp_pre_softmax",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quant_qat_int8.py::TestQuantizedAttention::test_quantized_attention_no_clamp",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quant_qat_int8.py::TestLoadModelFromCheckpoint::test_load_model_from_checkpoint_success",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quant_qat_int8.py::TestLoadModelFromCheckpoint::test_load_model_from_checkpoint_no_config",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quant_qat_int8.py::TestQuantizationIntegration::test_observer_to_fake_quant_workflow",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quant_qat_int8.py::TestQuantizationIntegration::test_quantized_linear_workflow",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_quant_qat_int8.py::TestQuantizationIntegration::test_quantized_model_forward",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_teacher_stub_toy.py::TestTeacherLogits::test_teacher_logits_hot_tokens",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_tokenizer_migration.py::TestVerifyTokenIDs::test_verify_token_ids_matching",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_tokenizer_migration.py::TestResizeModelEmbeddings::test_resize_model_embeddings_basic",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_tokenizer_migration.py::TestResizeModelEmbeddings::test_resize_model_embeddings_with_new_vocab_size",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_tokenizer_migration.py::TestResizeModelEmbeddings::test_resize_model_embeddings_tokenizer_len",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_tracing.py::TestTrainingTracerInit::test_tracer_init_basic",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_tracing.py::TestTrainingTracerInit::test_tracer_init_with_wandb",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_tracing.py::TestTrainingTracerLogMetrics::test_log_metrics_tensorboard",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_tracing.py::TestTrainingTracerLogMetrics::test_log_metrics_wandb",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_tracing.py::TestTrainingTracerLogHparams::test_log_hparams_tensorboard",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_tracing.py::TestTrainingTracerLogHparams::test_log_hparams_wandb",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_tracing.py::TestTrainingTracerLogModelGraph::test_log_model_graph_tensorboard",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_tracing.py::TestTrainingTracerLogModelGraph::test_log_model_graph_wandb",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_tracing.py::TestTrainingTracerLogText::test_log_text_tensorboard",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_tracing.py::TestTrainingTracerLogImage::test_log_image_tensorboard",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_tracing.py::TestTrainingTracerLogHistogram::test_log_histogram_tensorboard",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_tracing.py::TestTrainingTracerClose::test_close_tensorboard",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_tracing.py::TestTrainingTracerClose::test_close_wandb",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_tracing.py::TestCreateTracerFromConfig::test_create_tracer_from_config_wandb",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/unit/test_config_validation.py::TestConfigMerging::test_merge_configs_empty_list",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/unit/test_enumerated_shapes.py::TestSampleEnumeratedShape::test_custom_shape_probs",
+          "error": "FAILED",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_generate_coreml.py::TestErrorHandling::test_generate_text_streaming_tokenizer_error",
+          "error": "ERROR",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_kv_cache_optimized.py::TestOptimizedKVCachePerformance::test_update_performance",
+          "error": "ERROR",
+          "message": ""
+        },
+        {
+          "test": "tests/runtime/test_kv_cache_optimized.py::TestOptimizedKVCachePerformance::test_slice_performance",
+          "error": "ERROR",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_teacher_cache.py::TestTeacherCacheIntegration::test_complete_cache_workflow",
+          "error": "ERROR",
+          "message": ""
+        },
+        {
+          "test": "tests/training/test_teacher_cache.py::TestTeacherCacheIntegration::test_cache_with_version_upgrade",
+          "error": "ERROR",
+          "message": ""
+        }
+      ],
+      "duration_seconds": 221.2
     },
     "integration": {
       "total": 0,
@@ -558,54 +1229,6 @@
         "confidence": 1.0
       },
       {
-        "file": "conversion/convert_coreml.py",
-        "line": "11",
-        "text": "Convert ONNX \u2192 CoreML (mlprogram). Uses public MIL converter API. Usage: python -m conversion.convert_coreml \\ --backend onnx \\ --in onnx/toy.sanitized.onnx \\ --out coreml/artifacts/toy/model.mlpackag",
-        "confidence": 1.0
-      },
-      {
-        "file": "conversion/convert_coreml.py",
-        "line": "80",
-        "text": "Convert PyTorch model (TorchScript or ExportedProgram) to CoreML. Args: pytorch_model: TorchScript module or torch.export.ExportedProgram output_path: Output path for .mlpackage compute_units: \"all\", ",
-        "confidence": 1.0
-      },
-      {
-        "file": "conversion/convert_coreml.py",
-        "line": "477",
-        "text": "Convert ONNX model to CoreML using public MIL converter API. Args: onnx_path: Path to ONNX model file output_path: Output path for .mlpackage compute_units: \"all\", \"cpuandgpu\", or \"cpuonly\" target: De",
-        "confidence": 1.0
-      },
-      {
-        "file": "conversion/convert_coreml.py",
-        "line": "591",
-        "text": "Create a placeholder .mlpackage for smoke tests.",
-        "confidence": 1.0
-      },
-      {
-        "file": "conversion/convert_coreml.py",
-        "line": "595",
-        "text": "Create .placeholder marker",
-        "confidence": 1.0
-      },
-      {
-        "file": "conversion/convert_coreml.py",
-        "line": "630",
-        "text": "Smoke test (creates placeholder on failure):",
-        "confidence": 1.0
-      },
-      {
-        "file": "conversion/make_toy_block.py",
-        "line": "53",
-        "text": "Simplified attention for parity testing. This is intentionally simplified for parity testing purposes: - No GQA (Grouped Query Attention) - uses standard multi-head attention - No RoPE (Rotary Positio",
-        "confidence": 1.0
-      },
-      {
-        "file": "conversion/judge_export_coreml.py",
-        "line": "45",
-        "text": "Convert Judge ONNX model to CoreML with INT8 quantization. IMPORTANT: CoreMLTools does not natively support ONNX\u2192CoreML conversion. This function attempts conversion but may create a placeholder if co",
-        "confidence": 1.0
-      },
-      {
         "file": "coreml/probes/compare_probes.py",
         "line": "40",
         "text": "Run CoreML model inference. Note: Placeholder check should be performed in main() before calling this function. This function assumes a valid CoreML model (not a placeholder).",
@@ -634,6 +1257,54 @@
         "line": "151",
         "text": "This FSM is intentionally simplified: we enforce key/value separators, brackets balance,",
         "confidence": 0.94
+      },
+      {
+        "file": "conversion/convert_coreml.py",
+        "line": "11",
+        "text": "Convert ONNX \u2192 CoreML (mlprogram). Uses public MIL converter API. Usage: python -m conversion.convert_coreml \\ --backend onnx \\ --in onnx/toy.sanitized.onnx \\ --out coreml/artifacts/toy/model.mlpackag",
+        "confidence": 1.0
+      },
+      {
+        "file": "conversion/convert_coreml.py",
+        "line": "80",
+        "text": "Convert PyTorch model (TorchScript or ExportedProgram) to CoreML. Args: pytorch_model: TorchScript module or torch.export.ExportedProgram output_path: Output path for .mlpackage compute_units: \"all\", ",
+        "confidence": 1.0
+      },
+      {
+        "file": "conversion/convert_coreml.py",
+        "line": "474",
+        "text": "Convert ONNX model to CoreML using public MIL converter API. Args: onnx_path: Path to ONNX model file output_path: Output path for .mlpackage compute_units: \"all\", \"cpuandgpu\", or \"cpuonly\" target: De",
+        "confidence": 1.0
+      },
+      {
+        "file": "conversion/convert_coreml.py",
+        "line": "588",
+        "text": "Create a placeholder .mlpackage for smoke tests.",
+        "confidence": 1.0
+      },
+      {
+        "file": "conversion/convert_coreml.py",
+        "line": "592",
+        "text": "Create .placeholder marker",
+        "confidence": 1.0
+      },
+      {
+        "file": "conversion/convert_coreml.py",
+        "line": "627",
+        "text": "Smoke test (creates placeholder on failure):",
+        "confidence": 1.0
+      },
+      {
+        "file": "conversion/make_toy_block.py",
+        "line": "53",
+        "text": "Simplified attention for parity testing. This is intentionally simplified for parity testing purposes: - No GQA (Grouped Query Attention) - uses standard multi-head attention - No RoPE (Rotary Positio",
+        "confidence": 1.0
+      },
+      {
+        "file": "conversion/judge_export_coreml.py",
+        "line": "45",
+        "text": "Convert Judge ONNX model to CoreML with INT8 quantization. IMPORTANT: CoreMLTools does not natively support ONNX\u2192CoreML conversion. This function attempts conversion but may create a placeholder if co",
+        "confidence": 1.0
       }
     ],
     "placeholders": 28,
@@ -641,8 +1312,13 @@
   },
   "readiness": {
     "status": "blocked",
-    "score": 42.1,
+    "score": 53.5,
     "blockers": [
+      {
+        "category": "tests",
+        "description": "129 unit test(s) failing",
+        "severity": "high"
+      },
       {
         "category": "coverage",
         "description": "Coverage below thresholds (line: 36.9%, branch: 0.0%)",
@@ -671,13 +1347,14 @@
     ],
     "warnings": [],
     "recommendations": [
+      "Fix failing unit tests before proceeding",
       "Increase line coverage from 36.9% to 80%",
       "Resolve blocking TODOs in critical paths"
     ]
   },
   "metadata": {
-    "python_version": "3.13.7",
+    "python_version": "3.11.13",
     "platform": "Darwin",
-    "assessment_duration_seconds": 398.84921
+    "assessment_duration_seconds": 861.953733
   }
 }

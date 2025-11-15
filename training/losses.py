@@ -470,7 +470,7 @@ def early_tool_call_loss(
         for token in json_start_tokens:
             try:
                 token_id = tokenizer.convert_tokens_to_ids(token)
-                if token_id is not None:
+                if token_id is not None and 0 <= token_id < V:
                     json_token_ids.append(token_id)
             except (AttributeError, KeyError):
                 pass
@@ -483,7 +483,11 @@ def early_tool_call_loss(
             # Extract log-probs for JSON tokens
             json_log_probs_list = []
             for token_id in json_token_ids:
-                json_log_probs_list.append(log_probs[:, :, token_id])  # [B, N]
+                try:
+                    json_log_probs_list.append(log_probs[:, :, token_id])  # [B, N]
+                except IndexError:
+                    # Skip token IDs that are out of vocabulary bounds
+                    pass
 
             if json_log_probs_list:
                 # Take max log-prob across JSON tokens at each position
