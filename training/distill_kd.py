@@ -3111,6 +3111,7 @@ def main():
             dataset_fingerprint=dataset.dataset_fingerprint
             if hasattr(dataset, "dataset_fingerprint")
             else None,
+            scaler=scaler,
         )
 
         # Close tracer and save summary
