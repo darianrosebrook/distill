@@ -323,6 +323,7 @@ def test_toy_pipeline_with_code_mode(temp_dir):
         capture_output=True,
         text=True,
         env=env,
+        timeout=120,  # 2 minutes for export
     )
     assert result.returncode == 0, f"Export failed: {result.stderr}"
 
@@ -370,6 +371,7 @@ def test_toy_pipeline_with_latent_mode(temp_dir):
         capture_output=True,
         text=True,
         env=env,
+        timeout=60,  # 1 minute for dataset generation
     )
     assert result.returncode == 0, f"Dataset generation failed: {result.stderr}"
     assert dataset_path.exists(), "Dataset file not created"
@@ -394,6 +396,7 @@ def test_toy_pipeline_with_latent_mode(temp_dir):
         capture_output=True,
         text=True,
         env=env,
+        timeout=120,  # 2 minutes for training
     )
     assert result.returncode == 0, f"Training failed: {result.stderr}"
     assert checkpoint_path.exists(), "Checkpoint file not created"
@@ -429,6 +432,7 @@ def test_toy_pipeline_with_latent_mode(temp_dir):
         capture_output=True,
         text=True,
         env=env,
+        timeout=120,  # 2 minutes for export
     )
     assert result.returncode == 0, f"Export failed: {result.stderr}"
 
@@ -477,6 +481,7 @@ def test_toy_pipeline_with_both_features(temp_dir):
         capture_output=True,
         text=True,
         env=env,
+        timeout=60,  # 1 minute for dataset generation
     )
     assert result.returncode == 0, f"Dataset generation failed: {result.stderr}"
     assert dataset_path.exists(), "Dataset file not created"
@@ -501,6 +506,7 @@ def test_toy_pipeline_with_both_features(temp_dir):
         capture_output=True,
         text=True,
         env=env,
+        timeout=120,  # 2 minutes for training
     )
     assert result.returncode == 0, f"Training failed: {result.stderr}"
     assert checkpoint_path.exists(), "Checkpoint file not created"
@@ -539,6 +545,7 @@ def test_toy_pipeline_with_both_features(temp_dir):
         capture_output=True,
         text=True,
         env=env,
+        timeout=120,  # 2 minutes for export
     )
     assert result.returncode == 0, f"Export failed: {result.stderr}"
 
