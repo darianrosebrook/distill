@@ -110,9 +110,13 @@ class KDDataset(Dataset):
 
         with open(self.jsonl_path, "r", encoding="utf-8") as f:
             first_line = True
+            valid_samples = 0
+            skipped_samples = 0
+
             for line_num, line in enumerate(f):
                 if not line.strip():
                     continue
+
                 try:
                     data = json.loads(line)
 
@@ -127,22 +131,67 @@ class KDDataset(Dataset):
 
                     first_line = False
 
+                    # Validate required fields
                     if "prompt" not in data or "teacher_text" not in data:
                         print(
-                            f"[KDDataset] WARN: Skipping line {line_num + 1}: missing required fields"
+                            f"[KDDataset] WARN: Skipping line {line_num + 1}: missing required fields 'prompt' and/or 'teacher_text'"
                         )
+                        skipped_samples += 1
                         continue
+
+                    # Validate data types
+                    if not isinstance(data["prompt"], str) or not isinstance(data["teacher_text"], str):
+                        print(
+                            f"[KDDataset] WARN: Skipping line {line_num + 1}: prompt and teacher_text must be strings"
+                        )
+                        skipped_samples += 1
+                        continue
+
+                    # Validate string lengths
+                    if len(data["prompt"].strip()) == 0:
+                        print(
+                            f"[KDDataset] WARN: Skipping line {line_num + 1}: prompt is empty"
+                        )
+                        skipped_samples += 1
+                        continue
+
+                    if len(data["teacher_text"].strip()) == 0:
+                        print(
+                            f"[KDDataset] WARN: Skipping line {line_num + 1}: teacher_text is empty"
+                        )
+                        skipped_samples += 1
+                        continue
+
                     # CoT-free validation: Fail if reasoning_content detected
                     if "teacher_reasoning_content" in data and data["teacher_reasoning_content"]:
                         raise ValueError(
                             f"CoT-free training: teacher_reasoning_content detected in line {line_num + 1}. "
                             "Training on reasoning_content violates ToS. Use process-step supervision instead."
                         )
+
+                    # Optional field validation
+                    if "teacher_logits" in data:
+                        logits = data["teacher_logits"]
+                        if not isinstance(logits, list) or not all(isinstance(x, (int, float)) for x in logits):
+                            print(
+                                f"[KDDataset] WARN: Line {line_num + 1}: teacher_logits should be list of numbers, got {type(logits)}"
+                            )
+
                     self.samples.append(data)
+                    valid_samples += 1
+
                 except json.JSONDecodeError as e:
                     print(
                         f"[KDDataset] WARN: Skipping line {line_num + 1}: JSON decode error: {e}")
+                    skipped_samples += 1
                     continue
+                except UnicodeDecodeError as e:
+                    print(
+                        f"[KDDataset] WARN: Skipping line {line_num + 1}: Unicode decode error: {e}")
+                    skipped_samples += 1
+                    continue
+
+        print(f"[KDDataset] Loaded {valid_samples} valid samples, skipped {skipped_samples} invalid samples")
 
         print(
             f"[KDDataset] Loaded {len(self.samples)} samples from {self.jsonl_path}")

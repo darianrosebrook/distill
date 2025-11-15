@@ -2911,13 +2911,28 @@ def main():
                         torch.cuda.synchronize()  # Ensure cleanup completes
                         print("[distill_kd] Cleared GPU cache after error")
 
-                        # For very large models, also clear CPU cache
+                        # Enhanced memory cleanup for large models
                         if is_large_model:
                             import gc
 
-                            gc.collect()
-                            print(
-                                "[distill_kd] Performed full garbage collection for large model")
+                            # Force garbage collection
+                            collected = gc.collect()
+                            print(f"[distill_kd] Garbage collection freed {collected} objects")
+
+                            # Clear any cached tensors in model components
+                            if hasattr(model, 'clear_cache'):
+                                model.clear_cache()
+                            elif isinstance(model, DDP) and hasattr(model.module, 'clear_cache'):
+                                model.module.clear_cache()
+
+                            # Additional CPU memory cleanup
+                            import torch
+                            if torch.cuda.is_available():
+                                # Clear CUDA cache more aggressively
+                                torch.cuda.empty_cache()
+                                torch.cuda.synchronize()
+
+                            print("[distill_kd] Enhanced memory cleanup completed for large model")
 
                     except Exception as cache_e:
                         print(
@@ -2958,6 +2973,20 @@ def main():
                         )
 
                     sys.exit(1)
+
+                # Enhanced error recovery - reset gradients and clear any corrupted state
+                try:
+                    # Clear any accumulated gradients that might be corrupted
+                    if hasattr(optimizer, 'zero_grad'):
+                        optimizer.zero_grad()
+
+                    # Clear any cached computations that might be corrupted
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+
+                    print("[distill_kd] Cleared optimizer state and GPU cache after error")
+                except Exception as cleanup_e:
+                    print(f"[distill_kd] WARN: Failed to clean up after error: {cleanup_e}")
 
                 # Continue to next step instead of crashing
                 step += 1
