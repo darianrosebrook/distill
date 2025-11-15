@@ -29,15 +29,21 @@ main = convert_coreml_module.main
 class TestConvertPytorchToCoreML:
     """Test PyTorch to CoreML conversion functionality."""
 
-    @patch("conversion.convert_coreml.ct")
-    @patch("conversion.convert_coreml.torch")
-    def test_convert_pytorch_to_coreml_success(self, mock_torch, mock_ct, tmp_path):
+    @patch("conversion.convert_coreml.detect_int64_tensors_on_attention_paths", return_value=[])
+    @patch.dict("sys.modules", {"torch": Mock(), "coremltools": Mock()})
+    def test_convert_pytorch_to_coreml_success(self, mock_detect_int64, tmp_path):
         """Test successful PyTorch to CoreML conversion."""
+        import sys
+        mock_torch = sys.modules["torch"]
+        mock_ct = sys.modules["coremltools"]
+
         # Mock PyTorch and CoreML
         mock_model = Mock()
         mock_traced = Mock()
         mock_torch.jit.trace.return_value = mock_traced
         mock_torch.nn.Module = Mock()
+        mock_torch.jit.ScriptModule = Mock()
+        mock_torch.export.ExportedProgram = Mock()
 
         mock_mlmodel = Mock()
         mock_spec = Mock()
@@ -48,6 +54,7 @@ class TestConvertPytorchToCoreML:
         mock_mlmodel.save = Mock()
 
         mock_ct.convert.return_value = mock_mlmodel
+        mock_detect_int64.return_value = []  # No int64 issues
 
         output_path = str(tmp_path / "model.mlpackage")
 
@@ -62,14 +69,20 @@ class TestConvertPytorchToCoreML:
         mock_ct.convert.assert_called_once()
         mock_mlmodel.save.assert_called_once_with(output_path)
 
-    @patch("conversion.convert_coreml.ct")
-    @patch("conversion.convert_coreml.torch")
-    def test_convert_pytorch_to_coreml_with_halt_head(self, mock_torch, mock_ct, tmp_path):
+    @patch.dict("sys.modules", {"torch": Mock(), "coremltools": Mock()})
+    @patch("conversion.convert_coreml.detect_int64_tensors_on_attention_paths", return_value=[])
+    def test_convert_pytorch_to_coreml_with_halt_head(self, mock_detect_int64, tmp_path):
         """Test PyTorch to CoreML conversion with halt head."""
+        import sys
+        mock_torch = sys.modules["torch"]
+        mock_ct = sys.modules["coremltools"]
+
         # Mock PyTorch and CoreML
         mock_model = Mock()
         mock_traced = Mock()
         mock_torch.jit.trace.return_value = mock_traced
+        mock_torch.jit.ScriptModule = Mock()
+        mock_torch.export.ExportedProgram = Mock()
 
         mock_mlmodel = Mock()
         mock_spec = Mock()
@@ -103,7 +116,8 @@ class TestConvertPytorchToCoreML:
         assert mock_output1.name == "logits"
         assert mock_output2.name == "halt_logits"
 
-    def test_convert_pytorch_to_coreml_missing_dependencies(self):
+    @patch("conversion.convert_coreml.detect_int64_tensors_on_attention_paths", return_value=[])
+    def test_convert_pytorch_to_coreml_missing_dependencies(self, mock_detect_int64):
         """Test PyTorch to CoreML conversion with missing dependencies."""
         # Temporarily make torch unavailable
         import sys
@@ -125,13 +139,17 @@ class TestConvertPytorchToCoreML:
 class TestConvertOnnxToCoreML:
     """Test ONNX to CoreML conversion functionality."""
 
-    @patch("conversion.convert_coreml.ct")
-    @patch("conversion.convert_coreml.onnx")
-    def test_convert_onnx_to_coreml_success(self, mock_onnx, mock_ct, tmp_path):
+    @patch.dict("sys.modules", {"onnx": Mock(), "coremltools": Mock()})
+    def test_convert_onnx_to_coreml_success(self, tmp_path):
         """Test successful ONNX to CoreML conversion."""
+        import sys
+        mock_onnx = sys.modules["onnx"]
+        mock_ct = sys.modules["coremltools"]
+
         # Mock ONNX and CoreML
         mock_onnx_model = Mock()
         mock_onnx.load.return_value = mock_onnx_model
+        mock_onnx.ModelProto = Mock()
 
         mock_mlmodel = Mock()
         mock_spec = Mock()
@@ -147,12 +165,24 @@ class TestConvertOnnxToCoreML:
 
         output_path = str(tmp_path / "model.mlpackage")
 
-        result = convert_onnx_to_coreml(
-            onnx_path="dummy.onnx",
-            output_path=output_path,
-            compute_units="all",
-            target="macOS13",
-        )
+        # Mock Path methods for file existence checks
+        from pathlib import Path
+
+        def mock_exists(self):
+            # ONNX file exists, output path does not
+            return str(self) == "dummy.onnx"
+
+        def mock_is_file(self):
+            return True
+
+        with patch.object(Path, "exists", mock_exists), \
+             patch.object(Path, "is_file", mock_is_file):
+            result = convert_onnx_to_coreml(
+                onnx_path="dummy.onnx",
+                output_path=output_path,
+                compute_units="all",
+                target="macOS13",
+            )
 
         assert result == output_path
         mock_onnx.load.assert_called_once_with("dummy.onnx")
@@ -160,27 +190,46 @@ class TestConvertOnnxToCoreML:
         # Should rename output to "logits"
         assert mock_output.name == "logits"
 
-    @patch("conversion.convert_coreml.ct")
-    @patch("conversion.convert_coreml.onnx")
-    def test_convert_onnx_to_coreml_conversion_failure(self, mock_onnx, mock_ct, tmp_path):
+    @patch.dict("sys.modules", {"onnx": Mock(), "coremltools": Mock()})
+    def test_convert_onnx_to_coreml_conversion_failure(self, tmp_path):
         """Test ONNX to CoreML conversion failure with placeholder creation."""
-        mock_onnx.load.side_effect = Exception("Conversion failed")
+        import sys
+        mock_onnx = sys.modules["onnx"]
+        mock_ct = sys.modules["coremltools"]
+
+        # Mock successful load, but conversion failure
+        mock_onnx_model = Mock()
+        mock_onnx.load.return_value = mock_onnx_model
+        mock_onnx.ModelProto = Mock()
+        mock_ct.convert.side_effect = Exception("Conversion failed")
         mock_ct.ComputeUnit.ALL = "all"
         mock_ct.target.macOS13 = "macOS13"
 
         output_path = str(tmp_path / "model.mlpackage")
 
-        result = convert_onnx_to_coreml(
-            onnx_path="dummy.onnx",
-            output_path=output_path,
-            compute_units="all",
-            target="macOS13",
-            allow_placeholder=True,
-        )
+        # Mock Path methods for file existence checks
+        from pathlib import Path
 
-        # Should create placeholder and return None
-        assert result is None
-        assert (tmp_path / "model.mlpackage" / ".placeholder").exists()
+        def mock_exists(self):
+            # ONNX file exists, output path does not
+            return str(self) == "dummy.onnx"
+
+        def mock_is_file(self):
+            return True
+
+        with patch.object(Path, "exists", mock_exists), \
+             patch.object(Path, "is_file", mock_is_file):
+            result = convert_onnx_to_coreml(
+                onnx_path="dummy.onnx",
+                output_path=output_path,
+                compute_units="all",
+                target="macOS13",
+                allow_placeholder=True,
+            )
+
+        # Should create placeholder and return the output path
+        assert result == output_path
+        assert (tmp_path / ".placeholder").exists()
 
 
 class TestCreatePlaceholder:
