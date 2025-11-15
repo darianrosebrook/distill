@@ -305,6 +305,16 @@ class TestClaimExtractionEdgeCases:
         """Test _has_verifiable_content with code blocks (```)."""
         assert extractor._has_verifiable_content("Here's code:\n```python\nprint(42)\n```")
         assert extractor._has_verifiable_content("```code```")
+    
+    def test_has_verifiable_content_structured_content_branch(self, extractor):
+        """Test _has_verifiable_content structured content branch (line 132)."""
+        # Test each condition in the or statement to cover all branches
+        # Code blocks
+        assert extractor._has_verifiable_content("Code: ```python\nprint(42)\n```")
+        # Braces
+        assert extractor._has_verifiable_content("JSON: {key: value}")
+        # Brackets
+        assert extractor._has_verifiable_content("List: [1, 2, 3]")
 
     def test_has_verifiable_content_with_braces(self, extractor):
         """Test _has_verifiable_content with JSON braces ({})."""
@@ -317,10 +327,13 @@ class TestClaimExtractionEdgeCases:
         assert extractor._has_verifiable_content("[item]")
 
     def test_has_verifiable_content_factual_structure_only(self, extractor):
-        """Test _has_verifiable_content relying on factual structure check."""
+        """Test _has_verifiable_content relying on factual structure check (line 136)."""
         # Sentence with factual verbs and nouns but no patterns
+        # This should trigger the branch at line 136 (return True after factual structure check)
         assert extractor._has_verifiable_content("Python implements functions")
         assert extractor._has_verifiable_content("This system uses databases")
+        # Ensure this path is taken (no structured content, but has factual structure)
+        assert extractor._has_verifiable_content("The function returns a value")
 
     def test_has_verifiable_content_no_patterns_no_structure(self, extractor):
         """Test _has_verifiable_content with no verifiable indicators."""
@@ -350,6 +363,14 @@ class TestClaimExtractionEdgeCases:
         assert extractor._has_factual_structure("He had defined")
         assert extractor._has_factual_structure("Function returns values")
         assert extractor._has_factual_structure("System uses resources")
+
+    def test_has_factual_structure_past_participle_branch(self, extractor):
+        """Test _has_factual_structure with past participle not in meaningful_words (line 177)."""
+        # Test with past participle that should trigger the branch at line 177
+        # where word is in past_participles and word not in meaningful_words
+        assert extractor._has_factual_structure("It was created by the system")
+        assert extractor._has_factual_structure("The function was implemented correctly")
+        # These should trigger the branch where past participle is added to meaningful_words
 
     def test_decompose_to_atomic_no_splits(self, extractor):
         """Test _decompose_to_atomic with no conjunctions (returns original)."""
