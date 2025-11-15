@@ -1,16 +1,16 @@
 {
-  "timestamp": "2025-11-15T11:04:28.318111",
+  "timestamp": "2025-11-15T11:21:51.891576",
   "version": "1.0",
   "git": {
-    "commit": "b60494fc0bc8944227493f6122a2f648f7686c1b",
+    "commit": "27a3199e6b0aab7acd83c6e43cecf2a418943995",
     "branch": "main",
     "dirty": true
   },
   "test_status": {
     "unit": {
-      "total": 3207,
-      "passed": 3042,
-      "failed": 129,
+      "total": 3211,
+      "passed": 3051,
+      "failed": 124,
       "skipped": 31,
       "errors": 5,
       "failures": [
@@ -151,31 +151,6 @@
         },
         {
           "test": "tests/training/test_dataset.py::TestKDDatasetBranchCoverage::test_kd_dataset_getitem_teacher_logits_dim2_padding_branch",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_distill_kd.py::TestMainFunction::test_baseline_outputs_tuple_handling",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_distill_kd.py::TestMainFunction::test_rng_states_none_handling",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_distill_kd.py::TestMainFunction::test_ddp_model_handling",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_distill_kd.py::TestMainFunction::test_optimizer_param_groups_check",
-          "error": "FAILED",
-          "message": ""
-        },
-        {
-          "test": "tests/training/test_distill_kd.py::TestMainFunction::test_checkpoint_frequency_calculation",
           "error": "FAILED",
           "message": ""
         },
@@ -685,7 +660,7 @@
           "message": ""
         }
       ],
-      "duration_seconds": 221.2
+      "duration_seconds": 168.06
     },
     "integration": {
       "total": 0,
@@ -1316,7 +1291,7 @@
     "blockers": [
       {
         "category": "tests",
-        "description": "129 unit test(s) failing",
+        "description": "124 unit test(s) failing",
         "severity": "high"
       },
       {
@@ -1355,6 +1330,6 @@
   "metadata": {
     "python_version": "3.11.13",
     "platform": "Darwin",
-    "assessment_duration_seconds": 861.953733
+    "assessment_duration_seconds": 963.926188
   }
 }
