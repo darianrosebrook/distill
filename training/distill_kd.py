@@ -878,11 +878,40 @@ def save_checkpoint(
     rng_states: Optional[Dict[str, Any]] = None,
     data_shard_index: Optional[int] = None,
     dataset_fingerprint: Optional[str] = None,
+    scaler: Optional[torch.cuda.amp.GradScaler] = None,
 ):
-    """Save training checkpoint."""
+    """Save training checkpoint.
+    
+    Args:
+        model: Model to save
+        optimizer: Optimizer to save state
+        step: Current training step
+        loss: Current loss value
+        output_dir: Directory to save checkpoint
+        config: Training configuration
+        loss_dict: Optional loss component breakdown
+        rng_states: Optional RNG states (if None, will capture current states)
+        data_shard_index: Optional data shard index for multi-shard datasets
+        dataset_fingerprint: Optional dataset fingerprint for validation
+        scaler: Optional GradScaler for FP16 training
+    """
     from training.utils import sha256_state_dict
 
-    output_dir.mkdir(parents=True, exist_ok=True)
+    # Validate output directory
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except (PermissionError, OSError) as e:
+        raise RuntimeError(f"Cannot create checkpoint directory {output_dir}: {e}") from e
+    
+    # Check available disk space (rough estimate: checkpoint ~500MB-2GB)
+    import shutil
+    try:
+        stat = shutil.disk_usage(output_dir)
+        free_space_gb = stat.free / (1024**3)
+        if free_space_gb < 1.0:  # Less than 1GB free
+            print(f"[distill_kd] WARN: Low disk space: {free_space_gb:.2f}GB free")
+    except Exception:
+        pass  # Disk space check is best-effort
 
     # Get model state dict (unwrap DDP if needed)
     model_state = model.module.state_dict() if isinstance(
@@ -924,6 +953,14 @@ def save_checkpoint(
             "torch_cuda": torch.cuda.get_rng_state() if torch.cuda.is_available() else None,
         }
 
+    # Capture scaler state if using FP16
+    scaler_state = None
+    if scaler is not None:
+        try:
+            scaler_state = scaler.state_dict()
+        except Exception as e:
+            print(f"[distill_kd] WARN: Failed to capture scaler state: {e}")
+
     checkpoint = {
         "step": step,
         "model_state_dict": model_state,
@@ -941,6 +978,7 @@ def save_checkpoint(
             "rng_states": rng_states,
             "data_shard_index": data_shard_index,
             "dataset_fingerprint": dataset_fingerprint,
+            "scaler_state_dict": scaler_state,
         },
     }
 
@@ -2374,11 +2412,65 @@ def main():
 
     # Resume from checkpoint if specified
     start_step = 0
+    optimizer_state_restored = False
+    scaler_state_restored = False
     if args.resume:
         print(f"[distill_kd] Resuming from checkpoint: {args.resume}")
         from training.safe_checkpoint_loading import safe_load_checkpoint
         checkpoint = safe_load_checkpoint(
             args.resume, map_location=str(device))
+
+        # Restore step number
+        if "step" in checkpoint:
+            start_step = checkpoint["step"]
+            print(f"[distill_kd] Resuming from step {start_step}")
+        else:
+            print("[distill_kd] WARN: Checkpoint missing 'step' field, starting from step 0")
+
+        # Restore optimizer state if available
+        if "optimizer_state_dict" in checkpoint:
+            try:
+                optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+                optimizer_state_restored = True
+                print("[distill_kd] Optimizer state restored from checkpoint")
+            except Exception as e:
+                print(f"[distill_kd] WARN: Failed to restore optimizer state: {e}")
+                print("[distill_kd] Continuing with fresh optimizer state")
+        else:
+            print("[distill_kd] WARN: Checkpoint missing optimizer state, using fresh optimizer")
+
+        # Restore scaler state if using FP16 and available
+        if use_fp16 and scaler is not None:
+            if "meta" in checkpoint and "scaler_state_dict" in checkpoint.get("meta", {}):
+                try:
+                    scaler.load_state_dict(checkpoint["meta"]["scaler_state_dict"])
+                    scaler_state_restored = True
+                    print("[distill_kd] GradScaler state restored from checkpoint")
+                except Exception as e:
+                    print(f"[distill_kd] WARN: Failed to restore scaler state: {e}")
+                    print("[distill_kd] Continuing with fresh scaler state")
+            else:
+                print("[distill_kd] WARN: Checkpoint missing scaler state, using fresh scaler")
+
+        # Restore RNG states if available (for reproducibility)
+        if "meta" in checkpoint and "rng_states" in checkpoint["meta"]:
+            try:
+                rng_states = checkpoint["meta"]["rng_states"]
+                if "python" in rng_states:
+                    import random
+                    random.setstate(rng_states["python"])
+                if "numpy" in rng_states:
+                    import numpy as np
+                    np.random.set_state(rng_states["numpy"])
+                if "torch" in rng_states:
+                    torch.set_rng_state(rng_states["torch"])
+                if "torch_cuda" in rng_states and rng_states["torch_cuda"] is not None:
+                    if torch.cuda.is_available():
+                        torch.cuda.set_rng_state(rng_states["torch_cuda"])
+                print("[distill_kd] RNG states restored from checkpoint")
+            except Exception as e:
+                print(f"[distill_kd] WARN: Failed to restore RNG states: {e}")
+                print("[distill_kd] Continuing with fresh RNG states")
 
         # Validate config compatibility on resume
         if "config" in checkpoint:
@@ -2838,17 +2930,18 @@ def main():
                         f"[distill_kd] CRITICAL: {train_step._consecutive_failures} consecutive failures. Saving emergency checkpoint and exiting."
                     )
                     try:
-                        save_checkpoint(
-                            model=model,
-                            optimizer=optimizer,
-                            step=step,
-                            loss=loss_dict.get("total", float("inf")),
-                            output_dir=output_dir,
-                            config=cfg,
-                            rng_states=None,  # Skip RNG states in emergency
-                            data_shard_index=current_shard_index,
-                            dataset_fingerprint=None,
-                        )
+                save_checkpoint(
+                    model=model,
+                    optimizer=optimizer,
+                    step=step,
+                    loss=loss_dict.get("total", float("inf")),
+                    output_dir=output_dir,
+                    config=cfg,
+                    rng_states=None,  # Skip RNG states in emergency
+                    data_shard_index=current_shard_index,
+                    dataset_fingerprint=None,
+                    scaler=scaler,
+                )
                         print(
                             "[distill_kd] Emergency checkpoint saved successfully")
                     except Exception as ckpt_e:
@@ -2989,6 +3082,7 @@ def main():
                     rng_states=rng_states,
                     data_shard_index=current_shard_index,
                     dataset_fingerprint=dataset.dataset_fingerprint,
+                    scaler=scaler,
                 )
 
     # Final checkpoint
