@@ -149,7 +149,7 @@ class TestTrainStep:
             "input_ids": torch.randint(0, vocab_size, (batch_size, seq_len)),
             "attention_mask": torch.ones(batch_size, seq_len),
             "labels": torch.randint(0, vocab_size, (batch_size, seq_len)),
-            "tool_names": ["tool1", "tool2"],
+            "tool_names": ["tool1", "tool2"],  # List of tool names, not Mock
         }
 
     @pytest.fixture
@@ -162,7 +162,7 @@ class TestTrainStep:
         """Create simple optimizer for real model."""
         return AdamW(small_model.parameters(), lr=1e-3)
 
-    @patch("training.distill_tool_select.load_tokenizer")
+    @patch("training.dataset.load_tokenizer")
     def test_train_step_basic(
         self, mock_load_tokenizer, small_model, sample_batch, simple_optimizer, training_config, device
     ):
@@ -170,6 +170,8 @@ class TestTrainStep:
         # Mock tokenizer
         mock_tokenizer = Mock()
         mock_tokenizer.decode = Mock(return_value='{"name": "tool1", "arguments": {}}')
+        # encode should return a list of token IDs
+        mock_tokenizer.encode = Mock(return_value=[1, 2, 3, 4, 5])
         mock_load_tokenizer.return_value = mock_tokenizer
 
         # Move batch to device
@@ -195,7 +197,7 @@ class TestTrainStep:
         assert isinstance(result["total"], float)
         assert result["total"] >= 0
 
-    @patch("training.distill_tool_select.load_tokenizer")
+    @patch("training.dataset.load_tokenizer")
     def test_train_step_with_decoder(
         self, mock_load_tokenizer, small_model, sample_batch, simple_optimizer, training_config, device
     ):
@@ -203,6 +205,7 @@ class TestTrainStep:
         # Mock tokenizer
         mock_tokenizer = Mock()
         mock_tokenizer.decode = Mock(return_value='{"name": "tool1", "arguments": {}}')
+        mock_tokenizer.encode = Mock(return_value=[1, 2, 3, 4, 5])
         mock_load_tokenizer.return_value = mock_tokenizer
 
         # Mock constrained decoder
@@ -234,7 +237,7 @@ class TestTrainStep:
         # Decoder should be used
         mock_decoder.start.assert_called()
 
-    @patch("training.distill_tool_select.load_tokenizer")
+    @patch("training.dataset.load_tokenizer")
     def test_train_step_with_fp16(
         self, mock_load_tokenizer, small_model, sample_batch, simple_optimizer, training_config, device
     ):
@@ -242,6 +245,7 @@ class TestTrainStep:
         # Mock tokenizer
         mock_tokenizer = Mock()
         mock_tokenizer.decode = Mock(return_value='{"name": "tool1", "arguments": {}}')
+        mock_tokenizer.encode = Mock(return_value=[1, 2, 3, 4, 5])
         mock_load_tokenizer.return_value = mock_tokenizer
 
         # Create FP16 scaler (only works on CUDA)
@@ -267,7 +271,7 @@ class TestTrainStep:
         assert isinstance(result, dict)
         assert "total" in result
 
-    @patch("training.distill_tool_select.load_tokenizer")
+    @patch("training.dataset.load_tokenizer")
     def test_train_step_zero_weights(
         self, mock_load_tokenizer, small_model, sample_batch, simple_optimizer, device
     ):
@@ -306,7 +310,7 @@ class TestTrainStep:
         assert result["json_validity"] == 0.0
         assert result["tool_select"] == 0.0
 
-    @patch("training.distill_tool_select.load_tokenizer")
+    @patch("training.dataset.load_tokenizer")
     def test_train_step_no_tool_names(
         self, mock_load_tokenizer, small_model, sample_batch, simple_optimizer, training_config, device
     ):
@@ -338,7 +342,7 @@ class TestTrainStep:
         assert isinstance(result, dict)
         assert "total" in result
 
-    @patch("training.distill_tool_select.load_tokenizer")
+    @patch("training.dataset.load_tokenizer")
     def test_train_step_decoder_incomplete(
         self, mock_load_tokenizer, small_model, sample_batch, simple_optimizer, training_config, device
     ):
@@ -346,6 +350,7 @@ class TestTrainStep:
         # Mock tokenizer
         mock_tokenizer = Mock()
         mock_tokenizer.decode = Mock(return_value='{"name": "tool1"')  # Incomplete JSON
+        mock_tokenizer.encode = Mock(return_value=[1, 2, 3, 4, 5])
         mock_load_tokenizer.return_value = mock_tokenizer
 
         # Mock constrained decoder with incomplete state
@@ -375,7 +380,7 @@ class TestTrainStep:
         assert isinstance(result, dict)
         assert "total" in result
 
-    @patch("training.distill_tool_select.load_tokenizer")
+    @patch("training.dataset.load_tokenizer")
     def test_train_step_decoder_invalid(
         self, mock_load_tokenizer, small_model, sample_batch, simple_optimizer, training_config, device
     ):

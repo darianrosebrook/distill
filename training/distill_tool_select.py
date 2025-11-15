@@ -123,7 +123,7 @@ def train_step(
                     # Generate token by token with constraint masking
                     for t in range(seq_len):
                         # Get logits for this position
-                        step_logits = logits[i, t, :].cpu().numpy()  # [V]
+                        step_logits = logits[i, t, :].detach().cpu().numpy()  # [V]
 
                         # Apply token mask from constrained decoder
                         mask = decoder.allowed_token_mask(state, step_logits.shape)
