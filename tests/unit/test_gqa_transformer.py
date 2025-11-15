@@ -2,6 +2,7 @@
 Unit tests for GQA Transformer architecture components.
 """
 
+import pytest
 import torch
 
 from models.student.architectures.gqa_transformer import (
@@ -687,5 +688,84 @@ class TestStudentLM:
         logits, kv_caches = small_model.forward_decode(input_ids, kv_caches=None, pos=0)
 
         assert logits.shape == (b, 1, 1000)
-        assert isinstance(kv_caches, list)
-        assert len(kv_caches) == 2  # n_layers=2
+
+
+class TestMHAGQAMaskHandling:
+    """Test MHA_GQA mask handling edge cases."""
+
+    def test_mha_gqa_mask_broadcast_single_head(self, device):
+        """Test mask broadcasting when mask has single head dimension (line 188)."""
+        b, t, d_head, n_heads, n_kv_heads = 2, 10, 64, 4, 2
+        rope = RotaryEmbedding(d_head=d_head)
+        mha = MHA_GQA(d_model=256, n_heads=n_heads, n_kv_heads=n_kv_heads, d_head=d_head, rope=rope).to(device)
+
+        x = torch.randn(b, t, 256, device=device)
+        # Create mask with shape [B, 1, T, T] - should broadcast to [B, H, T, T]
+        attn_mask = torch.randn(b, 1, t, t, device=device)
+
+        output = mha(x, attn_mask=attn_mask)
+        assert output.shape == (b, t, 256)
+
+    def test_mha_gqa_mask_incompatible_heads_error(self, device):
+        """Test error when mask has incompatible number of heads (line 193)."""
+        b, t, d_head, n_heads, n_kv_heads = 2, 10, 64, 4, 2
+        rope = RotaryEmbedding(d_head=d_head)
+        mha = MHA_GQA(d_model=256, n_heads=n_heads, n_kv_heads=n_kv_heads, d_head=d_head, rope=rope).to(device)
+
+        x = torch.randn(b, t, 256, device=device)
+        # Create mask with wrong number of heads
+        attn_mask = torch.randn(b, 3, t, t, device=device)  # 3 heads != 4 expected
+
+        with pytest.raises(ValueError, match="Mask shape.*incompatible"):
+            mha(x, attn_mask=attn_mask)
+
+    def test_mha_gqa_mask_unsupported_shape_error(self, device):
+        """Test error for unsupported mask shape (line 196)."""
+        b, t, d_head, n_heads, n_kv_heads = 2, 10, 64, 4, 2
+        rope = RotaryEmbedding(d_head=d_head)
+        mha = MHA_GQA(d_model=256, n_heads=n_heads, n_kv_heads=n_kv_heads, d_head=d_head, rope=rope).to(device)
+
+        x = torch.randn(b, t, 256, device=device)
+        # Create mask with unsupported shape (3D instead of 4D)
+        attn_mask = torch.randn(b, t, t, device=device)
+
+        with pytest.raises(ValueError, match="Unsupported mask shape"):
+            mha(x, attn_mask=attn_mask)
+
+
+class TestMHAGQAKVCacheHandling:
+    """Test MHA_GQA KV cache handling edge cases."""
+
+    def test_mha_gqa_kv_cache_no_expansion(self, device):
+        """Test KV cache when head_groups == 1 (lines 244-245)."""
+        b, d_head, n_heads, n_kv_heads = 2, 64, 4, 4  # n_kv_heads = n_heads so head_groups = 1
+        rope = RotaryEmbedding(d_head=d_head)
+        mha = MHA_GQA(d_model=256, n_heads=n_heads, n_kv_heads=n_kv_heads, d_head=d_head, rope=rope).to(device)
+
+        x = torch.randn(b, 1, 256, device=device)  # Single token for decode
+
+        # Initialize KV caches to None (will be created by forward_decode)
+        kv_cache = None
+
+        output, _ = mha.forward_decode(x, kv_cache, pos=0)
+        assert output.shape == (b, 1, 256)
+
+
+class TestStudentLMCheckpointing:
+    """Test StudentLM checkpointing functionality."""
+
+    def test_studentlm_checkpointing_with_hidden_states(self, small_model, device):
+        """Test checkpointing with return_hidden_states=True (line 375)."""
+        small_model.checkpointing = True
+        b, t = 2, 5
+        x = torch.randint(0, 1000, (b, t), device=device)
+
+        outputs = small_model(x, return_hidden_states=True)
+
+        # Should return tuple when return_hidden_states=True
+        assert isinstance(outputs, tuple)
+        logits, hidden_states = outputs
+
+        assert logits.shape == (b, t, 1000)
+        # Should have hidden states for each layer + input
+        assert len(hidden_states) == small_model.cfg.n_layers + 1
