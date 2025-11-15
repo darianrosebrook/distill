@@ -39,6 +39,73 @@ from training.losses import (
 from training.dataset import KDDataset, collate_kd_batch, load_tokenizer
 from training.tracing import create_tracer_from_config
 from training.assertions import assert_loss_finite, log_loss_components
+
+
+def compute_distillation_quality_metrics(student_logits, teacher_logits, teacher_targets, temperature):
+    """
+    Compute distillation quality metrics to monitor training effectiveness.
+
+    Measures:
+    - KL divergence between student and teacher distributions
+    - Student-teacher prediction agreement
+    - Teacher prediction confidence
+    - Student prediction entropy
+
+    Returns dict of quality metrics.
+    """
+    metrics = {}
+
+    try:
+        # KL divergence (already computed in loss, but let's recompute for logging)
+        from training.losses import kl_divergence
+        kl_div = kl_divergence(student_logits, teacher_logits, temperature=temperature)
+        metrics["kl_divergence"] = float(kl_div.item())
+
+        # Student-teacher prediction agreement (exact token match)
+        if teacher_targets is not None:
+            # Get student predictions
+            student_preds = student_logits.argmax(dim=-1)  # [B, T]
+
+            # Compute agreement rate (ignoring padding tokens)
+            valid_mask = (teacher_targets != -100) & (teacher_targets != 0)
+            if valid_mask.any():
+                agreement = (student_preds == teacher_targets)[valid_mask].float().mean()
+                metrics["teacher_agreement"] = float(agreement.item())
+            else:
+                metrics["teacher_agreement"] = 0.0
+
+        # Teacher prediction confidence (avg probability of argmax token)
+        teacher_probs = torch.softmax(teacher_logits / temperature, dim=-1)
+        teacher_confidence = teacher_probs.max(dim=-1)[0].mean()
+        metrics["teacher_confidence"] = float(teacher_confidence.item())
+
+        # Student prediction entropy (lower entropy = more confident predictions)
+        student_probs = torch.softmax(student_logits / temperature, dim=-1)
+        # Compute entropy: -sum(p * log(p))
+        student_entropy = -(student_probs * torch.log(student_probs + 1e-8)).sum(dim=-1).mean()
+        metrics["student_entropy"] = float(student_entropy.item())
+
+        # Logits variance (measure of student certainty vs teacher)
+        student_var = student_logits.var(dim=-1).mean()
+        teacher_var = teacher_logits.var(dim=-1).mean()
+        metrics["student_variance"] = float(student_var.item())
+        metrics["teacher_variance"] = float(teacher_var.item())
+
+    except Exception as e:
+        # If metrics computation fails, return empty dict
+        print(f"[distill_kd] WARN: Failed to compute quality metrics: {e}")
+        metrics = {
+            "kl_divergence": 0.0,
+            "teacher_agreement": 0.0,
+            "teacher_confidence": 0.0,
+            "student_entropy": 0.0,
+            "student_variance": 0.0,
+            "teacher_variance": 0.0,
+        }
+
+    return metrics
+
+
 from infra.version_gate import check_training_versions
 
 # Latent curriculum import (optional)
@@ -2089,6 +2156,17 @@ def train_step(
         # Assert loss finiteness before backward pass
         assert_loss_finite(loss_dict, step=current_step)
 
+        # Compute distillation quality metrics
+        if teacher_logits is not None and current_step % 100 == 0:
+            quality_metrics = compute_distillation_quality_metrics(
+                student_logits=student_logits,
+                teacher_logits=teacher_logits,
+                teacher_targets=teacher_target_ids,
+                temperature=current_temperature
+            )
+            # Add to loss_dict for logging
+            loss_dict.update(quality_metrics)
+
         # Log loss components periodically
         log_loss_components(loss_dict, current_step, log_every=100)
 
@@ -2238,6 +2316,9 @@ def validate_config(cfg: Dict[str, Any]) -> None:
 
 
 def main():
+    # Ensure torch is available for device creation
+    import torch
+
     ap = argparse.ArgumentParser(description="Knowledge distillation training")
     ap.add_argument("--config", nargs="+", required=True,
                     help="Config file(s) to load")

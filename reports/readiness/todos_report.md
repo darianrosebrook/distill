@@ -2,9 +2,9 @@
 ============================================================
 
 ## Summary
-- Total files: 36003
+- Total files: 36009
 - Non-ignored files: 307
-- Ignored files: 35696
+- Ignored files: 35702
 - Files with hidden TODOs: 40
 - Total hidden TODOs found: 4507
 - Code stub detections: 4
@@ -352,7 +352,7 @@ The following TODOs should be upgraded to the engineering-grade format:
 # - Reviewer Requirements: <Roles or domain expertise>
 ```
 
-### `scripts/analyze_todo_risks.py:204` (python)
+### `scripts/analyze_todo_risks.py:205` (python)
 **Original:** Read code context around a TODO line....
 **Suggested Tier:** 3
 **Priority:** Medium
@@ -397,7 +397,7 @@ The following TODOs should be upgraded to the engineering-grade format:
 # - Reviewer Requirements: <Roles or domain expertise>
 ```
 
-### `scripts/analyze_todo_risks.py:258` (python)
+### `scripts/analyze_todo_risks.py:263` (python)
 **Original:** Critical Path TODO Inventory...
 **Suggested Tier:** 3
 **Priority:** Medium

@@ -25,6 +25,100 @@ from training.teacher_stub_toy import teacher_logits
 from training.teacher_stub_toy import eight_ball_teacher_logits
 
 
+def handle_toy_vocab_clamping(input_ids, labels, vocab_size, eight_ball, binary_classifier, ternary_classifier):
+    """
+    Handle token ID clamping for toy models, preserving classification token ranges.
+
+    For toy classification models, we need to preserve specific token ranges:
+    - 8-ball: 200-219
+    - Binary: 300-301
+    - Ternary: 400-402
+
+    Regular text tokens get clamped to fit vocab_size, but classification tokens are preserved.
+    """
+    # Define classification token ranges that should be preserved
+    classification_tokens = set()
+
+    if eight_ball:
+        classification_tokens.update(range(200, 220))  # 200-219
+    if binary_classifier:
+        classification_tokens.update(range(300, 302))  # 300-301
+    if ternary_classifier:
+        classification_tokens.update(range(400, 403))  # 400-402
+
+    # Function to clamp tokens while preserving classification ranges
+    def clamp_preserve_classification(tokens):
+        result = tokens.clone()
+        # Create mask for tokens that should be clamped (non-classification tokens)
+        mask = torch.ones_like(tokens, dtype=torch.bool)
+        for token_id in classification_tokens:
+            if token_id < vocab_size:
+                mask &= (tokens != token_id)
+
+        # Apply clamping only to non-classification tokens
+        result = torch.where(mask, torch.clamp(
+            tokens, 0, vocab_size - 1), tokens)
+        return result
+
+    # Apply clamping
+    input_ids = clamp_preserve_classification(input_ids)
+    labels = clamp_preserve_classification(labels)
+
+    return input_ids, labels
+
+
+def create_toy_tokenizer_adapter(tokenizer, vocab_size, eight_ball=False, binary_classifier=False, ternary_classifier=False):
+    """
+    Create a tokenizer adapter for toy models that maps token IDs to the model's vocab range.
+
+    This is needed because the real tokenizer has 32K+ tokens but toy models only support
+    vocab_size tokens. For evaluation, we need to map tokenizer outputs to the model's range.
+
+    Returns a function that can adapt tokenization for toy model evaluation.
+    """
+    # Define classification token ranges that should be preserved
+    classification_tokens = set()
+
+    if eight_ball:
+        classification_tokens.update(range(200, 220))  # 200-219
+    if binary_classifier:
+        classification_tokens.update(range(300, 302))  # 300-301
+    if ternary_classifier:
+        classification_tokens.update(range(400, 403))  # 400-402
+
+    def adapt_token_ids(token_ids):
+        """
+        Adapt token IDs from tokenizer to model's vocab range.
+
+        Simply clamp all token IDs to fit the model's vocabulary.
+        """
+        return torch.clamp(token_ids, 0, vocab_size - 1)
+
+    def tokenize_and_adapt(text, **kwargs):
+        """Tokenize text and adapt token IDs to model vocab range."""
+        # Tokenize normally
+        encoding = tokenizer(text, **kwargs)
+
+        # Adapt the input_ids if they exist
+        if hasattr(encoding, 'input_ids'):
+            if isinstance(encoding.input_ids, list):
+                # Convert to tensor, adapt, convert back to list
+                original_ids = torch.tensor(encoding.input_ids)
+                adapted_ids = adapt_token_ids(original_ids)
+                encoding.input_ids = adapted_ids.tolist()
+            else:
+                # Already a tensor - adapt it
+                adapted_tensor = adapt_token_ids(encoding.input_ids)
+                encoding.input_ids = adapted_tensor
+                # Also update the dict access if it exists
+                if 'input_ids' in encoding:
+                    encoding['input_ids'] = adapted_tensor
+
+        return encoding
+
+    return tokenize_and_adapt
+
+
 def get_git_sha() -> str:
     """Get current git commit SHA."""
     try:
@@ -261,16 +355,10 @@ def main():
             input_ids = batch["input_ids"].to(device)
             labels = batch["labels"].to(device)
 
-            # Clamp token IDs to fit toy vocab size (tokenizer may have larger vocab)
-            pre_violate = (input_ids.ge(args.vocab_size)
-                           | input_ids.lt(0)).any().item()
-            input_ids = torch.clamp(input_ids, 0, args.vocab_size - 1)
-            labels = torch.clamp(labels, 0, args.vocab_size - 1)
-            if pre_violate and step % 50 == 0:
-                print(
-                    f"[run_toy_distill] ⚠ clamped token ids to vocab_size={args.vocab_size}",
-                    flush=True,
-                )
+            # Handle token IDs for toy models - preserve classification tokens
+            input_ids, labels = handle_toy_vocab_clamping(
+                input_ids, labels, args.vocab_size, args.eight_ball, args.binary_classifier, args.ternary_classifier
+            )
 
             # Forward pass
             student_logits = model(input_ids)

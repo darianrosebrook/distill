@@ -1423,10 +1423,12 @@ class TestConfigValidation:
                             "model": {"vocab_size": -1000},  # Invalid
                             "training": {"steps": 100},
                         }
-                        with patch("training.distill_kd.sys.exit", side_effect=SystemExit(1)) as mock_exit:
-                            # Call main - should catch ValueError and exit
-                            with pytest.raises(SystemExit):
-                                main()
+                        with patch("training.distill_kd.torch") as mock_torch:
+                            mock_torch.device.return_value = Mock()
+                            with patch("training.distill_kd.sys.exit", side_effect=SystemExit(1)) as mock_exit:
+                                # Call main - should catch ValueError and exit
+                                with pytest.raises(SystemExit):
+                                    main()
                             
                             # Verify sys.exit was called with error code 1
                             mock_exit.assert_called_once_with(1)
