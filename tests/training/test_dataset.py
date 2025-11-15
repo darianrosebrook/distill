@@ -8,15 +8,13 @@ import pytest
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch, mock_open
+from unittest.mock import Mock, patch
 import torch
-import numpy as np
 
 from training.dataset import (
     load_tokenizer,
     KDDataset,
     collate_kd_batch,
-    HF_TOKENIZER_AVAILABLE,
 )
 
 
@@ -114,7 +112,7 @@ class TestKDDataset:
     @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_kd_dataset_init_with_teacher_logits(self, mock_safe_tokenizer):
         """Test KDDataset initialization with teacher logits available."""
-        mock_tokenizer = self.setup_mock_tokenizer(mock_safe_tokenizer)
+        self.setup_mock_tokenizer(mock_safe_tokenizer)
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
             json.dump({
@@ -147,7 +145,7 @@ class TestKDDataset:
     @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_kd_dataset_load_data_complex_sample(self, mock_safe_tokenizer):
         """Test loading complex sample with all supervision targets."""
-        mock_tokenizer = self.setup_mock_tokenizer(mock_safe_tokenizer)
+        self.setup_mock_tokenizer(mock_safe_tokenizer)
 
         complex_sample = {
             "prompt": "test prompt",
@@ -191,7 +189,7 @@ class TestKDDataset:
     @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_kd_dataset_len(self, mock_safe_tokenizer):
         """Test dataset length reporting."""
-        mock_tokenizer = self.setup_mock_tokenizer(mock_safe_tokenizer)
+        self.setup_mock_tokenizer(mock_safe_tokenizer)
 
         # Create file with 3 samples
         with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
@@ -213,7 +211,7 @@ class TestKDDataset:
     @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_kd_dataset_getitem_basic(self, mock_safe_tokenizer):
         """Test basic __getitem__ functionality."""
-        mock_tokenizer = self.setup_mock_tokenizer(mock_safe_tokenizer)
+        self.setup_mock_tokenizer(mock_safe_tokenizer)
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
             json.dump({
@@ -252,7 +250,7 @@ class TestKDDataset:
     @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_kd_dataset_getitem_with_supervision_targets(self, mock_safe_tokenizer):
         """Test __getitem__ with process-step supervision targets."""
-        mock_tokenizer = self.setup_mock_tokenizer(mock_safe_tokenizer)
+        self.setup_mock_tokenizer(mock_safe_tokenizer)
 
         sample = {
             "prompt": "test prompt",
@@ -301,7 +299,7 @@ class TestKDDataset:
     @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
     def test_kd_dataset_getitem_with_teacher_logits(self, mock_safe_tokenizer):
         """Test __getitem__ with teacher logits."""
-        mock_tokenizer = self.setup_mock_tokenizer(mock_safe_tokenizer)
+        self.setup_mock_tokenizer(mock_safe_tokenizer)
 
         sample = {
             "prompt": "test prompt",

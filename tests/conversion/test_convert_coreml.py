@@ -689,6 +689,77 @@ class TestCreatePlaceholder:
 class TestMainFunction:
     """Test main function."""
 
+    @patch("conversion.convert_coreml.check_coreml_versions")
+    @patch("conversion.convert_coreml.argparse.ArgumentParser")
+    @patch("builtins.print")
+    def test_main_version_check_failure(
+        self,
+        mock_print,
+        mock_parser_class,
+        mock_check_versions,
+    ):
+        """Test main function exits on version check failure."""
+        mock_parser = Mock()
+        mock_args = Mock()
+        mock_args.backend = "onnx"
+        mock_args.input_path = "model.onnx"
+        mock_args.output_path = "output.mlpackage"
+        mock_args.target = "macOS13"
+        mock_args.contract_path = None
+        mock_args.allow_placeholder = False
+        mock_args.compute_units = "all"
+        mock_args.ane_plan = False
+        mock_args.seq = None
+        mock_args.toy = False
+        mock_parser.parse_args.return_value = mock_args
+        mock_parser_class.return_value = mock_parser
+
+        # Version check fails
+        mock_check_versions.side_effect = RuntimeError("Version check failed")
+
+        with patch("conversion.convert_coreml.sys.exit") as mock_exit:
+            from conversion.convert_coreml import main
+            main()
+            mock_exit.assert_called_once_with(1)
+
+    @patch("conversion.convert_coreml.check_coreml_versions")
+    @patch("conversion.convert_coreml.argparse.ArgumentParser")
+    @patch("builtins.print")
+    def test_main_toy_mode_skips_version_check(
+        self,
+        mock_print,
+        mock_parser_class,
+        mock_check_versions,
+    ):
+        """Test main function skips version check in toy mode."""
+        mock_parser = Mock()
+        mock_args = Mock()
+        mock_args.backend = "onnx"
+        mock_args.input_path = "model.onnx"
+        mock_args.output_path = "output.mlpackage"
+        mock_args.target = "macOS13"
+        mock_args.contract_path = None
+        mock_args.allow_placeholder = False
+        mock_args.compute_units = "all"
+        mock_args.ane_plan = False
+        mock_args.seq = None
+        mock_args.toy = True  # Toy mode enabled
+        mock_parser.parse_args.return_value = mock_args
+        mock_parser_class.return_value = mock_parser
+
+        with patch("conversion.convert_coreml.convert_onnx_to_coreml") as mock_convert:
+            with patch("conversion.convert_coreml.Path") as mock_path:
+                mock_path_instance = Mock()
+                mock_path_instance.exists.return_value = True
+                mock_path.return_value = mock_path_instance
+
+                from conversion.convert_coreml import main
+                main()
+
+                # Version check should not be called in toy mode
+                mock_check_versions.assert_not_called()
+                mock_convert.assert_called_once()
+
     @patch("conversion.convert_coreml.convert_pytorch_to_coreml")
     @patch("conversion.convert_coreml.convert_onnx_to_coreml")
     @patch("conversion.convert_coreml.load_contract")
@@ -1065,7 +1136,7 @@ class TestCoreMLConversionIntegration:
 
         with patch.dict("sys.modules", {"torch": Mock(), "coremltools": Mock(), "numpy": np}):
             import sys
-            mock_torch = sys.modules["torch"]
+            sys.modules["torch"]
             mock_ct = sys.modules["coremltools"]
             mock_np = sys.modules["numpy"]
 
@@ -1240,7 +1311,7 @@ class TestCoreMLConversionIntegration:
 
         with patch.dict("sys.modules", {"torch": Mock(), "coremltools": Mock()}):
             import sys
-            mock_torch = sys.modules["torch"]
+            sys.modules["torch"]
             mock_ct = sys.modules["coremltools"]
 
             # Mock successful inference fallback
@@ -1327,7 +1398,7 @@ class TestCoreMLConversionIntegration:
         """Test inference fallback with int32[1,128] shape success."""
         with patch.dict("sys.modules", {"torch": Mock(), "coremltools": Mock(), "numpy": np}):
             import sys
-            mock_torch = sys.modules["torch"]
+            sys.modules["torch"]
             mock_ct = sys.modules["coremltools"]
             mock_np = sys.modules["numpy"]
 
@@ -1366,7 +1437,7 @@ class TestCoreMLConversionIntegration:
         """Test inference fallback with float32[1,128,64] shape success after int32 fails."""
         with patch.dict("sys.modules", {"torch": Mock(), "coremltools": Mock(), "numpy": np}):
             import sys
-            mock_torch = sys.modules["torch"]
+            sys.modules["torch"]
             mock_ct = sys.modules["coremltools"]
             mock_np = sys.modules["numpy"]
 
@@ -1412,7 +1483,7 @@ class TestCoreMLConversionIntegration:
         """Test inference fallback with common shapes [1,512], [1,1024], [1,2048]."""
         with patch.dict("sys.modules", {"torch": Mock(), "coremltools": Mock(), "numpy": np}):
             import sys
-            mock_torch = sys.modules["torch"]
+            sys.modules["torch"]
             mock_ct = sys.modules["coremltools"]
             mock_np = sys.modules["numpy"]
 
@@ -1459,7 +1530,7 @@ class TestCoreMLConversionIntegration:
         """Test inference fallback when all shapes fail, with allow_placeholder=True."""
         with patch.dict("sys.modules", {"torch": Mock(), "coremltools": Mock(), "numpy": np}):
             import sys
-            mock_torch = sys.modules["torch"]
+            sys.modules["torch"]
             mock_ct = sys.modules["coremltools"]
             mock_np = sys.modules["numpy"]
 
@@ -1505,7 +1576,7 @@ class TestCoreMLConversionIntegration:
         """Test inference fallback when all shapes fail, with allow_placeholder=False."""
         with patch.dict("sys.modules", {"torch": Mock(), "coremltools": Mock(), "numpy": np}):
             import sys
-            mock_torch = sys.modules["torch"]
+            sys.modules["torch"]
             mock_ct = sys.modules["coremltools"]
             mock_np = sys.modules["numpy"]
 
