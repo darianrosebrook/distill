@@ -1030,6 +1030,38 @@ class TestSystemHealthChecksEdgeCases:
     @patch("torch.cuda.memory_allocated")
     @patch("torch.cuda.memory_reserved")
     @patch("torch.cuda.get_device_properties")
+    def test_check_gpu_memory_warning_branch(self, mock_get_props, mock_reserved, mock_allocated, mock_cuda_available):
+        """Test check_gpu_memory warning branch (line 306-308)."""
+        mock_cuda_available.return_value = True
+        mock_allocated.return_value = 9000000000  # 9GB
+        mock_reserved.return_value = 0
+        mock_get_props.return_value.total_memory = 10000000000  # 10GB total
+        # 9GB / 10GB = 90% usage, should trigger warning (85-95%)
+        status = SystemHealthChecks.check_gpu_memory()
+        
+        assert status.status == "warning"
+        assert "high" in status.message.lower()
+
+    @patch("torch.cuda.is_available")
+    @patch("torch.cuda.memory_allocated")
+    @patch("torch.cuda.memory_reserved")
+    @patch("torch.cuda.get_device_properties")
+    def test_check_gpu_memory_healthy_branch(self, mock_get_props, mock_reserved, mock_allocated, mock_cuda_available):
+        """Test check_gpu_memory healthy branch (line 309-311)."""
+        mock_cuda_available.return_value = True
+        mock_allocated.return_value = 5000000000  # 5GB
+        mock_reserved.return_value = 0
+        mock_get_props.return_value.total_memory = 10000000000  # 10GB total
+        # 5GB / 10GB = 50% usage, should be healthy (<85%)
+        status = SystemHealthChecks.check_gpu_memory()
+        
+        assert status.status == "healthy"
+        assert "normal" in status.message.lower()
+
+    @patch("torch.cuda.is_available")
+    @patch("torch.cuda.memory_allocated")
+    @patch("torch.cuda.memory_reserved")
+    @patch("torch.cuda.get_device_properties")
     def test_check_gpu_memory_exception(self, mock_get_props, mock_reserved, mock_allocated, mock_cuda_available):
         """Test check_gpu_memory handles exceptions (lines 326-327)."""
         mock_cuda_available.return_value = True
