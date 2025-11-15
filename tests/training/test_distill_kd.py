@@ -51,7 +51,7 @@ class TestUtilityFunctions:
 
         # Should return a tensor
         assert isinstance(result, torch.Tensor)
-        assert str(result.device) == str(device)  # Device comparison
+        assert result.device.type == device.type  # Device type comparison
 
     def test_get_sequence_length_basic(self):
         """Test get_sequence_length function."""
@@ -89,13 +89,13 @@ class TestUtilityFunctions:
         """Test should_enable_qat function."""
         from training.distill_kd import should_enable_qat
 
-        qat_cfg = {"enabled": True, "start_step": 1000, "total_steps": 10000}
+        qat_cfg = {"enabled": True, "start_fraction": 0.1}  # Start at 10% of training
 
-        # Before start
-        assert not should_enable_qat(500, 10000, qat_cfg)
+        # Before start (step 500 < 1000 * 0.1 = 100)
+        assert not should_enable_qat(50, 1000, qat_cfg)
 
-        # After start
-        assert should_enable_qat(1500, 10000, qat_cfg)
+        # After start (step 150 > 1000 * 0.1 = 100)
+        assert should_enable_qat(150, 1000, qat_cfg)
 
     def test_apply_qat_to_model_basic(self, small_model_cfg, device):
         """Test apply_qat_to_model function."""
@@ -113,7 +113,8 @@ class TestUtilityFunctions:
 
         # Should return a model
         assert quantized_model is not None
-        assert quantized_model.device == device
+        # Check that the model has parameters on the correct device
+        assert next(quantized_model.parameters()).device.type == device.type
 
     def test_check_qat_stability_basic(self, small_model_cfg, device):
         """Test check_qat_stability function."""
@@ -121,8 +122,15 @@ class TestUtilityFunctions:
 
         model = StudentLM(small_model_cfg).to(device)
 
+        # Create a simple batch for testing
+        batch = {
+            "input_ids": torch.tensor([[1, 2, 3]], device=device),
+            "attention_mask": torch.tensor([[1, 1, 1]], device=device),
+        }
+
         # Should not raise exception
-        check_qat_stability(model)
+        result = check_qat_stability(model, batch, device)
+        assert isinstance(result, dict)
 
     def test_truncate_batch_to_shape_basic(self, device):
         """Test truncate_batch_to_shape function."""
