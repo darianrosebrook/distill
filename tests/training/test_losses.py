@@ -9,6 +9,7 @@ and CAWS compliance losses.
 
 from unittest.mock import Mock
 
+import pytest
 import torch
 import torch.nn as nn
 
@@ -2682,6 +2683,156 @@ class TestCodeModePreferenceLoss:
             f"verifying > 0 check and averaging (not < 0 or == 0)"
         )
 
+    def test_code_mode_preference_loss_prefer_ts_api_false_branch(self, device):
+        """Test CodeModePreferenceLoss when prefer_ts_api_over_direct_tool is False (line 830->840 branch)."""
+        # This test covers the branch where prefer_ts_api_over_direct_tool is False
+        # The if branch at line 830 should not execute
+        batch_size = 2
+        seq_len = 20
+        vocab_size = 1000
+        
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+        
+        batch_meta = [
+            {
+                "tool_count": 2,
+                "intermediate_sizes": [10, 15],
+                "pii_tags_present": False,
+            },
+            {
+                "tool_count": 1,
+                "intermediate_sizes": [8],
+                "pii_tags_present": False,
+            },
+        ]
+        
+        span_targets = [
+            {
+                "ts_mode_spans": [(0, 5), (10, 15)],
+                "direct_tool_spans": [(5, 10)],
+            },
+            {
+                "ts_mode_spans": [(0, 8)],
+                "direct_tool_spans": [],
+            },
+        ]
+        
+        # Create loss with prefer_ts_api_over_direct_tool = False
+        loss_fn = CodeModePreferenceLoss(
+            eligibility_rules={"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []},
+            reward={
+                "prefer_ts_api_over_direct_tool": False,  # This should skip the if branch at line 830
+                "penalize_tool_result_roundtrip": True,
+            },
+            weights={"pos": 0.5, "neg": 0.3},
+        )
+        
+        result = loss_fn.forward(student_logits, span_targets=span_targets, batch_meta=batch_meta)
+        
+        assert isinstance(result, torch.Tensor)
+        assert result.requires_grad
+
+    def test_code_mode_preference_loss_penalize_tool_result_roundtrip_false_branch(self, device):
+        """Test CodeModePreferenceLoss when penalize_tool_result_roundtrip is False (line 843->841 branch)."""
+        # This test covers the branch where penalize_tool_result_roundtrip is False
+        # The if branch at line 840 should not execute
+        batch_size = 2
+        seq_len = 20
+        vocab_size = 1000
+        
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+        
+        batch_meta = [
+            {
+                "tool_count": 2,
+                "intermediate_sizes": [10, 15],
+                "pii_tags_present": False,
+            },
+            {
+                "tool_count": 1,
+                "intermediate_sizes": [8],
+                "pii_tags_present": False,
+            },
+        ]
+        
+        span_targets = [
+            {
+                "ts_mode_spans": [(0, 5), (10, 15)],
+                "direct_tool_spans": [(5, 10)],
+            },
+            {
+                "ts_mode_spans": [(0, 8)],
+                "direct_tool_spans": [],
+            },
+        ]
+        
+        # Create loss with penalize_tool_result_roundtrip = False
+        loss_fn = CodeModePreferenceLoss(
+            eligibility_rules={"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []},
+            reward={
+                "prefer_ts_api_over_direct_tool": True,
+                "penalize_tool_result_roundtrip": False,  # This should skip the if branch at line 840
+            },
+            weights={"pos": 0.5, "neg": 0.3},
+        )
+        
+        result = loss_fn.forward(student_logits, span_targets=span_targets, batch_meta=batch_meta)
+        
+        assert isinstance(result, torch.Tensor)
+        assert result.requires_grad
+
+    def test_code_mode_preference_loss_num_eligible_zero_else_branch(self, device):
+        """Test CodeModePreferenceLoss when num_eligible is 0 (line 851->854 else branch)."""
+        # This test covers the else branch at line 851 when num_eligible == 0
+        # This happens when no samples are eligible (all fail eligibility checks)
+        batch_size = 2
+        seq_len = 20
+        vocab_size = 1000
+        
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+        
+        # Create batch_meta where all samples fail eligibility (e.g., tool_count < min_tools)
+        batch_meta = [
+            {
+                "tool_count": 0,  # Below minimum
+                "intermediate_sizes": [],
+                "pii_tags_present": False,
+            },
+            {
+                "tool_count": 0,  # Below minimum
+                "intermediate_sizes": [],
+                "pii_tags_present": False,
+            },
+        ]
+        
+        span_targets = [
+            {
+                "ts_mode_spans": [],
+                "direct_tool_spans": [],
+            },
+            {
+                "ts_mode_spans": [],
+                "direct_tool_spans": [],
+            },
+        ]
+        
+        loss_fn = CodeModePreferenceLoss(
+            eligibility_rules={"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []},
+            reward={
+                "prefer_ts_api_over_direct_tool": True,
+                "penalize_tool_result_roundtrip": True,
+            },
+            weights={"pos": 0.5, "neg": 0.3},
+        )
+        
+        # When num_eligible is 0, the function should return total_loss without division
+        # But since total_loss starts at 0.0, it should return 0.0
+        result = loss_fn.forward(student_logits, span_targets=span_targets, batch_meta=batch_meta)
+        
+        assert isinstance(result, torch.Tensor)
+        # When no samples are eligible, loss should be 0.0 (or the initial value)
+        assert result.item() == 0.0
+
     def test_code_mode_preference_loss_penalize_tool_result_roundtrip_true_check(self, device):
         """Test CodeModePreferenceLoss with penalize_tool_result_roundtrip True check.
         
@@ -4022,5 +4173,326 @@ class TestEntropyWeighting:
         )
 
 
+class TestLengthAwareKDLossEdgeCases:
+    """Test edge cases for length_aware_kd_loss."""
+
+    def test_length_aware_kd_loss_invalid_reduction(self, device):
+        """Test length_aware_kd_loss raises ValueError for invalid reduction (line 373)."""
+        student_attn_mask = torch.ones(2, 10, device=device)
+        teacher_attn_mask = torch.ones(2, 8, device=device)
+        required_fields_present = torch.tensor([True, False], device=device)
+
+        with pytest.raises(ValueError, match="Unknown reduction"):
+            length_aware_kd_loss(
+                student_attn_mask,
+                teacher_attn_mask,
+                required_fields_present,
+                reduction="invalid"
+            )
+
+
+class TestEarlyToolCallLossEdgeCases:
+    """Test edge cases for early_tool_call_loss."""
+
+    def test_early_tool_call_loss_no_json_tokens_empty_list(self, device, mock_tokenizer):
+        """Test early_tool_call_loss when json_token_ids is empty (line 502)."""
+        batch_size = 2
+        seq_len = 20
+        vocab_size = 1000
+
+        logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+        input_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        tool_should_be_used = torch.tensor([True, False], device=device)
+
+        # Mock tokenizer to raise AttributeError/KeyError for all JSON tokens
+        # This will result in empty json_token_ids list
+        def mock_convert_tokens_to_ids(token):
+            if token in ["{", "[", '"']:
+                raise KeyError(f"Token {token} not found")
+            return None
+        
+        mock_tokenizer.convert_tokens_to_ids = Mock(side_effect=mock_convert_tokens_to_ids)
+
+        loss, diagnostics = early_tool_call_loss(
+            logits,
+            input_ids,
+            tool_should_be_used,
+            mock_tokenizer,
+            teacher_prefix_ids=None,
+            N=25,
+            json_prior_weight=0.02,
+        )
+
+        assert isinstance(loss, torch.Tensor)
+        assert loss.item() == 0.0  # Should be zero when no JSON tokens
+        assert diagnostics["early_tool.mean_json_prior_nll0"] == 0.0
+
+
+
+class TestCombinedKDLossEdgeCases:
+    """Test edge cases for combined_kd_loss."""
+
+    def test_combined_kd_loss_loss_mask_shape_mismatch_teacher_targets(self, device):
+        """Test combined_kd_loss when loss_mask shape doesn't match teacher_targets (lines 607-616)."""
+        batch_size = 2
+        seq_len = 10
+        vocab_size = 1000
+
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+        teacher_targets = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        # Create loss_mask with mismatched shape
+        loss_mask = torch.ones(batch_size, seq_len + 5, dtype=torch.bool, device=device)
+
+        losses = combined_kd_loss(
+            student_logits=student_logits,
+            teacher_logits=None,
+            teacher_targets=teacher_targets,
+            ground_truth_targets=None,
+            ce_teacher_weight=0.2,
+            loss_mask=loss_mask,
+        )
+
+        # Should use teacher_targets directly when shapes don't match (line 616)
+        assert "ce_teacher" in losses
+        assert "total" in losses
+
+    def test_combined_kd_loss_loss_mask_shape_match_teacher_targets(self, device):
+        """Test combined_kd_loss when loss_mask shape matches teacher_targets (line 612)."""
+        batch_size = 2
+        seq_len = 10
+        vocab_size = 1000
+
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+        teacher_targets = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        # Create loss_mask with matching shape
+        loss_mask = torch.ones(batch_size, seq_len, dtype=torch.bool, device=device)
+        # Set some positions to False to test masking
+        loss_mask[0, 5:] = False
+
+        losses = combined_kd_loss(
+            student_logits=student_logits,
+            teacher_logits=None,
+            teacher_targets=teacher_targets,
+            ground_truth_targets=None,
+            ce_teacher_weight=0.2,
+            loss_mask=loss_mask,
+        )
+
+        # Should mask teacher_targets when shapes match (line 612)
+        assert "ce_teacher" in losses
+        assert "total" in losses
+
+    def test_combined_kd_loss_loss_mask_shape_mismatch_ground_truth(self, device):
+        """Test combined_kd_loss when loss_mask shape doesn't match ground_truth_targets (line 664)."""
+        batch_size = 2
+        seq_len = 10
+        vocab_size = 1000
+
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+        ground_truth_targets = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        # Create loss_mask with mismatched shape
+        loss_mask = torch.ones(batch_size, seq_len - 3, dtype=torch.bool, device=device)
+
+        losses = combined_kd_loss(
+            student_logits=student_logits,
+            teacher_logits=None,
+            teacher_targets=None,
+            ground_truth_targets=ground_truth_targets,
+            ce_ground_truth_weight=0.2,
+            loss_mask=loss_mask,
+        )
+
+        # Should use ground_truth_targets directly when shapes don't match (line 664)
+        assert "ce_ground_truth" in losses
+        assert "total" in losses
+
+    def test_combined_kd_loss_loss_mask_shape_match_ground_truth(self, device):
+        """Test combined_kd_loss when loss_mask shape matches ground_truth_targets (line 658)."""
+        batch_size = 2
+        seq_len = 10
+        vocab_size = 1000
+
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+        ground_truth_targets = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        # Create loss_mask with matching shape
+        loss_mask = torch.ones(batch_size, seq_len, dtype=torch.bool, device=device)
+        # Set some positions to False to test masking
+        loss_mask[0, 5:] = False
+
+        losses = combined_kd_loss(
+            student_logits=student_logits,
+            teacher_logits=None,
+            teacher_targets=None,
+            ground_truth_targets=ground_truth_targets,
+            ce_ground_truth_weight=0.2,
+            loss_mask=loss_mask,
+        )
+
+        # Should mask ground_truth_targets when shapes match (line 658)
+        assert "ce_ground_truth" in losses
+        assert "total" in losses
+
+    def test_combined_kd_loss_with_tool_name_loss(self, device):
+        """Test combined_kd_loss with tool_name_loss (lines 628-632)."""
+        batch_size = 2
+        seq_len = 10
+        vocab_size = 1000
+        tool_len = 5
+
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+        tool_name_ids = torch.randint(0, vocab_size, (batch_size, tool_len), device=device)
+        tool_name_mask = torch.ones(batch_size, tool_len, dtype=torch.bool, device=device)
+
+        losses = combined_kd_loss(
+            student_logits=student_logits,
+            teacher_logits=None,
+            teacher_targets=None,
+            ground_truth_targets=None,
+            tool_name_ids=tool_name_ids,
+            tool_name_mask=tool_name_mask,
+            w_tool=0.15,
+        )
+
+        assert "tool_name" in losses
+        assert "total" in losses
+
+    def test_combined_kd_loss_with_integration_loss(self, device):
+        """Test combined_kd_loss with integration_copy_loss (lines 642-646)."""
+        batch_size = 2
+        seq_len = 10
+        vocab_size = 1000
+        int_len = 4
+
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+        tool_result_fields = torch.randint(0, vocab_size, (batch_size, int_len), device=device)
+        integration_mask = torch.ones(batch_size, int_len, dtype=torch.bool, device=device)
+
+        losses = combined_kd_loss(
+            student_logits=student_logits,
+            teacher_logits=None,
+            teacher_targets=None,
+            ground_truth_targets=None,
+            tool_result_fields=tool_result_fields,
+            integration_mask=integration_mask,
+            w_integr=0.10,
+        )
+
+        assert "integration" in losses
+        assert "total" in losses
+
+    def test_combined_kd_loss_non_finite_total_loss_nan(self, device):
+        """Test combined_kd_loss raises RuntimeError when total_loss contains NaN (lines 689-691)."""
+        batch_size = 2
+        seq_len = 10
+        vocab_size = 1000
+
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+        teacher_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+
+        # Create a loss that will produce NaN
+        # We'll patch kl_divergence to return NaN
+        from unittest.mock import patch
+        with patch('training.losses.kl_divergence', return_value=torch.tensor(float('nan'), device=device)):
+            with pytest.raises(RuntimeError, match="Total loss is not finite"):
+                combined_kd_loss(
+                    student_logits=student_logits,
+                    teacher_logits=teacher_logits,
+                    teacher_targets=None,
+                    ground_truth_targets=None,
+                    kl_weight=1.0,
+                )
+
+    def test_combined_kd_loss_non_finite_total_loss_inf(self, device):
+        """Test combined_kd_loss raises RuntimeError when total_loss contains Inf (lines 689-691)."""
+        batch_size = 2
+        seq_len = 10
+        vocab_size = 1000
+
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+        teacher_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+
+        # Create a loss that will produce Inf
+        from unittest.mock import patch
+        with patch('training.losses.kl_divergence', return_value=torch.tensor(float('inf'), device=device)):
+            with pytest.raises(RuntimeError, match="Total loss is not finite"):
+                combined_kd_loss(
+                    student_logits=student_logits,
+                    teacher_logits=teacher_logits,
+                    teacher_targets=None,
+                    ground_truth_targets=None,
+                    kl_weight=1.0,
+                )
+
+
+class TestCAWSComplianceLossEdgeCases:
+    """Test edge cases for CAWS compliance loss."""
+
+    def test_caws_compliance_loss_claim_extraction_exception(self, device):
+        """Test caws_compliance_loss handles claim extraction exception (lines 1044-1046)."""
+        student_output = "The answer is 42."
+        teacher_output = "The answer is 42."
+
+        # Create a claim extractor that raises an exception
+        mock_extractor = Mock()
+        mock_extractor.extract_claims.side_effect = Exception("Extraction failed")
+
+        loss = caws_compliance_loss(student_output, teacher_output, claim_extractor=mock_extractor)
+
+        # Should fall back to heuristic evaluation
+        assert isinstance(loss, torch.Tensor)
+        assert loss.item() >= 0.0
+
+
+class TestClaimSupportedByTeacher:
+    """Test _claim_supported_by_teacher helper function."""
+
+    def test_claim_supported_by_teacher_with_statement_attribute(self, device):
+        """Test _claim_supported_by_teacher with ExtractedClaim objects (lines 1123, 1133)."""
+        from training.losses import _claim_supported_by_teacher
+        from training.claim_extraction import ExtractedClaim
+
+        student_claim = ExtractedClaim(
+            statement="The answer is 42",
+            confidence=0.8,
+            is_verifiable=True,
+            has_context=False,
+        )
+
+        teacher_claims = [
+            ExtractedClaim(
+                statement="The answer is 42 and the status is success",
+                confidence=0.9,
+                is_verifiable=True,
+                has_context=False,
+            )
+        ]
+
+        result = _claim_supported_by_teacher(student_claim, teacher_claims)
+        assert result is True
+
+    def test_claim_supported_by_teacher_substring_containment(self, device):
+        """Test _claim_supported_by_teacher with substring containment (line 1148)."""
+        from training.losses import _claim_supported_by_teacher
+
+        # Test student_text in teacher_text (line 1148)
+        student_claim = "The answer is 42"
+        teacher_claims = ["The answer is 42 and the status is success"]
+
+        result = _claim_supported_by_teacher(student_claim, teacher_claims)
+        assert result is True
+
+        # Test teacher_text in student_text (line 1148)
+        student_claim = "The answer is 42 and the status is success"
+        teacher_claims = ["The answer is 42"]
+
+        result = _claim_supported_by_teacher(student_claim, teacher_claims)
+        assert result is True
+
+        # Test case where Jaccard similarity is low but substring match exists
+        student_claim = "answer"
+        teacher_claims = ["The answer is 42"]
+
+        result = _claim_supported_by_teacher(student_claim, teacher_claims)
+        assert result is True
 
 
