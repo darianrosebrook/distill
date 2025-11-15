@@ -1061,6 +1061,97 @@ class TestClassificationEvalIntegration:
         # The function may not calculate prediction_confidence, so just verify it runs
         assert isinstance(metrics, EvaluationMetrics)
 
+
+class TestLoadClassificationConfigEdgeCases:
+    """Test edge cases for load_classification_config."""
+
+    def test_load_classification_config_empty_path(self):
+        """Test load_classification_config with empty path (line 73-74)."""
+        with pytest.raises(ValueError, match="Config path is required"):
+            load_classification_config("")
+
+    def test_load_classification_config_invalid_module_path_format(self):
+        """Test load_classification_config with invalid module path format (lines 135-138)."""
+        with pytest.raises(ValueError, match="Invalid config path format"):
+            load_classification_config("invalid")  # Single part, not module.attribute
+
+    def test_load_classification_config_module_not_found_import_error(self):
+        """Test load_classification_config with module not found (line 145-146)."""
+        # The function may raise ValueError instead of ImportError depending on the error path
+        with pytest.raises((ImportError, ValueError), match="(Cannot find module|Failed to load config)"):
+            load_classification_config("nonexistent.module.CONFIG")
+
+
+class TestEvaluatePyTorchModelEdgeCases:
+    """Test edge cases for evaluate_pytorch_model."""
+
+    def test_evaluate_pytorch_model_missing_config_argument(self):
+        """Test evaluate_pytorch_model with missing config argument (lines 186, 191, 194)."""
+        with pytest.raises(TypeError, match="missing required argument: config"):
+            evaluate_pytorch_model("model.pt", ["question1", "question2"])  # Missing config
+
+    def test_evaluate_pytorch_model_missing_config_with_tokenizer(self):
+        """Test evaluate_pytorch_model with tokenizer but missing config (line 186)."""
+        with pytest.raises(TypeError, match="missing required argument: config"):
+            evaluate_pytorch_model("model.pt", "tokenizer.pt", ["question1"])  # Missing config
+
+    def test_evaluate_pytorch_model_empty_questions_returns_empty(self):
+        """Test evaluate_pytorch_model with empty questions list (line 201-202)."""
+        mock_config = ClassificationConfig(
+            name="test",
+            class_names=["Class1", "Class2"],
+            token_ids=[100, 101],
+            id_to_name={100: "Class1", 101: "Class2"},
+            name_to_id={"Class1": 100, "Class2": 101},
+        )
+        result = evaluate_pytorch_model("model.pt", [], mock_config)
+        assert result == []
+
+
+class TestEvaluateCoreMLModelEdgeCases:
+    """Test edge cases for evaluate_coreml_model."""
+
+    def test_evaluate_coreml_model_missing_config_argument(self):
+        """Test evaluate_coreml_model with missing config argument."""
+        with pytest.raises(TypeError, match="missing required argument: config"):
+            evaluate_coreml_model("model.mlpackage", ["question1"])  # Missing config
+
+    def test_evaluate_coreml_model_empty_questions_returns_empty(self):
+        """Test evaluate_coreml_model with empty questions list."""
+        mock_config = ClassificationConfig(
+            name="test",
+            class_names=["Class1", "Class2"],
+            token_ids=[100, 101],
+            id_to_name={100: "Class1", 101: "Class2"},
+            name_to_id={"Class1": 100, "Class2": 101},
+        )
+        result = evaluate_coreml_model("model.mlpackage", [], mock_config)
+        assert result == []
+
+
+class TestComparePredictionsEdgeCases:
+    """Test edge cases for compare_predictions."""
+
+    @pytest.fixture
+    def mock_config(self):
+        """Create mock classification config."""
+        return ClassificationConfig(
+            name="test",
+            class_names=["Class1", "Class2"],
+            token_ids=[100, 101],
+            id_to_name={100: "Class1", 101: "Class2"},
+            name_to_id={"Class1": 100, "Class2": 101},
+        )
+
+    def test_compare_predictions_empty_lists_detailed(self, mock_config):
+        """Test compare_predictions with empty lists returns proper structure."""
+        metrics = compare_predictions([], [], mock_config)
+        
+        assert metrics.total_questions == 0
+        assert metrics.exact_match_rate == 0.0
+        assert metrics.mean_l2_drift is None
+        assert metrics.mean_kl_divergence is None
+
     def test_classification_config_inconsistent_mappings(self):
         """Test ClassificationConfig with inconsistent mappings (edge case)."""
         # Config with mappings that don't match class_names/token_ids

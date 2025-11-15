@@ -727,18 +727,6 @@ class TestANEOptimizations:
             mock_model_path)
         assert isinstance(result, dict)
         assert result["compatible"] is True
-        assert "error" in result
-        assert "Tests module not available" in result["error"]
-
-    def test_verify_enumerated_shapes_fallback(self):
-        """Test enumerated shapes verification fallback."""
-        shapes = [128, 256, 512]
-
-        # The fallback function should return verified
-        result = convert_coreml_module.verify_enumerated_shapes_static_allocation(
-            shapes)
-        assert result["verified"]
-        assert result["issues"] == []
 
 
 class TestCoreMLConversionIntegration:

@@ -1150,6 +1150,99 @@ class TestConfigValidation:
 
         captured = capsys.readouterr()
         assert "Both latent reasoning and code_mode enabled" in captured.out
+    
+    def test_validate_config_multiple_errors(self):
+        """Test validate_config formats error message correctly with multiple errors (lines 2091-2093)."""
+        config = {
+            "model": {"vocab_size": -1000, "d_model": -128, "n_layers": 0},
+            "training": {"steps": -100, "batch_size": 0},
+            "optimizer": {"lr": -0.001},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            validate_config(config)
+
+        error_msg = str(exc_info.value)
+        # Should contain formatted error message with multiple errors
+        assert "Configuration validation failed:" in error_msg
+        assert "model.vocab_size must be positive" in error_msg
+        assert "model.d_model must be positive" in error_msg
+        assert "model.n_layers must be positive" in error_msg
+        assert "training.steps must be positive" in error_msg
+        assert "training.batch_size must be positive" in error_msg
+        assert "optimizer.lr must be positive" in error_msg
+        # Verify format includes bullet points
+        assert "  - " in error_msg
+    
+    def test_validate_config_zero_values(self):
+        """Test validate_config catches zero values (edge case for <= 0 checks)."""
+        config = {
+            "model": {"vocab_size": 0, "d_model": 0},
+            "training": {"steps": 0, "batch_size": 0},
+            "optimizer": {"lr": 0},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            validate_config(config)
+
+        error_msg = str(exc_info.value)
+        assert "model.vocab_size must be positive" in error_msg
+        assert "model.d_model must be positive" in error_msg
+        assert "training.steps must be positive" in error_msg
+        assert "training.batch_size must be positive" in error_msg
+        assert "optimizer.lr must be positive" in error_msg
+    
+    def test_validate_config_main_error_handling(self, capsys):
+        """Test main function handles config validation errors gracefully (lines 2131-2135)."""
+        from training.distill_kd import main
+        from unittest.mock import Mock, patch
+        
+        config_content = """
+        model:
+          vocab_size: -1000
+        training:
+          steps: 100
+        """
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write(config_content)
+            config_path = f.name
+        
+        try:
+            mock_parser = Mock()
+            mock_args = Mock()
+            mock_args.config = [config_path]
+            mock_args.resume = None
+            mock_args.output_dir = "outputs"
+            mock_args.local_rank = -1
+            
+            with patch("training.distill_kd.argparse.ArgumentParser") as mock_parser_class:
+                mock_parser_class.return_value = mock_parser
+                mock_parser.parse_args.return_value = mock_args
+                
+                with patch("training.distill_kd.check_training_versions"):
+                    with patch("training.distill_kd.merge_configs") as mock_merge:
+                        # Mock merge_configs to return invalid config that will fail validation
+                        mock_merge.return_value = {
+                            "model": {"vocab_size": -1000},  # Invalid
+                            "training": {"steps": 100},
+                        }
+                        with patch("training.distill_kd.sys.exit", side_effect=SystemExit(1)) as mock_exit:
+                            # Call main - should catch ValueError and exit
+                            with pytest.raises(SystemExit):
+                                main()
+                            
+                            # Verify sys.exit was called with error code 1
+                            mock_exit.assert_called_once_with(1)
+                            
+                            # Verify error message was printed
+                            captured = capsys.readouterr()
+                            assert "ERROR" in captured.out or "error" in captured.out.lower()
+                            assert "vocab_size" in captured.out or "validation" in captured.out.lower()
+        finally:
+            import os
+            if os.path.exists(config_path):
+                os.unlink(config_path)
 
 
 class TestComputeRequiredFieldsPresent:
@@ -5739,6 +5832,150 @@ class TestOptionalImports:
                                                                         mock_aggregate.assert_not_called()
         finally:
             import os
+            if os.path.exists(config_path):
+                os.unlink(config_path)
+
+
+class TestDistributedTraining:
+    """Test distributed training setup and DDP wrapper paths (lines 2117-2125, 2183-2185)."""
+    
+    def test_main_distributed_setup_with_local_rank(self):
+        """Test main function sets up distributed training when local_rank >= 0 (lines 2118-2122)."""
+        from training.distill_kd import main
+        from unittest.mock import Mock, patch
+        import tempfile
+        import os
+        
+        config_content = """
+        arch:
+          vocab_size: 1000
+          d_model: 128
+        train:
+          steps: 0
+        distillation:
+          use_intermediate_layers: false
+        io:
+          tokenizer_path: models/student/tokenizer
+        """
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write(config_content)
+            config_path = f.name
+        
+        try:
+            mock_parser = Mock()
+            mock_args = Mock()
+            mock_args.config = [config_path]
+            mock_args.resume = None
+            mock_args.output_dir = "outputs"
+            mock_args.local_rank = 0
+            
+            with patch("training.distill_kd.argparse.ArgumentParser") as mock_parser_class:
+                mock_parser_class.return_value = mock_parser
+                mock_parser.parse_args.return_value = mock_args
+                with patch("training.distill_kd.check_training_versions"):
+                    with patch("training.distill_kd.merge_configs") as mock_merge:
+                        mock_merge.return_value = {
+                            "arch": {"vocab_size": 1000, "d_model": 128},
+                            "train": {"steps": 0},
+                            "distillation": {"use_intermediate_layers": False},
+                            "io": {"tokenizer_path": "models/student/tokenizer"},
+                        }
+                        with patch("training.distill_kd.validate_config"):
+                            with patch("training.distill_kd.Path.mkdir"):
+                                with patch("training.distill_kd.create_model") as mock_create_model:
+                                    mock_model = Mock()
+                                    mock_param = Mock()
+                                    mock_param.numel.return_value = 1000
+                                    mock_model.parameters.return_value = [mock_param]
+                                    mock_create_model.return_value = mock_model
+                                    with patch("training.distill_kd.torch.device"):
+                                        with patch("training.distill_kd.torch.cuda.is_available", return_value=True):
+                                            with patch("training.distill_kd.dist.init_process_group") as mock_init:
+                                                with patch("training.distill_kd.torch.cuda.set_device") as mock_set_device:
+                                                    with patch("training.distill_kd.TOKENIZER_MIGRATION_AVAILABLE", False):
+                                                        with patch("training.distill_kd.DDP") as mock_ddp:
+                                                            with patch("training.distill_kd.create_optimizer") as mock_create_opt:
+                                                                mock_optimizer = Mock()
+                                                                mock_optimizer.param_groups = [{"lr": 0.001}]
+                                                                mock_create_opt.return_value = mock_optimizer
+                                                                with patch("training.distill_kd.DataLoader"):
+                                                                    try:
+                                                                        main()
+                                                                    except (SystemExit, AttributeError, TypeError):
+                                                                        pass
+                                                                    mock_init.assert_called_once_with(backend="nccl")
+                                                                    mock_set_device.assert_called_once_with(0)
+                                                                    mock_ddp.assert_called_once()
+        finally:
+            if os.path.exists(config_path):
+                os.unlink(config_path)
+    
+    def test_main_non_distributed_setup_with_local_rank_negative(self):
+        """Test main function uses regular device setup when local_rank < 0 (lines 2123-2125)."""
+        from training.distill_kd import main
+        from unittest.mock import Mock, patch
+        import tempfile
+        import os
+        
+        config_content = """
+        arch:
+          vocab_size: 1000
+          d_model: 128
+        train:
+          steps: 0
+        distillation:
+          use_intermediate_layers: false
+        io:
+          tokenizer_path: models/student/tokenizer
+        """
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write(config_content)
+            config_path = f.name
+        
+        try:
+            mock_parser = Mock()
+            mock_args = Mock()
+            mock_args.config = [config_path]
+            mock_args.resume = None
+            mock_args.output_dir = "outputs"
+            mock_args.local_rank = -1
+            
+            with patch("training.distill_kd.argparse.ArgumentParser") as mock_parser_class:
+                mock_parser_class.return_value = mock_parser
+                mock_parser.parse_args.return_value = mock_args
+                with patch("training.distill_kd.check_training_versions"):
+                    with patch("training.distill_kd.merge_configs") as mock_merge:
+                        mock_merge.return_value = {
+                            "arch": {"vocab_size": 1000, "d_model": 128},
+                            "train": {"steps": 0},
+                            "distillation": {"use_intermediate_layers": False},
+                            "io": {"tokenizer_path": "models/student/tokenizer"},
+                        }
+                        with patch("training.distill_kd.validate_config"):
+                            with patch("training.distill_kd.Path.mkdir"):
+                                with patch("training.distill_kd.create_model") as mock_create_model:
+                                    mock_model = Mock()
+                                    mock_param = Mock()
+                                    mock_param.numel.return_value = 1000
+                                    mock_model.parameters.return_value = [mock_param]
+                                    mock_create_model.return_value = mock_model
+                                    with patch("training.distill_kd.torch.device"):
+                                        with patch("training.distill_kd.torch.cuda.is_available", return_value=False):
+                                            with patch("training.distill_kd.dist.init_process_group") as mock_init:
+                                                with patch("training.distill_kd.TOKENIZER_MIGRATION_AVAILABLE", False):
+                                                    with patch("training.distill_kd.DDP") as mock_ddp:
+                                                        with patch("training.distill_kd.create_optimizer") as mock_create_opt:
+                                                            mock_optimizer = Mock()
+                                                            mock_optimizer.param_groups = [{"lr": 0.001}]
+                                                            mock_create_opt.return_value = mock_optimizer
+                                                            with patch("training.distill_kd.DataLoader"):
+                                                                try:
+                                                                    main()
+                                                                except (SystemExit, AttributeError, TypeError):
+                                                                    pass
+                                                                mock_init.assert_not_called()
+                                                                mock_ddp.assert_not_called()
+        finally:
             if os.path.exists(config_path):
                 os.unlink(config_path)
 

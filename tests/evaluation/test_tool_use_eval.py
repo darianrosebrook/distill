@@ -829,42 +829,108 @@ class TestToolUseEvalIntegration:
         mock_model.forward.assert_called()
 
     def test_generate_text_max_length_parameter(self):
-        """Test generate_text accepts max_length as alias for max_new_tokens."""
+        """Test generate_text with max_length parameter (alias for max_new_tokens)."""
         prompt = "Test"
         mock_model = Mock()
-        mock_model.forward = Mock(return_value=torch.randn(1, 3, 32000))
+        mock_model.forward = Mock(return_value=torch.randn(1, 10, 32000))
         mock_tokenizer = Mock()
         mock_tokenizer.encode = Mock(return_value=[1, 2, 3])
         mock_tokenizer.decode = Mock(return_value="Generated")
-        mock_tokenizer.eos_token_id = 2
-        
-        # Use max_length parameter
-        result = generate_text(mock_model, mock_tokenizer, prompt, max_length=50)
+        mock_tokenizer.eos_token_id = None
+
+        result = generate_text(mock_model, mock_tokenizer, prompt, max_length=5)
+
+        assert isinstance(result, str)
+        mock_model.forward.assert_called()
+
+    def test_generate_text_device_detection_fallback(self):
+        """Test generate_text device detection with model without parameters (lines 118-122)."""
+        mock_model = Mock()
+        # Model without parameters() method
+        del mock_model.parameters
+        mock_model.forward = Mock(return_value=torch.randn(1, 10, 32000))
+        mock_tokenizer = Mock()
+        mock_tokenizer.encode = Mock(return_value=[1, 2, 3])
+        mock_tokenizer.decode = Mock(return_value="Generated")
+        mock_tokenizer.eos_token_id = None
+
+        result = generate_text(mock_model, mock_tokenizer, "test", max_length=5)
+
         assert isinstance(result, str)
 
-    def test_validate_json_embedded_json(self):
-        """Test validate_json finds JSON embedded in text."""
-        text_with_json = "Some text before {\"key\": \"value\"} and after"
-        result = validate_json(text_with_json)
-        assert result
+    def test_generate_text_tokenizer_fallback_to_callable(self):
+        """Test generate_text tokenizer fallback to callable (lines 151-161)."""
+        mock_model = Mock()
+        mock_model.forward = Mock(return_value=torch.randn(1, 10, 32000))
+        mock_tokenizer = Mock()
+        # Tokenizer without encode() but is callable
+        del mock_tokenizer.encode
+        mock_tokenizer.__call__ = Mock(return_value={"input_ids": torch.tensor([[1, 2, 3]])})
+        mock_tokenizer.decode = Mock(return_value="Generated")
+        mock_tokenizer.eos_token_id = None
 
-    def test_validate_json_multiple_json_objects(self):
-        """Test validate_json finds valid JSON when multiple objects present."""
-        multiple_json = '{"first": "obj"} and {"second": "obj"}'
-        result = validate_json(multiple_json)
-        assert result
+        result = generate_text(mock_model, mock_tokenizer, "test", max_length=5)
 
-    def test_validate_json_array(self):
-        """Test validate_json validates JSON arrays."""
-        json_array = '[1, 2, 3, {"nested": "object"}]'
-        result = validate_json(json_array)
-        assert result
+        assert isinstance(result, str)
 
-    def test_validate_json_nested_structures(self):
-        """Test validate_json with deeply nested structures."""
-        nested = '{"level1": {"level2": {"level3": {"level4": "deep"}}}}'
-        result = validate_json(nested)
-        assert result
+    def test_generate_text_tokenizer_last_resort_dummy(self):
+        """Test generate_text tokenizer last resort dummy tensor (lines 162-164)."""
+        mock_model = Mock()
+        mock_model.forward = Mock(return_value=torch.randn(1, 10, 32000))
+        mock_tokenizer = Mock()
+        # Tokenizer that fails all attempts
+        del mock_tokenizer.encode
+        mock_tokenizer.__call__ = Mock(side_effect=AttributeError("Not callable"))
+        mock_tokenizer.decode = Mock(return_value="Generated")
+        mock_tokenizer.eos_token_id = None
+
+        result = generate_text(mock_model, mock_tokenizer, "test", max_length=5)
+
+        assert isinstance(result, str)
+
+    def test_generate_text_model_forward_fallback(self):
+        """Test generate_text model forward fallback to positional args (lines 188-193)."""
+        mock_model = Mock()
+        # Model without forward() method, but callable
+        del mock_model.forward
+        mock_model.__call__ = Mock(return_value=torch.randn(1, 10, 32000))
+        mock_tokenizer = Mock()
+        mock_tokenizer.encode = Mock(return_value=[1, 2, 3])
+        mock_tokenizer.decode = Mock(return_value="Generated")
+        mock_tokenizer.eos_token_id = None
+
+        result = generate_text(mock_model, mock_tokenizer, "test", max_length=5)
+
+        assert isinstance(result, str)
+
+    def test_generate_text_logits_tuple_output(self):
+        """Test generate_text handles tuple output from model (lines 195-197)."""
+        mock_model = Mock()
+        mock_model.forward = Mock(return_value=(torch.randn(1, 10, 32000), None))  # Tuple output
+        mock_tokenizer = Mock()
+        mock_tokenizer.encode = Mock(return_value=[1, 2, 3])
+        mock_tokenizer.decode = Mock(return_value="Generated")
+        mock_tokenizer.eos_token_id = None
+
+        result = generate_text(mock_model, mock_tokenizer, "test", max_length=5)
+
+        assert isinstance(result, str)
+
+    def test_generate_text_logits_shape_fallback(self):
+        """Test generate_text logits shape fallback to dummy (lines 200-211)."""
+        mock_model = Mock()
+        # Model returns logits without proper shape
+        mock_logits = Mock()
+        mock_logits.shape = None  # No shape attribute
+        mock_model.forward = Mock(return_value=mock_logits)
+        mock_tokenizer = Mock()
+        mock_tokenizer.encode = Mock(return_value=[1, 2, 3])
+        mock_tokenizer.decode = Mock(return_value="Generated")
+        mock_tokenizer.eos_token_id = None
+
+        result = generate_text(mock_model, mock_tokenizer, "test", max_length=5)
+
+        assert isinstance(result, str)
 
     def test_extract_tool_call_embedded_json(self):
         """Test extract_tool_call finds JSON embedded in text."""

@@ -4496,3 +4496,143 @@ class TestClaimSupportedByTeacher:
         assert result is True
 
 
+class TestEarlyToolCallLossBranchCoverage:
+    """Test branch coverage for early_tool_call_loss."""
+
+    def test_early_tool_call_loss_ramp_t_zero_branch(self, device, mock_tokenizer):
+        """Test early_tool_call_loss with ramp_t=0.0 to cover line 500 branch (ramp_t > 0 is False)."""
+        batch_size = 2
+        seq_len = 50
+        vocab_size = 1000
+
+        logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+        input_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        tool_should_be_used = torch.tensor([True, False], device=device)
+
+        # Call with ramp_t=0.0 and no teacher_prefix_ids (to go through else branch)
+        # Also need json_token_ids to be non-empty to hit the inner if at line 475
+        loss, diagnostics = early_tool_call_loss(
+            logits=logits,
+            input_ids=input_ids,
+            tool_should_be_used=tool_should_be_used,
+            tokenizer=mock_tokenizer,
+            teacher_prefix_ids=None,  # No teacher prefix, so goes to else branch
+            N=25,
+            ce_weight=0.2,
+            json_prior_weight=0.02,
+            ramp_t=0.0,  # This should trigger the else branch at line 500
+        )
+
+        # Should have mean_json_prior_nll0 = 0.0 when ramp_t = 0.0
+        assert isinstance(loss, torch.Tensor)
+        assert "early_tool.mean_json_prior_nll0" in diagnostics
+        assert diagnostics["early_tool.mean_json_prior_nll0"] == 0.0
+
+    def test_early_tool_call_loss_json_log_probs_list_empty_branch(self, device, mock_tokenizer):
+        """Test early_tool_call_loss when json_log_probs_list is empty to cover line 500 branch."""
+        batch_size = 2
+        seq_len = 50
+        vocab_size = 1000
+
+        logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+        input_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        tool_should_be_used = torch.tensor([True, False], device=device)
+
+        # Mock tokenizer to return None for all tokens (so json_token_ids is empty)
+        mock_tokenizer.convert_tokens_to_ids = Mock(return_value=None)
+
+        # Call with ramp_t=1.0 and no teacher_prefix_ids
+        loss, diagnostics = early_tool_call_loss(
+            logits=logits,
+            input_ids=input_ids,
+            tool_should_be_used=tool_should_be_used,
+            tokenizer=mock_tokenizer,
+            teacher_prefix_ids=None,
+            N=25,
+            ce_weight=0.2,
+            json_prior_weight=0.02,
+            ramp_t=1.0,
+        )
+
+        # Should have mean_json_prior_nll0 = 0.0 when json_log_probs_list is empty
+        assert isinstance(loss, torch.Tensor)
+        assert "early_tool.mean_json_prior_nll0" in diagnostics
+        assert diagnostics["early_tool.mean_json_prior_nll0"] == 0.0
+
+
+class TestCodeModePreferenceLossBranchCoverage:
+    """Test branch coverage for CodeModePreferenceLoss."""
+
+    def test_code_mode_preference_loss_span_boundary_check_false_branch(self, device):
+        """Test CodeModePreferenceLoss with spans that fail boundary check (line 843->841: start >= log_probs.size(1) or end > log_probs.size(1))."""
+        batch_size = 2
+        seq_len = 10
+        vocab_size = 1000
+
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+
+        # Create span targets with start/end that exceed log_probs.size(1)
+        span_targets = [
+            {
+                "ts_mode_spans": [(5, 15)],  # end > seq_len (10)
+                "direct_tool_spans": [(12, 20)],  # start >= seq_len (10)
+            },
+            {
+                "ts_mode_spans": [],
+                "direct_tool_spans": [],
+            },
+        ]
+
+        batch_meta = [
+            {"tool_count": 3, "intermediate_sizes": [], "pii_tags_present": False},  # Eligible
+            {"tool_count": 1, "intermediate_sizes": [], "pii_tags_present": False},  # Not eligible
+        ]
+
+        loss_fn = CodeModePreferenceLoss(
+            eligibility_rules={"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []},
+            reward={"prefer_ts_api_over_direct_tool": True, "penalize_tool_result_roundtrip": True},
+            vocab_ids={},
+            weights={"pos": 1.0, "neg": 1.0},
+        )
+
+        loss = loss_fn(student_logits, span_targets=span_targets, batch_meta=batch_meta)
+
+        # Should return a loss tensor (even if spans are out of bounds, they're skipped)
+        assert isinstance(loss, torch.Tensor)
+        assert loss.requires_grad
+
+    def test_code_mode_preference_loss_num_eligible_zero_return_branch(self, device):
+        """Test CodeModePreferenceLoss when num_eligible=0 to cover line 851->854 branch (num_eligible > 0 is False)."""
+        batch_size = 2
+        seq_len = 10
+        vocab_size = 1000
+
+        student_logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
+
+        # Create batch_meta where no samples are eligible, but provide span_targets so we go through the loop
+        # but num_eligible remains 0
+        batch_meta = [
+            {"tool_count": 1, "intermediate_sizes": [], "pii_tags_present": False},  # Not eligible (min_tools=2)
+            {"tool_count": 0, "intermediate_sizes": [], "pii_tags_present": False},  # Not eligible
+        ]
+
+        # Provide span_targets so we don't return early
+        span_targets = [
+            {"ts_mode_spans": [(0, 5)], "direct_tool_spans": []},
+            {"ts_mode_spans": [(0, 5)], "direct_tool_spans": []},
+        ]
+
+        loss_fn = CodeModePreferenceLoss(
+            eligibility_rules={"min_tools": 2, "min_intermediate_chars": 10000, "pii_patterns": []},
+            reward={"prefer_ts_api_over_direct_tool": True, "penalize_tool_result_roundtrip": True},
+            vocab_ids={},
+            weights={"pos": 1.0, "neg": 1.0},
+        )
+
+        loss = loss_fn(student_logits, span_targets=span_targets, batch_meta=batch_meta)
+
+        # Should return zero loss when no eligible samples (num_eligible = 0)
+        assert isinstance(loss, torch.Tensor)
+        # When num_eligible is 0, total_loss is returned without division (line 854)
+        assert loss.item() == 0.0
+
