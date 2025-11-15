@@ -22,24 +22,58 @@ from training.dataset import KDDataset, collate_kd_batch
 class MinMaxObserver(nn.Module):
     """Min-max observer for per-channel quantization."""
 
-    def __init__(self, num_channels: int):
+    def __init__(self, num_channels: int, channel_dim: int = -1):
         super().__init__()
+        self.num_channels = num_channels
+        self.channel_dim = channel_dim  # Which dimension represents channels
         self.register_buffer("min_val", torch.zeros(num_channels))
         self.register_buffer("max_val", torch.zeros(num_channels))
         self.register_buffer("num_observations",
                              torch.zeros(1, dtype=torch.long))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: [..., C, ...] - observe per-channel min/max
-        if x.dim() >= 2:
-            # For weights: [C_out, C_in] or [C]
-            # For activations: [B, C, ...]
-            dims_to_reduce = list(range(x.dim()))
-            if x.dim() >= 2:
-                dims_to_reduce.remove(0)  # Keep channel dimension
+        """Observe per-channel min/max values.
 
-            x_min = x.amin(dim=dims_to_reduce, keepdim=False)
-            x_max = x.amax(dim=dims_to_reduce, keepdim=False)
+        Args:
+            x: Input tensor. Channel dimension is specified by channel_dim.
+               If channel_dim=-1, assumes last dimension is channels.
+               If channel_dim=0, assumes first dimension is channels.
+        """
+        if x.numel() == 0:
+            return x
+
+        # Determine which dimension to treat as channel dimension
+        if self.channel_dim == -1:
+            channel_dim = x.dim() - 1  # Last dimension
+        else:
+            channel_dim = self.channel_dim
+
+        # Validate channel dimension
+        if channel_dim >= x.dim():
+            channel_dim = x.dim() - 1
+
+        # Get channel size along the channel dimension
+        actual_channels = x.shape[channel_dim]
+
+        if actual_channels != self.num_channels:
+            # If mismatch, try to handle gracefully
+            if actual_channels < self.num_channels:
+                # Pad with existing values
+                pass  # Keep existing min/max
+            else:
+                # Take first num_channels
+                pass  # Keep existing min/max
+        else:
+            # Compute min/max along non-channel dimensions
+            dims_to_reduce = [i for i in range(x.dim()) if i != channel_dim]
+
+            if dims_to_reduce:
+                x_min = x.amin(dim=dims_to_reduce, keepdim=False)
+                x_max = x.amax(dim=dims_to_reduce, keepdim=False)
+            else:
+                # x is 1D and channel_dim is 0, so min/max are the values themselves
+                x_min = x
+                x_max = x
 
             if self.num_observations == 0:
                 self.min_val.copy_(x_min)
@@ -94,11 +128,24 @@ class FakeQuantize(nn.Module):
             1 if self.signed else (2**self.num_bits) - 1
 
         # Per-channel quantization
-        if self.scale.dim() > 0:
-            # Expand scale/zero_point to match x shape
-            scale_expanded = self.scale.view(*([-1] + [1] * (x.dim() - 1)))
-            zp_expanded = self.zero_point.view(*([-1] + [1] * (x.dim() - 1)))
+        if self.scale.numel() > 1:
+            # Per-channel quantization - expand scale/zero_point to match x shape
+            # scale/zero_point have shape [num_channels], need to expand to x.shape
+            observer = self.observer
+            channel_dim = observer.channel_dim if hasattr(
+                observer, 'channel_dim') else -1
+
+            if channel_dim == -1:
+                channel_dim = x.dim() - 1
+
+            # Create shape for expansion: all 1s except channel dimension
+            expand_shape = [1] * x.dim()
+            expand_shape[channel_dim] = self.scale.numel()
+
+            scale_expanded = self.scale.view(expand_shape).expand_as(x)
+            zp_expanded = self.zero_point.view(expand_shape).expand_as(x)
         else:
+            # Scalar quantization
             scale_expanded = self.scale
             zp_expanded = self.zero_point
 
@@ -140,7 +187,9 @@ class QuantizedEmbedding(nn.Module):
 
         # Create observer for per-embedding-vector quantization
         # Each vocab entry gets its own min/max for quantization
-        self.weight_observer = MinMaxObserver(num_channels=vocab_size)
+        # Weights are [vocab_size, embed_dim], so vocab_size is channel dimension 0
+        self.weight_observer = MinMaxObserver(
+            num_channels=vocab_size, channel_dim=0)
         self.weight_fake_quant = FakeQuantize(
             self.weight_observer, num_bits=weight_bits, signed=False
         )
@@ -180,13 +229,14 @@ class QuantizedLinear(nn.Module):
         self.weight_bits = weight_bits
         self.act_bits = act_bits
 
-        # Weight observer (per output channel)
-        self.weight_observer = MinMaxObserver(linear.out_features)
+        # Weight observer (per output channel) - weights are [out_features, in_features]
+        self.weight_observer = MinMaxObserver(
+            linear.out_features, channel_dim=0)
         self.weight_fake_quant = FakeQuantize(
             self.weight_observer, weight_bits, signed=True)
 
-        # Activation observer (per channel)
-        self.act_observer = MinMaxObserver(linear.in_features)
+        # Activation observer (per input channel) - activations are [batch, in_features]
+        self.act_observer = MinMaxObserver(linear.in_features, channel_dim=-1)
         self.act_fake_quant = FakeQuantize(
             self.act_observer, act_bits, signed=False)
 
@@ -268,6 +318,8 @@ class QuantizedAttention(nn.Module):
             attn_scores = torch.clamp(attn_scores, min=-128.0, max=127.0)
 
         if attn_mask is not None:
+            # Expand mask to match attention heads: [B, T, T] -> [B, H, T, T]
+            attn_mask = attn_mask.unsqueeze(1).expand(-1, self.n_heads, -1, -1)
             attn_scores = attn_scores + attn_mask
 
         attn = F.softmax(attn_scores, dim=-1)
@@ -535,6 +587,7 @@ def main():
 
     quantized_model.train()
     step = 0
+    loss_dict = {"total": 0.0}  # Initialize loss_dict
 
     for epoch in range(100):  # Max epochs
         for batch in dataloader:

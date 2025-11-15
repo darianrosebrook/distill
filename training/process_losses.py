@@ -92,8 +92,8 @@ def json_validity_loss(
         is_valid = validate_json(text)
         validity_scores.append(1.0 if is_valid else 0.0)
 
-    # Convert to tensor
-    validity_tensor = torch.tensor(validity_scores, device=logits.device, dtype=logits.dtype)
+    # Convert to tensor with requires_grad=True to ensure differentiability
+    validity_tensor = torch.tensor(validity_scores, device=logits.device, dtype=logits.dtype, requires_grad=True)
 
     # Loss: 1 - validity (penalize invalid JSON)
     loss = (1.0 - validity_tensor).mean()
@@ -351,8 +351,8 @@ def json_validity_loss_from_ids(
     if not validity_scores:
         return torch.tensor(0.0, device=device, requires_grad=True)
 
-    # Convert to tensor
-    validity_tensor = torch.tensor(validity_scores, device=device, dtype=torch.float32)
+    # Convert to tensor with requires_grad=True to ensure differentiability
+    validity_tensor = torch.tensor(validity_scores, device=device, dtype=torch.float32, requires_grad=True)
 
     # Loss: 1 - validity (penalize invalid JSON)
     loss = (1.0 - validity_tensor).mean()

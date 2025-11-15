@@ -8,17 +8,19 @@ Tests min-max observers, fake quantization, quantized layers, and model quantiza
 import pytest
 import torch
 import torch.nn as nn
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, mock_open, ANY
 from training.quant_qat_int8 import (
     MinMaxObserver,
     FakeQuantize,
     QuantizedLinear,
     QuantizedAttention,
+    QuantizedEmbedding,
     quantize_linear,
     quantize_attention,
     quantize_swiglu,
     quantize_model,
     load_model_from_checkpoint,
+    main,
 )
 
 
@@ -33,12 +35,14 @@ class TestMinMaxObserver:
         assert observer.num_observations.item() == 0
 
     def test_min_max_observer_forward_2d(self):
-        """Test observing 2D tensor."""
-        observer = MinMaxObserver(num_channels=4)
+        """Test observing 2D tensor with channel_dim=-1 (last dim is channels)."""
+        observer = MinMaxObserver(num_channels=4, channel_dim=-1)
         x = torch.tensor([[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]])
 
         observer(x)
 
+        # For channel_dim=-1, each column represents a channel
+        # x has shape [2, 4], so channels are along dim 1
         assert torch.allclose(
             observer.min_val, torch.tensor([1.0, 2.0, 3.0, 4.0]))
         assert torch.allclose(
@@ -47,7 +51,7 @@ class TestMinMaxObserver:
 
     def test_min_max_observer_forward_multiple_observations(self):
         """Test observing multiple times."""
-        observer = MinMaxObserver(num_channels=3)
+        observer = MinMaxObserver(num_channels=3, channel_dim=-1)
         x1 = torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
         x2 = torch.tensor([[0.5, 1.5, 2.5], [7.0, 8.0, 9.0]])
 
@@ -90,13 +94,15 @@ class TestMinMaxObserver:
 
     def test_min_max_observer_1d_tensor(self):
         """Test observing 1D tensor."""
-        observer = MinMaxObserver(num_channels=3)
+        observer = MinMaxObserver(num_channels=3, channel_dim=0)
         x = torch.tensor([1.0, 2.0, 3.0])
 
         observer(x)
 
-        # Should handle 1D tensors
+        # Should handle 1D tensors with channel_dim=0
         assert observer.num_observations.item() == 1
+        assert torch.allclose(observer.min_val, torch.tensor([1.0, 2.0, 3.0]))
+        assert torch.allclose(observer.max_val, torch.tensor([1.0, 2.0, 3.0]))
 
 
 class TestFakeQuantize:
@@ -105,7 +111,7 @@ class TestFakeQuantize:
     @pytest.fixture
     def observer(self):
         """Create a MinMaxObserver instance."""
-        return MinMaxObserver(num_channels=4)
+        return MinMaxObserver(num_channels=4, channel_dim=-1)
 
     def test_fake_quantize_initialization(self, observer):
         """Test FakeQuantize initialization."""
@@ -310,6 +316,41 @@ class TestQuantizedAttention:
         assert result.shape == (2, 10, 128)
 
 
+class TestQuantizedEmbedding:
+    """Test QuantizedEmbedding class."""
+
+    def test_quantized_embedding_initialization(self):
+        """Test QuantizedEmbedding initialization."""
+        embedding = nn.Embedding(1000, 128)
+        quantized = QuantizedEmbedding(embedding, weight_bits=8)
+
+        assert quantized.num_embeddings == 1000
+        assert quantized.embedding_dim == 128
+        assert quantized.weight_bits == 8
+        assert quantized.weight.shape == embedding.weight.shape
+
+    def test_quantized_embedding_forward(self):
+        """Test QuantizedEmbedding forward pass."""
+        embedding = nn.Embedding(1000, 128)
+        quantized = QuantizedEmbedding(embedding, weight_bits=8)
+        quantized.train()
+
+        input_ids = torch.randint(0, 1000, (2, 10))
+        result = quantized(input_ids)
+
+        assert result.shape == (2, 10, 128)
+
+    def test_quantized_embedding_extra_repr(self):
+        """Test QuantizedEmbedding extra_repr."""
+        embedding = nn.Embedding(1000, 128)
+        quantized = QuantizedEmbedding(embedding, weight_bits=8)
+
+        repr_str = quantized.extra_repr()
+        assert "num_embeddings=1000" in repr_str
+        assert "embedding_dim=128" in repr_str
+        assert "weight_bits=8" in repr_str
+
+
 class TestQuantizeFunctions:
     """Test quantization helper functions."""
 
@@ -422,11 +463,11 @@ class TestQuantizeModel:
 class TestLoadModelFromCheckpoint:
     """Test load_model_from_checkpoint function."""
 
-    @patch("training.quant_qat_int8.torch.load")
+    @patch("training.safe_checkpoint_loading.safe_load_checkpoint")
     @patch("training.quant_qat_int8.StudentLM")
     @patch("training.quant_qat_int8.ModelCfg")
     def test_load_model_from_checkpoint_success(
-        self, mock_model_cfg, mock_student_lm, mock_torch_load
+        self, mock_model_cfg, mock_student_lm, mock_safe_load
     ):
         """Test successful model loading from checkpoint."""
         mock_checkpoint = {
@@ -442,7 +483,7 @@ class TestLoadModelFromCheckpoint:
                 }
             },
         }
-        mock_torch_load.return_value = mock_checkpoint
+        mock_safe_load.return_value = mock_checkpoint
 
         mock_config = Mock()
         mock_model_cfg.return_value = mock_config
@@ -457,15 +498,15 @@ class TestLoadModelFromCheckpoint:
         assert result == mock_model
         mock_model.load_state_dict.assert_called_once()
 
-    @patch("training.quant_qat_int8.torch.load")
+    @patch("training.safe_checkpoint_loading.safe_load_checkpoint")
     @patch("training.quant_qat_int8.StudentLM")
     @patch("training.quant_qat_int8.ModelCfg")
     def test_load_model_from_checkpoint_no_config(
-        self, mock_model_cfg, mock_student_lm, mock_torch_load
+        self, mock_model_cfg, mock_student_lm, mock_safe_load
     ):
         """Test model loading without config in checkpoint."""
         mock_checkpoint = {"model_state_dict": {"weight": torch.randn(5, 5)}}
-        mock_torch_load.return_value = mock_checkpoint
+        mock_safe_load.return_value = mock_checkpoint
 
         mock_config = Mock()
         mock_model_cfg.return_value = mock_config
@@ -482,12 +523,101 @@ class TestLoadModelFromCheckpoint:
         assert result == mock_model
 
 
+class TestMainFunction:
+    """Test main function and training utilities."""
+
+    @patch("training.quant_qat_int8.torch.save")
+    @patch("training.quant_qat_int8.DataLoader")
+    @patch("training.quant_qat_int8.KDDataset")
+    @patch("training.quant_qat_int8.load_model_from_checkpoint")
+    @patch("training.quant_qat_int8.quantize_model")
+    @patch("training.quant_qat_int8.torch.optim.AdamW")
+    @patch("training.quant_qat_int8.argparse.ArgumentParser.parse_args")
+    @patch("training.quant_qat_int8.yaml.safe_load")
+    @patch("builtins.open", new_callable=mock_open)
+    def test_main_qat_disabled(self, mock_file, mock_yaml, mock_parse_args,
+                              mock_optimizer, mock_quantize, mock_load_checkpoint,
+                              mock_dataset, mock_dataloader, mock_save):
+        """Test main function when QAT is disabled."""
+        # Mock config with QAT disabled
+        mock_yaml.return_value = {"qat": {"enable": False}}
+
+        # Mock arguments
+        mock_args = Mock()
+        mock_args.config = ["config.yaml"]
+        mock_parse_args.return_value = mock_args
+
+        # Call main
+        main()
+
+        # Should exit early without doing anything
+        mock_load_checkpoint.assert_not_called()
+
+    @patch("training.quant_qat_int8.torch.save")
+    @patch("training.quant_qat_int8.DataLoader")
+    @patch("training.quant_qat_int8.KDDataset")
+    @patch("training.quant_qat_int8.load_model_from_checkpoint")
+    @patch("training.quant_qat_int8.quantize_model")
+    @patch("training.quant_qat_int8.torch.optim.AdamW")
+    @patch("training.quant_qat_int8.argparse.ArgumentParser.parse_args")
+    @patch("training.quant_qat_int8.yaml.safe_load")
+    @patch("builtins.open", new_callable=mock_open)
+    def test_main_training_loop(self, mock_file, mock_yaml, mock_parse_args,
+                               mock_optimizer, mock_quantize, mock_load_checkpoint,
+                               mock_dataset, mock_dataloader, mock_save):
+        """Test main function training loop setup."""
+        # Mock config with QAT enabled
+        mock_yaml.return_value = {
+            "qat": {"enable": True, "weight_bits": 8, "act_bits": 8},
+            "optimizer": {"lr": 1e-4, "betas": [0.9, 0.95], "weight_decay": 0.1},
+            "train": {"micro_batch_size": 2, "fp16": False, "grad_clip": 1.0},
+            "io": {"train_shards": ["data.jsonl"], "tokenizer_path": "tokenizer"},
+            "distillation": {"kl_weight": 0.5, "ce_teacher_weight": 0.3, "ce_ground_truth_weight": 0.2},
+            "kd": {"teacher_logits_available": False, "kd_temperature": 2.0}
+        }
+
+        # Mock arguments
+        mock_args = Mock()
+        mock_args.config = ["config.yaml"]
+        mock_args.checkpoint = "checkpoint.pt"
+        mock_args.output_dir = "output"
+        mock_args.steps = 10
+        mock_args.save_every = 5
+        mock_args.log_every = 1
+        mock_parse_args.return_value = mock_args
+
+        # Mock model and components
+        mock_model = Mock()
+        mock_load_checkpoint.return_value = mock_model
+
+        mock_quantized_model = Mock()
+        mock_quantize.return_value = mock_quantized_model
+
+        mock_optimizer_instance = Mock()
+        mock_optimizer.return_value = mock_optimizer_instance
+
+        mock_data_loader = Mock()
+        mock_dataloader.return_value = mock_data_loader
+
+        # Mock empty dataloader (no batches)
+        mock_data_loader.__iter__ = Mock(return_value=iter([]))
+
+        # Call main
+        main()
+
+        # Verify components were called
+        mock_load_checkpoint.assert_called_once_with("checkpoint.pt", ANY)
+        mock_quantize.assert_called_once()
+        mock_optimizer.assert_called_once()
+        mock_save.assert_called_once()  # Final checkpoint
+
+
 class TestQuantizationIntegration:
     """Test integration of quantization components."""
 
     def test_observer_to_fake_quant_workflow(self):
         """Test complete observer to fake quant workflow."""
-        observer = MinMaxObserver(num_channels=4)
+        observer = MinMaxObserver(num_channels=4, channel_dim=-1)
         fake_quant = FakeQuantize(observer, num_bits=8, signed=True)
         fake_quant.train()
 

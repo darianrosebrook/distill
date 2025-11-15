@@ -220,7 +220,7 @@ class TestToolSelectionLoss:
         seq_len = 20
         vocab_size = 1000
 
-        logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+        logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
         generated_texts = ['{"name": "tool1", "args": {}}', '{"name": "tool2", "args": {}}']
         target_tool_names = ["tool1", "tool2"]
         tool_names = ["tool1", "tool2", "tool3"]
@@ -287,7 +287,7 @@ class TestToolSelectionLossFromIDs:
         seq_len = 20
         vocab_size = 1000
 
-        logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+        logits = torch.randn(batch_size, seq_len, vocab_size, device=device, requires_grad=True)
         tool_name_ids = torch.tensor([[10, 11, 12], [13, 14, 15]], device=device)
         tool_name_mask = torch.tensor([[True, True, False], [True, True, True]], device=device)
 
