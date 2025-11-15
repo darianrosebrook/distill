@@ -104,9 +104,9 @@ def export_prefill(
         traced = torch.jit.trace(wrapper, example_input)
         traced.eval()
 
-        # If wrapper returns dict, we need to handle it differently
-        # For now, keep returning tensor directly - CoreML will name it
-        # The output name stabilization happens in convert_coreml.py
+        # Wrapper returns tensor(s) directly - output naming is handled in convert_coreml.py
+        # This design keeps the export layer simple and centralizes output naming logic
+        # CoreML conversion will rename outputs based on contract and output count
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     traced.save(str(output_path))
