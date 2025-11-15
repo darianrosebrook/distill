@@ -1160,3 +1160,31 @@ class TestTrainingMonitorEdgeCases:
         assert summary["final_loss"] == 0.1
         assert "training_duration_seconds" in summary
         assert "metrics_file" in summary
+
+    def test_get_status(self, training_monitor):
+        """Test get_status method (line 483)."""
+        status = training_monitor.get_status()
+        
+        assert isinstance(status, dict)
+        assert "health" in status
+        assert "metrics_count" in status
+        assert "training_active" in status
+        assert "last_health_check" in status
+        assert status["training_active"] is False  # Not started yet
+        
+        # Start training and check again
+        training_monitor.start_training({})
+        status = training_monitor.get_status()
+        assert status["training_active"] is True
+
+    def test_record_step_health_check_interval_not_exceeded(self, training_monitor):
+        """Test record_step when health check interval is NOT exceeded (line 409->exit branch)."""
+        training_monitor.start_training({})
+        training_monitor.last_health_check = time.time()  # Set to current time
+        
+        # Record step immediately - should NOT trigger health check
+        with patch.object(training_monitor, '_run_health_checks') as mock_run:
+            training_monitor.record_step(step=1, loss=0.5, lr=0.001)
+            # Should NOT have called _run_health_checks (line 409->exit branch)
+            assert not mock_run.called
+
