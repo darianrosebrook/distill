@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
@@ -174,9 +175,23 @@ def main():
 
     # Create dataset
     try:
-        # Check if dataset might have teacher_logits (for 8-ball or future ndjson support)
-        # For now, assume 8-ball datasets may have them
+        # Detect if dataset has teacher_logits by checking first sample
+        # This is more robust than assuming based on dataset type
         teacher_logits_available = args.eight_ball
+        
+        # Try to peek at first sample to detect teacher_logits availability
+        try:
+            import json
+            with open(args.input_path, 'r') as f:
+                first_line = f.readline()
+                if first_line.strip():
+                    first_sample = json.loads(first_line)
+                    if "teacher_logits" in first_sample and first_sample["teacher_logits"]:
+                        teacher_logits_available = True
+                        print("[run_toy_distill] Detected teacher_logits in dataset")
+        except Exception:
+            # If detection fails, fall back to command-line flag
+            pass
 
         dataset = KDDataset(
             jsonl_path=args.input_path,
@@ -288,10 +303,13 @@ def main():
             if (
                 args.eight_ball or args.binary_classifier or args.ternary_classifier
             ) and teacher_logits_tensor is None:
-                # Create loss mask that heavily weights mystical answer positions
-                loss_mask = torch.ones_like(labels, dtype=torch.bool, device=device)
+                # Create position weights that heavily weight mystical answer positions
+                # Base weight for all positions, higher weight for answer positions
+                position_weights = torch.ones_like(labels, dtype=torch.float32, device=device)
+                answer_position_weight = 3.0  # 3x higher weight for answer positions
+                base_weight = 1.0
 
-                # For each sample in batch, identify mystical answer positions
+                # For each sample in batch, identify mystical answer positions and weight them
                 for batch_idx_in_batch in range(labels.shape[0]):
                     sample_data = batch["raw_data"][batch_idx_in_batch]
 
@@ -303,26 +321,49 @@ def main():
                     full_tokens = tokenizer.encode(full_text, add_special_tokens=False)
                     answer_tokens = tokenizer.encode(mystical_answer, add_special_tokens=False)
 
-                    # Find where answer appears in the sequence
+                    # Find where answer appears in the sequence and weight those positions
+                    answer_start_pos = None
                     for start_pos in range(len(full_tokens) - len(answer_tokens) + 1):
                         if full_tokens[start_pos : start_pos + len(answer_tokens)] == answer_tokens:
-                            # Mark these positions with higher weight (True = normal weight)
-                            # We'll use loss weighting instead of masking
+                            answer_start_pos = start_pos
                             break
 
-                    # For now, weight all positions equally but this could be improved
-                    # to give higher weight to mystical answer positions
+                    # Apply higher weight to answer positions
+                    if answer_start_pos is not None:
+                        # Map token positions to sequence positions (accounting for padding/truncation)
+                        seq_len = labels.shape[1]
+                        answer_end_pos = min(answer_start_pos + len(answer_tokens), seq_len)
+                        answer_start_seq = min(answer_start_pos, seq_len)
+                        
+                        # Set higher weight for answer token positions
+                        position_weights[batch_idx_in_batch, answer_start_seq:answer_end_pos] = answer_position_weight
 
-                loss_dict = combined_kd_loss(
-                    student_logits=student_logits.float(),
-                    teacher_logits=None,
-                    teacher_targets=None,
-                    ground_truth_targets=labels.to(device),
-                    loss_mask=loss_mask,
-                    kl_weight=0.0,  # No KL loss without teacher
-                    ce_teacher_weight=0.0,  # No teacher CE
-                    ce_ground_truth_weight=1.0,  # Focus on ground truth
+                # Compute weighted cross-entropy loss manually for ground truth
+                logits_flat = student_logits.float().view(-1, student_logits.size(-1))
+                targets_flat = labels.view(-1)
+                weights_flat = position_weights.view(-1)
+
+                # Compute per-token cross-entropy loss
+                ce_per_token = F.cross_entropy(
+                    logits_flat, targets_flat, ignore_index=-100, reduction='none'
                 )
+
+                # Apply position weights
+                weighted_loss = ce_per_token * weights_flat
+
+                # Mask out ignored tokens and compute mean
+                valid_mask = (targets_flat != -100)
+                if valid_mask.sum() > 0:
+                    total_weighted_loss = weighted_loss[valid_mask].sum()
+                    total_weight = weights_flat[valid_mask].sum()
+                    ce_gt = total_weighted_loss / (total_weight + 1e-8)
+                else:
+                    ce_gt = torch.tensor(0.0, device=device, requires_grad=True)
+
+                loss_dict = {
+                    "ce_ground_truth": ce_gt,
+                    "total": ce_gt,
+                }
             else:
                 # Standard KD loss
                 loss_dict = combined_kd_loss(

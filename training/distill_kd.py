@@ -964,6 +964,7 @@ def train_step(
     grad_accum_steps: int = 1,
     grad_accum_counter: int = 0,
     current_step: int = 0,
+    code_mode_loss_module: Optional[nn.Module] = None,
 ) -> Dict[str, float]:
     """
     Single training step.
@@ -1273,18 +1274,17 @@ def train_step(
                         except Exception:
                             pass
 
-                # Code-mode loss module should be initialized in main() and passed here
-                # For now, check if it exists as a closure variable or use fallback
-                code_mode_loss_module = getattr(train_step, "_code_mode_loss_module", None)
+                # Code-mode loss module should be initialized in main() and passed as parameter
+                # Fallback initialization only if not provided (for backward compatibility)
                 if code_mode_loss_module is None:
-                    # Fallback: initialize on first call (not ideal, but backward compatible)
+                    # Fallback: initialize on first call if not provided
+                    # This maintains backward compatibility but is not recommended
                     code_mode_loss_module = CodeModePreferenceLoss(
                         eligibility_rules=eligibility_rules,
                         reward=reward_cfg,
                         vocab_ids=vocab_ids,
                         weights=loss_weights,
                     ).to(device)
-                    train_step._code_mode_loss_module = code_mode_loss_module
 
                 # Get batch metadata and span targets (NO DECODING - pre-computed during dataset generation)
                 batch_meta = batch.get("meta", {})
@@ -2475,8 +2475,7 @@ def main():
             weights=loss_weights,
         ).to(device)
 
-        # Store as module attribute for train_step to access
-        train_step._code_mode_loss_module = code_mode_loss_module
+        # Code-mode loss module will be passed as parameter to train_step
 
         if is_main_process:
             print(
@@ -2614,6 +2613,7 @@ def main():
                     grad_accum_steps=grad_accum,
                     grad_accum_counter=grad_accum_counter,
                     current_step=step,
+                    code_mode_loss_module=code_mode_loss_module,
                 )
 
                 # Step learning rate scheduler after each optimizer step

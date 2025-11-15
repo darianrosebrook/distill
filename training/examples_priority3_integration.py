@@ -167,16 +167,20 @@ def compute_teacher_quality_score(
     """
     Compute quality score for teacher output.
 
-    This is a placeholder - in practice, you would use:
-    - Human evaluation scores
-    - Automated metrics (BLEU, ROUGE, etc.)
-    - Model-based evaluation
-    - Task-specific metrics
+    Supports multiple scoring methods:
+    - "heuristic": Structure-based heuristic scoring (fast, no dependencies)
+    - "bleu": BLEU score computation (requires nltk for full implementation, falls back to simplified)
+
+    For production use, consider:
+    - Human evaluation scores (gold standard but expensive)
+    - ROUGE scores (requires rouge-score package)
+    - Model-based evaluation (requires evaluation model)
+    - Task-specific metrics (domain-dependent)
 
     Args:
         teacher_output: Teacher model generated text
-        ground_truth: Optional ground truth text for comparison
-        method: Scoring method ("heuristic", "bleu", "rouge", etc.)
+        ground_truth: Optional ground truth text for comparison (required for BLEU)
+        method: Scoring method ("heuristic", "bleu")
 
     Returns:
         Quality score between 0.0 and 1.0

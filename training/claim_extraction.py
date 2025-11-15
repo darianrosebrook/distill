@@ -6,6 +6,10 @@ Provides simplified claim extraction for training purposes, focusing on:
 - Atomic claim extraction
 - Claim extraction success rate measurement
 
+This is an intentionally simplified extractor optimized for training speed and efficiency.
+For production claim extraction with full verification capabilities, use ClaimifyPipeline
+from arbiter.claims.pipeline.
+
 Reference: CLAIM_EXTRACTION_SKEPTICISM_GUARD_RAILS.md
 @author: @darianrosebrook
 """
@@ -29,10 +33,16 @@ class SimpleClaimExtractor:
     """
     Simplified claim extractor for training purposes.
 
+    This is an intentionally simplified implementation optimized for training speed.
+    It uses heuristic-based detection rather than full NLP parsing, making it fast
+    but less comprehensive than ClaimifyPipeline.
+
     Detects verifiable claims using heuristics:
     - Factual indicators (dates, quantities, code references)
     - Structured content (code blocks, lists, JSON)
     - Atomic statements (single facts, not compound)
+
+    For production use with full verification capabilities, use ClaimifyPipeline instead.
     """
 
     # Patterns indicating verifiable content

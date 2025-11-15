@@ -26,8 +26,13 @@ def main(
 ):
     """Convert Judge ONNX model to CoreML with INT8 quantization.
 
-    Note: CoreMLTools does not natively support ONNX→CoreML conversion.
-    For production, convert ONNX→PyTorch first, then use PyTorch→CoreML.
+    IMPORTANT: CoreMLTools does not natively support ONNX→CoreML conversion.
+    This function attempts conversion but may create a placeholder if conversion fails.
+    
+    Production workflow:
+    1. Convert ONNX→PyTorch first (using export_pytorch.py or similar)
+    2. Use PyTorch→CoreML conversion (--backend pytorch) for production
+    
     INT8 quantization should be applied at the ONNX level before conversion,
     or use PyTorch quantization APIs.
 

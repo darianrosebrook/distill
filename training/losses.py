@@ -858,6 +858,9 @@ def caws_compliance_loss(
     student_output: str,
     teacher_output: str,
     claim_extractor=None,
+    budget_weight: float = 1.0,
+    quality_weight: float = 1.5,
+    feature_weight: float = 0.8,
 ) -> torch.Tensor:
     """
     CAWS compliance loss for self-evaluation training.
@@ -871,26 +874,30 @@ def caws_compliance_loss(
         student_output: The model's generated text output
         teacher_output: The teacher's reference output
         claim_extractor: Optional claim extractor for claim evaluation
+        budget_weight: Weight for budget compliance penalty (default: 1.0)
+        quality_weight: Weight for quality compliance penalty (default: 1.5, higher priority)
+        feature_weight: Weight for feature usage compliance penalty (default: 0.8)
 
     Returns:
         Loss tensor where lower values indicate better CAWS compliance
     """
-    loss_components = []
-
     # 1. Evaluate budget compliance (latent spans, loop count)
     budget_penalty = _evaluate_budget_compliance(student_output)
-    loss_components.append(budget_penalty)
 
     # 2. Evaluate quality compliance (claim support, reasoning structure)
     quality_penalty = _evaluate_quality_compliance(student_output, teacher_output, claim_extractor)
-    loss_components.append(quality_penalty)
 
     # 3. Evaluate feature usage compliance (appropriate use of code-mode, latent reasoning)
     feature_penalty = _evaluate_feature_usage_compliance(student_output)
-    loss_components.append(feature_penalty)
 
-    # Combine penalties (sum with equal weights for now)
-    total_loss = sum(loss_components)
+    # Combine penalties with configurable weights
+    # Quality is weighted higher as it directly affects output correctness
+    # Budget and feature usage are important but secondary concerns
+    total_loss = (
+        budget_weight * budget_penalty +
+        quality_weight * quality_penalty +
+        feature_weight * feature_penalty
+    )
 
     # Ensure loss is non-negative and requires gradients for training
     return torch.clamp(torch.tensor(float(total_loss), requires_grad=True), min=0.0)

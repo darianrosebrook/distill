@@ -33,7 +33,11 @@ def run_onnx(onnx_path, input_ids):
 
 
 def run_coreml(mlpackage_path, input_ids):
-    """Run CoreML model inference. Assumes placeholder check already done in main()."""
+    """Run CoreML model inference.
+    
+    Note: Placeholder check should be performed in main() before calling this function.
+    This function assumes a valid CoreML model (not a placeholder).
+    """
     import coremltools as ct
 
     try:

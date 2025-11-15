@@ -42,7 +42,15 @@ class SwiGLU(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
-    """Simplified attention for parity testing (no GQA, no RoPE)."""
+    """Simplified attention for parity testing.
+    
+    This is intentionally simplified for parity testing purposes:
+    - No GQA (Grouped Query Attention) - uses standard multi-head attention
+    - No RoPE (Rotary Position Embeddings) - uses standard positional encoding
+    
+    This simplification makes it easier to verify CoreML conversion correctness
+    without the complexity of production attention mechanisms.
+    """
 
     def __init__(self, d_model: int, n_heads: int):
         super().__init__()

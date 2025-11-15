@@ -147,8 +147,9 @@ class JSONFSM:
         # If we're not inside a string, we only allow structural chars, digits signs, t/f/n, quote
         # If we are inside a string, anything except unescaped quotes; we allow \ escapes.
 
-        # This FSM is deliberately simplified: we enforce key/value separators, brackets balance,
-        # and string delimiters. For practical tool-JSON it is sufficient.
+        # This FSM is intentionally simplified: we enforce key/value separators, brackets balance,
+        # and string delimiters. This design is sufficient for practical tool-JSON generation
+        # and provides good performance with acceptable correctness guarantees.
 
         st.buffer.rstrip()
         # Are we currently inside an open string?

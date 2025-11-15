@@ -407,7 +407,9 @@ class SpeculativeDecoder:
             # Sample random uniform [0, 1] and compare
             return acceptance_prob >= random.uniform(0.0, 1.0)
         else:
-            # Simplified threshold-based acceptance (fallback)
+            # Threshold-based acceptance fallback (used when use_standard_acceptance=False)
+            # This is a simpler acceptance criterion that accepts tokens with probability >= 0.1
+            # Standard acceptance criterion is preferred for better distribution matching
             worker_probs = np.exp(worker_logits - np.max(worker_logits))
             worker_probs = worker_probs / np.sum(worker_probs)
             worker_prob = worker_probs[draft_token]

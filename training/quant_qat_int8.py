@@ -109,6 +109,66 @@ class FakeQuantize(nn.Module):
         return x_dq
 
 
+class QuantizedEmbedding(nn.Module):
+    """Quantized embedding layer with fake quantization for QAT.
+    
+    Performs per-embedding-vector quantization of embedding weights during training.
+    Each embedding vector (vocab entry) is quantized independently with its own
+    scale/zero_point. During forward pass, embeddings are quantized/dequantized
+    to simulate INT8 while maintaining gradients for training.
+    """
+
+    def __init__(self, embedding: nn.Embedding, weight_bits: int = 8):
+        super().__init__()
+        self.weight_bits = weight_bits
+        
+        # Store embedding parameters
+        vocab_size, embed_dim = embedding.weight.shape
+        self.num_embeddings = embedding.num_embeddings
+        self.embedding_dim = embedding.embedding_dim
+        self.padding_idx = embedding.padding_idx
+        self.max_norm = embedding.max_norm
+        self.norm_type = embedding.norm_type
+        self.scale_grad_by_freq = embedding.scale_grad_by_freq
+        self.sparse = embedding.sparse
+        
+        # Create weight parameter (will be quantized during forward)
+        self.register_parameter("weight", nn.Parameter(embedding.weight.data.clone()))
+        
+        # Create observer for per-embedding-vector quantization
+        # Each vocab entry gets its own min/max for quantization
+        self.weight_observer = MinMaxObserver(num_channels=vocab_size)
+        self.weight_fake_quant = FakeQuantize(
+            self.weight_observer, num_bits=weight_bits, signed=False
+        )
+
+    def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
+        """Forward pass with fake quantization of embedding weights."""
+        # Quantize embedding weights per embedding vector (per vocab entry)
+        # Weight shape: [vocab_size, embed_dim]
+        # We quantize each row (embedding vector) independently
+        weight_quantized = self.weight_fake_quant(self.weight)
+        
+        # Perform embedding lookup with quantized weights
+        output = F.embedding(
+            input_ids,
+            weight_quantized,
+            self.padding_idx,
+            self.max_norm,
+            self.norm_type,
+            self.scale_grad_by_freq,
+            self.sparse
+        )
+        
+        return output
+
+    def extra_repr(self) -> str:
+        return f"num_embeddings={self.num_embeddings}, " \
+               f"embedding_dim={self.embedding_dim}, " \
+               f"weight_bits={self.weight_bits}, " \
+               f"padding_idx={self.padding_idx}"
+
+
 class QuantizedLinear(nn.Module):
     """Quantized linear layer with per-channel weight quantization."""
 
@@ -273,20 +333,15 @@ def quantize_model(
     if quantize_embeddings:
         # Check if model has embedding layer
         if hasattr(model, "embed") and isinstance(model.embed, nn.Embedding):
-            # Create quantized embedding wrapper
-            # Note: Embedding quantization requires special handling since embeddings
-            # are looked up by index, not matrix multiplication
-            # For now, we'll use a simple approach: quantize the embedding weights
-            # but keep lookups in FP16 (post-quantization conversion can handle full INT8)
-            print("[quant_qat_int8] WARN: Embedding quantization enabled - may degrade quality")
+            # Replace with quantized embedding wrapper
+            print("[quant_qat_int8] Quantizing embedding layer with fake quantization")
+            print("[quant_qat_int8] WARN: Embedding quantization may degrade quality")
             print("[quant_qat_int8] Consider keeping embeddings FP16 for better quality")
-            # Embedding quantization would require a QuantizedEmbedding class
-            # For now, we'll leave it as-is and document the trade-off
-            # Full implementation would require:
-            # 1. QuantizedEmbedding class with fake quantization
-            # 2. Per-token or per-channel quantization of embedding weights
-            # 3. Quantized lookup with dequantization
-            # This is left as future work due to quality concerns
+            
+            # Create quantized embedding wrapper
+            quantized_embedding = QuantizedEmbedding(model.embed, weight_bits=weight_bits)
+            model.embed = quantized_embedding
+            print(f"[quant_qat_int8] Created QuantizedEmbedding: {quantized_embedding.extra_repr()}")
         else:
             print(
                 "[quant_qat_int8] WARN: Model does not have 'embed' attribute, skipping embedding quantization"

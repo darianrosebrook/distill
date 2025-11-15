@@ -185,8 +185,10 @@ class ANEResidencyMonitor:
         # Coefficient of variation
         cv = variance / (median_time**2) if median_time > 0 else 0
 
-        # Estimate based on timing characteristics
-        # This is a simplified heuristic - production would use more sophisticated analysis
+        # Estimate compute unit distribution based on timing characteristics
+        # This is a heuristic fallback when Instruments.app is not available
+        # For production monitoring, use Instruments.app for accurate ANE/GPU/CPU breakdown
+        # This heuristic works reasonably well for development and smoke testing
         if median_time < 50 and cv < 0.1:
             # Fast and consistent → mostly ANE
             ane_pct = 0.85

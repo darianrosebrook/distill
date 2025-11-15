@@ -470,7 +470,9 @@ def convert_onnx_to_coreml(
                 print(f"[convert_coreml] Renamed output '{old_name}' to 'logits'")
 
     except Exception:
-        # ONNX is not a supported production path - always create placeholder
+        # ONNX→CoreML conversion is not supported by CoreMLTools 9.0
+        # This is a documented limitation, not a bug
+        # Production path: Use PyTorch→CoreML conversion instead
         if allow_placeholder:
             print("[convert_coreml] WARN: ONNX conversion not supported by CoreMLTools")
             print("[convert_coreml] Creating placeholder (SKIP parity)")
