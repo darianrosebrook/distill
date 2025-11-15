@@ -523,21 +523,24 @@ smoke_training: check-versions toy-training
 # Toy E2E pipeline: Full flow from dataset → training → export → conversion → verification
 .PHONY: toy-clean toy-e2e
 
+# Use TMPDIR environment variable for security (avoids hardcoded /tmp/ paths)
+TMPDIR ?= /tmp
+
 toy-clean:
-	rm -rf /tmp/toy_* /tmp/toy.* eval/reports/toy_e2e.json training/toy_test/*.pt training/toy_test/*.jsonl
+	rm -rf $(TMPDIR)/toy_* $(TMPDIR)/toy.* eval/reports/toy_e2e.json training/toy_test/*.pt training/toy_test/*.jsonl
 
 toy-e2e: toy-clean
-	$(PYTHON) -m data.make_toy_kd --out /tmp/toy_kd.jsonl --n 128
-	$(PYTHON) -m training.run_toy_distill --in /tmp/toy_kd.jsonl --out /tmp/toy.ckpt --epochs 2 --mps 0
-	$(PYTHON) -m conversion.export_pytorch --checkpoint /tmp/toy.ckpt --out /tmp/toy_exported --toy --mode prefill --seq 64 --enumerated-T 64 128 256
+	$(PYTHON) -m data.make_toy_kd --out $(TMPDIR)/toy_kd.jsonl --n 128
+	$(PYTHON) -m training.run_toy_distill --in $(TMPDIR)/toy_kd.jsonl --out $(TMPDIR)/toy.ckpt --epochs 2 --mps 0
+	$(PYTHON) -m conversion.export_pytorch --checkpoint $(TMPDIR)/toy.ckpt --out $(TMPDIR)/toy_exported --toy --mode prefill --seq 64 --enumerated-T 64 128 256
 	# Compile a single representative shape fast by default
-	@if [ -f /tmp/toy_exported/student_prefill_T128.pt ]; then \
-		$(PYTHON) -m conversion.convert_coreml --backend pytorch --in /tmp/toy_exported/student_prefill_T128.pt --out /tmp/toy_T128.mlpackage --seq 128 --compute-units all || echo "⚠️  CoreML conversion may have failed (CoreML may not be available)"; \
+	@if [ -f $(TMPDIR)/toy_exported/student_prefill_T128.pt ]; then \
+		$(PYTHON) -m conversion.convert_coreml --backend pytorch --in $(TMPDIR)/toy_exported/student_prefill_T128.pt --out $(TMPDIR)/toy_T128.mlpackage --seq 128 --compute-units all || echo "⚠️  CoreML conversion may have failed (CoreML may not be available)"; \
 	else \
 		echo "⚠️  Prefill model not found, skipping conversion"; \
 	fi
-	@if [ -f /tmp/toy_T128.mlpackage ]; then \
-		$(PYTHON) -m evaluation.toy_contracts --model /tmp/toy_T128.mlpackage --seq 128 --report eval/reports/toy_e2e.json || echo "⚠️  Verification may have failed (CoreML may not be available)"; \
+	@if [ -f $(TMPDIR)/toy_T128.mlpackage ]; then \
+		$(PYTHON) -m evaluation.toy_contracts --model $(TMPDIR)/toy_T128.mlpackage --seq 128 --report eval/reports/toy_e2e.json || echo "⚠️  Verification may have failed (CoreML may not be available)"; \
 	else \
 		echo "⚠️  CoreML model not found, skipping verification"; \
 	fi
@@ -546,16 +549,16 @@ toy-e2e: toy-clean
 .PHONY: 8-ball
 8-ball: toy-clean
 	@echo "🎱 Starting 8-ball E2E Pipeline 🎱"
-	$(PYTHON) -m data.make_toy_kd --out /tmp/8_ball_kd.jsonl --n 128 --8-ball
-	$(PYTHON) -m training.run_toy_distill --in /tmp/8_ball_kd.jsonl --out /tmp/8_ball.ckpt --epochs 2 --mps 0 --8-ball
-	$(PYTHON) -m conversion.export_pytorch --checkpoint /tmp/8_ball.ckpt --out /tmp/8_ball_exported --toy --mode prefill --seq 64 --enumerated-T 64 128 256
-	@if [ -f /tmp/8_ball_exported/student_prefill_T128.pt ]; then \
-		$(PYTHON) -m conversion.convert_coreml --backend pytorch --in /tmp/8_ball_exported/student_prefill_T128.pt --out /tmp/8_ball_T128.mlpackage --seq 128 --compute-units all --toy || echo "⚠️  CoreML conversion may have failed (CoreML may not be available)"; \
+	$(PYTHON) -m data.make_toy_kd --out $(TMPDIR)/8_ball_kd.jsonl --n 128 --8-ball
+	$(PYTHON) -m training.run_toy_distill --in $(TMPDIR)/8_ball_kd.jsonl --out $(TMPDIR)/8_ball.ckpt --epochs 2 --mps 0 --8-ball
+	$(PYTHON) -m conversion.export_pytorch --checkpoint $(TMPDIR)/8_ball.ckpt --out $(TMPDIR)/8_ball_exported --toy --mode prefill --seq 64 --enumerated-T 64 128 256
+	@if [ -f $(TMPDIR)/8_ball_exported/student_prefill_T128.pt ]; then \
+		$(PYTHON) -m conversion.convert_coreml --backend pytorch --in $(TMPDIR)/8_ball_exported/student_prefill_T128.pt --out $(TMPDIR)/8_ball_T128.mlpackage --seq 128 --compute-units all --toy || echo "⚠️  CoreML conversion may have failed (CoreML may not be available)"; \
 	else \
 		echo "⚠️  Prefill model not found, skipping conversion"; \
 	fi
-	@if [ -d /tmp/8_ball_T128.mlpackage ]; then \
-		$(PYTHON) -m evaluation.toy_contracts --model /tmp/8_ball_T128.mlpackage --seq 64 128 256 --report eval/reports/8_ball_e2e.json || echo "⚠️  Verification may have failed (CoreML may not be available)"; \
+	@if [ -d $(TMPDIR)/8_ball_T128.mlpackage ]; then \
+		$(PYTHON) -m evaluation.toy_contracts --model $(TMPDIR)/8_ball_T128.mlpackage --seq 64 128 256 --report eval/reports/8_ball_e2e.json || echo "⚠️  Verification may have failed (CoreML may not be available)"; \
 	else \
 		echo "⚠️  CoreML model not found, skipping verification"; \
 	fi

@@ -595,7 +595,9 @@ class TestErrorHandling:
         mock_load_questions.side_effect = FileNotFoundError("File not found")
 
         # Mock tempfile and other dependencies
-        with patch("tempfile.mkdtemp", return_value="/tmp/test_output"):
+        # Use tempfile.gettempdir() instead of hardcoded /tmp for security
+        import tempfile
+        with patch("tempfile.mkdtemp", return_value=tempfile.gettempdir() + "/test_output"):
             with patch("pathlib.Path.mkdir"):
                 with patch("sys.argv", [
                     "compare_8ball_pipelines.py",
@@ -619,7 +621,9 @@ class TestErrorHandling:
         mock_eval_pytorch.side_effect = Exception("Model evaluation failed")
 
         # Mock tempfile and other dependencies
-        with patch("tempfile.mkdtemp", return_value="/tmp/test_output"):
+        # Use tempfile.gettempdir() instead of hardcoded /tmp for security
+        import tempfile
+        with patch("tempfile.mkdtemp", return_value=tempfile.gettempdir() + "/test_output"):
             with patch("pathlib.Path.mkdir"):
                 with patch("builtins.open", create=True):
                     with patch("sys.argv", [
