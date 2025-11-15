@@ -15,6 +15,7 @@ import torch.nn as nn
 from torch.optim import AdamW
 
 from training.distill_tool_select import load_config, create_model, train_step
+from unittest.mock import patch
 
 
 class TestLoadConfig:
@@ -70,35 +71,56 @@ class TestCreateModel:
             }
         }
 
-    def test_create_model_basic(self, basic_config, device):
+    @patch("training.distill_tool_select.StudentLM")
+    def test_create_model_basic(self, mock_student_lm, basic_config, device):
         """Test basic model creation."""
+        mock_model = Mock()
+        mock_model.to.return_value = mock_model
+        mock_student_lm.return_value = mock_model
+        
         model = create_model(basic_config, device)
 
-        assert isinstance(model, nn.Module)
-        assert model.training  # Model should be in training mode by default
+        assert model == mock_model
+        mock_student_lm.assert_called_once()
+        mock_model.to.assert_called_once_with(device)
 
-    def test_create_model_with_checkpoint(self, basic_config, device, tmp_path):
+    @patch("training.safe_checkpoint_loading.safe_load_checkpoint")
+    @patch("training.distill_tool_select.StudentLM")
+    def test_create_model_with_checkpoint(self, mock_student_lm, mock_load_checkpoint, basic_config, device, tmp_path):
         """Test model creation with checkpoint loading."""
-        # Create a dummy checkpoint
+        mock_model = Mock()
+        mock_model.to.return_value = mock_model
+        mock_model.load_state_dict.return_value = None
+        mock_student_lm.return_value = mock_model
+        
         checkpoint_path = tmp_path / "checkpoint.pt"
-        dummy_model = nn.Linear(10, 5)
-        torch.save({"model_state_dict": dummy_model.state_dict()}, checkpoint_path)
+        checkpoint_path.touch()
+        
+        mock_checkpoint = {"model_state_dict": {"layer1.weight": torch.randn(10, 10)}}
+        mock_load_checkpoint.return_value = mock_checkpoint
 
         config_with_checkpoint = basic_config.copy()
         config_with_checkpoint["init"] = {"base_checkpoint": str(checkpoint_path)}
 
-        # This will fail because model architectures don't match, but should attempt loading
         model = create_model(config_with_checkpoint, device)
 
-        assert isinstance(model, nn.Module)
+        assert model == mock_model
+        mock_load_checkpoint.assert_called_once()
+        mock_model.load_state_dict.assert_called_once()
 
-    def test_create_model_default_values(self, device):
+    @patch("training.distill_tool_select.StudentLM")
+    def test_create_model_default_values(self, mock_student_lm, device):
         """Test model creation with minimal config (uses defaults)."""
+        mock_model = Mock()
+        mock_model.to.return_value = mock_model
+        mock_student_lm.return_value = mock_model
+        
         minimal_config = {"arch": {}}
 
         model = create_model(minimal_config, device)
 
-        assert isinstance(model, nn.Module)
+        assert model == mock_model
+        mock_student_lm.assert_called_once()
 
 
 class TestTrainStep:

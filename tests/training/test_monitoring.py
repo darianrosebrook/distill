@@ -6,8 +6,10 @@ and training progress tracking using mock data and scenarios.
 """
 # @author: @darianrosebrook
 
+import json
 import time
 import threading
+from datetime import datetime
 from unittest.mock import Mock, patch
 
 import pytest
@@ -687,3 +689,474 @@ class TestConcurrencyAndPerformance:
 
         # Verify all metrics were collected
         assert len(training_monitor.metrics_collector.metrics) == 1000
+
+
+class TestMetricsCollectorEdgeCases:
+    """Test edge cases for MetricsCollector."""
+
+    @pytest.fixture
+    def collector(self):
+        """Create a metrics collector instance."""
+        return MetricsCollector(max_points=100)
+
+    def test_record_metric_max_points_eviction(self, collector):
+        """Test record_metric evicts old metrics when max_points exceeded (lines 60-67)."""
+        # Set small max_points
+        collector.max_points = 5
+        
+        # Add more metrics than max_points
+        for i in range(10):
+            collector.record_metric("test_metric", float(i))
+        
+        # Should only keep last 5 metrics
+        assert len(collector.metrics) == 5
+        # Should keep the most recent ones
+        assert collector.metrics[0].value == 5.0
+        assert collector.metrics[-1].value == 9.0
+
+    def test_get_metrics_with_name_filter(self, collector):
+        """Test get_metrics with name filter (lines 85-98)."""
+        collector.record_metric("metric1", 1.0)
+        collector.record_metric("metric2", 2.0)
+        collector.record_metric("metric1", 3.0)
+        
+        filtered = collector.get_metrics(name="metric1")
+        assert len(filtered) == 2
+        assert all(m.name == "metric1" for m in filtered)
+
+    def test_get_metrics_with_start_time_filter(self, collector):
+        """Test get_metrics with start_time filter (lines 85-98)."""
+        import time
+        start = time.time()
+        
+        collector.record_metric("test", 1.0)
+        time.sleep(0.01)
+        mid_time = time.time()
+        collector.record_metric("test", 2.0)
+        collector.record_metric("test", 3.0)
+        
+        filtered = collector.get_metrics(start_time=mid_time)
+        assert len(filtered) == 2
+        assert all(m.timestamp >= mid_time for m in filtered)
+
+    def test_get_metrics_with_end_time_filter(self, collector):
+        """Test get_metrics with end_time filter (lines 85-98)."""
+        import time
+        
+        collector.record_metric("test", 1.0)
+        collector.record_metric("test", 2.0)
+        mid_time = time.time()
+        time.sleep(0.01)
+        collector.record_metric("test", 3.0)
+        
+        filtered = collector.get_metrics(end_time=mid_time)
+        assert len(filtered) == 2
+        assert all(m.timestamp <= mid_time for m in filtered)
+
+    def test_get_summary_stats_empty_metrics(self, collector):
+        """Test get_summary_stats with no metrics (lines 109-115)."""
+        stats = collector.get_summary_stats("nonexistent_metric")
+        assert stats == {}
+
+    def test_save_to_file(self, collector, tmp_path):
+        """Test save_to_file method (lines 130-146)."""
+        collector.record_metric("test_metric", 1.0, tag1="value1")
+        collector.record_metric("test_metric", 2.0, tag2="value2")
+        
+        output_file = tmp_path / "metrics.json"
+        collector.save_to_file(output_file)
+        
+        assert output_file.exists()
+        with open(output_file) as f:
+            data = json.load(f)
+        
+        assert "exported_at" in data
+        assert "metrics" in data
+        assert len(data["metrics"]) == 2
+        assert data["metrics"][0]["name"] == "test_metric"
+        assert data["metrics"][0]["value"] == 1.0
+        assert data["metrics"][0]["tags"]["tag1"] == "value1"
+
+
+class TestHealthCheckerEdgeCases:
+    """Test edge cases for HealthChecker."""
+
+    @pytest.fixture
+    def health_checker(self):
+        """Create a health checker instance."""
+        return HealthChecker()
+
+    def test_run_checks_with_registered_checks(self, health_checker):
+        """Test run_checks executes all registered checks (lines 178-205)."""
+        check1_called = []
+        check2_called = []
+        
+        def check1():
+            check1_called.append(True)
+            return HealthStatus(
+                timestamp=time.time(),
+                component="test1",
+                status="healthy",
+                message="OK"
+            )
+        
+        def check2():
+            check2_called.append(True)
+            return HealthStatus(
+                timestamp=time.time(),
+                component="test2",
+                status="warning",
+                message="Warning"
+            )
+        
+        health_checker.register_check("check1", check1)
+        health_checker.register_check("check2", check2)
+        
+        results = health_checker.run_checks()
+        
+        assert len(results) == 2
+        assert len(check1_called) == 1
+        assert len(check2_called) == 1
+        assert results[0].component == "test1"
+        assert results[1].component == "test2"
+
+    def test_run_checks_with_metrics_collector(self, health_checker):
+        """Test run_checks records metrics when metrics_collector is available (lines 186-192)."""
+        metrics_collector = MetricsCollector()
+        health_checker.metrics_collector = metrics_collector
+        
+        def healthy_check():
+            return HealthStatus(
+                timestamp=time.time(),
+                component="test",
+                status="healthy",
+                message="OK"
+            )
+        
+        health_checker.register_check("test_check", healthy_check)
+        results = health_checker.run_checks()
+        
+        assert len(results) == 1
+        # Check that metric was recorded
+        metrics = metrics_collector.get_metrics(name="health_check")
+        assert len(metrics) == 1
+        assert metrics[0].value == 1.0  # 1 for healthy
+        assert metrics[0].tags["check"] == "test_check"
+        assert metrics[0].tags["status"] == "healthy"
+
+    def test_run_checks_exception_handling(self, health_checker):
+        """Test run_checks handles exceptions in check functions (lines 194-203)."""
+        def failing_check():
+            raise ValueError("Check failed")
+        
+        health_checker.register_check("failing_check", failing_check)
+        results = health_checker.run_checks()
+        
+        assert len(results) == 1
+        assert results[0].status == "error"
+        assert results[0].component == "failing_check"
+        assert "Health check failed" in results[0].message
+        assert "error" in results[0].details
+
+    def test_get_overall_health(self, health_checker):
+        """Test get_overall_health method (lines 207-220)."""
+        def healthy_check():
+            return HealthStatus(
+                timestamp=time.time(),
+                component="test1",
+                status="healthy",
+                message="OK"
+            )
+        
+        def warning_check():
+            return HealthStatus(
+                timestamp=time.time(),
+                component="test2",
+                status="warning",
+                message="Warning"
+            )
+        
+        health_checker.register_check("check1", healthy_check)
+        health_checker.register_check("check2", warning_check)
+        
+        overall = health_checker.get_overall_health()
+        # Should be "warning" since one check is warning
+        assert overall == "warning"
+        
+        # Test with all healthy
+        def all_healthy_check():
+            return HealthStatus(
+                timestamp=time.time(),
+                component="test3",
+                status="healthy",
+                message="OK"
+            )
+        health_checker.register_check("check3", all_healthy_check)
+        health_checker.checks = {"check3": all_healthy_check}
+        overall = health_checker.get_overall_health()
+        assert overall == "healthy"
+        
+        # Test with error
+        def error_check():
+            return HealthStatus(
+                timestamp=time.time(),
+                component="test4",
+                status="error",
+                message="Error"
+            )
+        health_checker.checks = {"check4": error_check}
+        overall = health_checker.get_overall_health()
+        assert overall == "error"
+
+
+class TestSystemHealthChecksEdgeCases:
+    """Test edge cases for SystemHealthChecks."""
+
+    @patch("psutil.virtual_memory")
+    def test_check_memory_usage_critical(self, mock_memory):
+        """Test check_memory_usage with critical usage (lines 229-242)."""
+        mock_mem = Mock()
+        mock_mem.percent = 95.0
+        mock_mem.available = 500 * 1024 * 1024  # 500 MB
+        mock_mem.total = 10 * 1024 * 1024 * 1024  # 10 GB
+        mock_memory.return_value = mock_mem
+        
+        status = SystemHealthChecks.check_memory_usage()
+        assert status.status == "error"
+        assert "critical" in status.message.lower()
+        assert status.component == "memory"
+
+    @patch("psutil.virtual_memory")
+    def test_check_memory_usage_warning(self, mock_memory):
+        """Test check_memory_usage with warning usage (lines 229-242)."""
+        mock_mem = Mock()
+        mock_mem.percent = 85.0
+        mock_mem.available = 1.5 * 1024 * 1024 * 1024  # 1.5 GB
+        mock_mem.total = 10 * 1024 * 1024 * 1024  # 10 GB
+        mock_memory.return_value = mock_mem
+        
+        status = SystemHealthChecks.check_memory_usage()
+        assert status.status == "warning"
+        assert "high" in status.message.lower()
+        assert status.component == "memory"
+
+    @patch("psutil.virtual_memory")
+    def test_check_memory_usage_healthy(self, mock_memory):
+        """Test check_memory_usage with healthy usage (lines 229-242)."""
+        mock_mem = Mock()
+        mock_mem.percent = 50.0
+        mock_mem.available = 5 * 1024 * 1024 * 1024  # 5 GB
+        mock_mem.total = 10 * 1024 * 1024 * 1024  # 10 GB
+        mock_memory.return_value = mock_mem
+        
+        status = SystemHealthChecks.check_memory_usage()
+        assert status.status == "healthy"
+        assert "normal" in status.message.lower()
+        assert status.component == "memory"
+
+    @patch("psutil.disk_usage")
+    def test_check_disk_usage_critical(self, mock_disk):
+        """Test check_disk_usage with critical usage (lines 255-270)."""
+        mock_d = Mock()
+        mock_d.percent = 96.0
+        mock_d.free = 40 * 1024 * 1024 * 1024  # 40 GB
+        mock_d.total = 1000 * 1024 * 1024 * 1024  # 1 TB
+        mock_disk.return_value = mock_d
+        
+        status = SystemHealthChecks.check_disk_usage()
+        assert status.status == "error"
+        assert "critical" in status.message.lower()
+        assert status.component == "disk"
+
+    @patch("psutil.disk_usage")
+    def test_check_disk_usage_warning(self, mock_disk):
+        """Test check_disk_usage with warning usage (lines 255-270)."""
+        mock_d = Mock()
+        mock_d.percent = 86.0
+        mock_d.free = 140 * 1024 * 1024 * 1024  # 140 GB
+        mock_d.total = 1000 * 1024 * 1024 * 1024  # 1 TB
+        mock_disk.return_value = mock_d
+        
+        status = SystemHealthChecks.check_disk_usage()
+        assert status.status == "warning"
+        assert "high" in status.message.lower()
+        assert status.component == "disk"
+
+    @patch("psutil.disk_usage")
+    def test_check_disk_usage_healthy(self, mock_disk):
+        """Test check_disk_usage with healthy usage (lines 255-270)."""
+        mock_d = Mock()
+        mock_d.percent = 50.0
+        mock_d.free = 500 * 1024 * 1024 * 1024  # 500 GB
+        mock_d.total = 1000 * 1024 * 1024 * 1024  # 1 TB
+        mock_disk.return_value = mock_d
+        
+        status = SystemHealthChecks.check_disk_usage()
+        assert status.status == "healthy"
+        assert "normal" in status.message.lower()
+        assert status.component == "disk"
+
+    @patch("torch.cuda.is_available")
+    def test_check_gpu_memory_no_gpu(self, mock_cuda_available):
+        """Test check_gpu_memory when GPU not available (lines 285-292)."""
+        mock_cuda_available.return_value = False
+        
+        status = SystemHealthChecks.check_gpu_memory()
+        assert status.status == "healthy"
+        assert "No GPU available" in status.message
+        assert status.component == "gpu_memory"
+        assert status.details["gpu_available"] is False
+
+    @patch("torch.cuda.is_available")
+    @patch("torch.cuda.memory_allocated")
+    @patch("torch.cuda.memory_reserved")
+    @patch("torch.cuda.get_device_properties")
+    def test_check_gpu_memory_critical(self, mock_get_props, mock_reserved, mock_allocated, mock_cuda_available):
+        """Test check_gpu_memory with critical usage (lines 294-324)."""
+        mock_cuda_available.return_value = True
+        # 9.6 GB allocated out of 10 GB total = 96% usage (critical)
+        mock_allocated.return_value = 9.6 * 1024 * 1024 * 1024  # 9.6 GB
+        mock_reserved.return_value = 10.0 * 1024 * 1024 * 1024  # 10 GB
+        mock_props = Mock()
+        mock_props.total_memory = 10.0 * 1024 * 1024 * 1024  # 10 GB total
+        mock_get_props.return_value = mock_props
+        
+        status = SystemHealthChecks.check_gpu_memory()
+        assert status.status == "error"
+        assert "critical" in status.message.lower()
+        assert status.component == "gpu_memory"
+
+    @patch("torch.cuda.is_available")
+    @patch("torch.cuda.memory_allocated")
+    @patch("torch.cuda.memory_reserved")
+    @patch("torch.cuda.get_device_properties")
+    def test_check_gpu_memory_exception(self, mock_get_props, mock_reserved, mock_allocated, mock_cuda_available):
+        """Test check_gpu_memory handles exceptions (lines 326-327)."""
+        mock_cuda_available.return_value = True
+        # Make get_device_properties raise exception to trigger exception path
+        mock_get_props.side_effect = RuntimeError("CUDA error")
+        
+        status = SystemHealthChecks.check_gpu_memory()
+        assert status.status == "error"
+        assert "error" in status.message.lower() or "failed" in status.message.lower()
+        assert status.component == "gpu_memory"
+
+
+class TestTrainingMonitorEdgeCases:
+    """Test edge cases for TrainingMonitor."""
+
+    @pytest.fixture
+    def training_monitor(self, tmp_path):
+        """Create a training monitor instance."""
+        return TrainingMonitor(log_dir=tmp_path)
+
+    def test_start_training_records_metric(self, training_monitor):
+        """Test start_training records metric (lines 368-378)."""
+        config = {"model": "test", "steps": 100}
+        training_monitor.start_training(config)
+        
+        assert training_monitor.training_start_time is not None
+        metrics = training_monitor.metrics.get_metrics(name="training_started")
+        assert len(metrics) == 1
+        assert metrics[0].value == 1.0
+
+    def test_record_step_with_all_params(self, training_monitor):
+        """Test record_step with all optional parameters (lines 398-411)."""
+        training_monitor.start_training({})
+        
+        training_monitor.record_step(
+            step=1,
+            loss=0.5,
+            lr=0.001,
+            tokens_processed=1000,
+            gpu_memory_mb=5000.0
+        )
+        
+        # Check metrics were recorded
+        loss_metrics = training_monitor.metrics.get_metrics(name="loss")
+        assert len(loss_metrics) == 1
+        assert loss_metrics[0].value == 0.5
+        
+        lr_metrics = training_monitor.metrics.get_metrics(name="learning_rate")
+        assert len(lr_metrics) == 1
+        assert lr_metrics[0].value == 0.001
+        
+        token_metrics = training_monitor.metrics.get_metrics(name="tokens_processed")
+        assert len(token_metrics) == 1
+        assert token_metrics[0].value == 1000.0
+        
+        gpu_metrics = training_monitor.metrics.get_metrics(name="gpu_memory_mb")
+        assert len(gpu_metrics) == 1
+        assert gpu_metrics[0].value == 5000.0
+
+    def test_record_step_triggers_health_checks(self, training_monitor):
+        """Test record_step triggers periodic health checks (lines 408-411)."""
+        training_monitor.start_training({})
+        training_monitor.health_check_interval = 0.1  # Short interval for testing
+        training_monitor.last_health_check = 0
+        
+        # Mock health checker
+        mock_health_checker = Mock()
+        mock_health_checker.run_checks.return_value = []
+        training_monitor.health_checker = mock_health_checker
+        
+        time.sleep(0.15)  # Wait longer than interval
+        training_monitor.record_step(step=1, loss=0.5, lr=0.001)
+        
+        # Should have run health checks
+        assert mock_health_checker.run_checks.called
+
+    def test_run_health_checks_logs_issues(self, training_monitor):
+        """Test _run_health_checks logs non-healthy issues (lines 415-425)."""
+        # Create health checker with warning status
+        warning_status = HealthStatus(
+            timestamp=time.time(),
+            component="test",
+            status="warning",
+            message="Test warning"
+        )
+        
+        mock_health_checker = Mock()
+        mock_health_checker.run_checks.return_value = [warning_status]
+        training_monitor.health_checker = mock_health_checker
+        
+        # Capture print output
+        with patch('builtins.print') as mock_print:
+            training_monitor._run_health_checks()
+            # Should have printed warning
+            assert mock_print.called
+            call_args = str(mock_print.call_args)
+            assert "warning" in call_args.lower() or "test" in call_args.lower()
+
+    def test_end_training_without_start(self, training_monitor):
+        """Test end_training when training not started (lines 440-442)."""
+        # Don't call start_training
+        training_monitor.end_training(final_loss=0.1, total_steps=10)
+        
+        # Should return early without error
+        # Check that no metrics were recorded
+        completed_metrics = training_monitor.metrics.get_metrics(name="training_completed")
+        assert len(completed_metrics) == 0
+
+    def test_end_training_saves_files(self, training_monitor, tmp_path):
+        """Test end_training saves metrics and summary files (lines 440-475)."""
+        training_monitor.start_training({})
+        training_monitor.record_step(step=1, loss=0.5, lr=0.001)
+        
+        training_monitor.end_training(final_loss=0.1, total_steps=10)
+        
+        # Check that metrics file was created
+        metrics_files = list(tmp_path.glob("training_metrics_*.json"))
+        assert len(metrics_files) == 1
+        
+        # Check that summary file was created
+        summary_file = tmp_path / "training_summary.json"
+        assert summary_file.exists()
+        
+        with open(summary_file) as f:
+            summary = json.load(f)
+        
+        assert summary["total_steps"] == 10
+        assert summary["final_loss"] == 0.1
+        assert "training_duration_seconds" in summary
+        assert "metrics_file" in summary
