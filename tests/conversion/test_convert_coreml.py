@@ -116,24 +116,22 @@ class TestConvertPytorchToCoreML:
         assert mock_output1.name == "logits"
         assert mock_output2.name == "halt_logits"
 
-    @patch("conversion.convert_coreml.detect_int64_tensors_on_attention_paths", return_value=[])
-    def test_convert_pytorch_to_coreml_missing_dependencies(self, mock_detect_int64):
+    @patch("builtins.__import__")
+    def test_convert_pytorch_to_coreml_missing_dependencies(self, mock_import):
         """Test PyTorch to CoreML conversion with missing dependencies."""
-        # Temporarily make torch unavailable
-        import sys
-        original_torch = sys.modules.get("torch")
-        if "torch" in sys.modules:
-            del sys.modules["torch"]
+        # Mock import to raise ImportError for torch
+        def mock_import_func(name, *args, **kwargs):
+            if name == "torch":
+                raise ImportError("No module named 'torch'")
+            return __builtins__["__import__"](name, *args, **kwargs)
 
-        try:
-            with pytest.raises(ImportError):
-                convert_pytorch_to_coreml(
-                    pytorch_model=Mock(),
-                    output_path="dummy.mlpackage",
-                )
-        finally:
-            if original_torch:
-                sys.modules["torch"] = original_torch
+        mock_import.side_effect = mock_import_func
+
+        with pytest.raises(ImportError, match="No module named 'torch'"):
+            convert_pytorch_to_coreml(
+                pytorch_model=Mock(),
+                output_path="dummy.mlpackage",
+            )
 
 
 class TestConvertOnnxToCoreML:
@@ -556,6 +554,9 @@ class TestConvertONNXToCoreML:
         onnx_path = tmp_path / "model.onnx"
         output_path = tmp_path / "model.mlpackage"
 
+        # Create a dummy ONNX file
+        onnx_path.write_bytes(b"dummy onnx content")
+
         # Mock ONNX model and CoreML conversion
         mock_onnx_model = Mock()
         mock_mlmodel = Mock()
@@ -598,6 +599,9 @@ class TestConvertONNXToCoreML:
         """Test ONNX to CoreML conversion with custom target."""
         onnx_path = tmp_path / "model.onnx"
         output_path = tmp_path / "model.mlpackage"
+
+        # Create a dummy ONNX file
+        onnx_path.write_bytes(b"dummy onnx content")
 
         # Mock ONNX model and CoreML conversion
         mock_onnx_model = Mock()
@@ -642,12 +646,8 @@ class TestConvertONNXToCoreML:
         onnx_path = tmp_path / "nonexistent.onnx"
         output_path = tmp_path / "model.mlpackage"
 
-        with (
-            patch("onnx.load", side_effect=FileNotFoundError(
-                "ONNX file not found")),
-            patch("builtins.print"),
-        ):
-            with pytest.raises(RuntimeError, match="Failed to load ONNX model"):
+        with patch("builtins.print"):
+            with pytest.raises(FileNotFoundError, match="ONNX model file not found"):
                 convert_onnx_to_coreml(
                     onnx_path=str(onnx_path), output_path=str(output_path), target="macOS13"
                 )
