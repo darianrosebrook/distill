@@ -26,6 +26,199 @@ create_placeholder = convert_coreml_module.create_placeholder
 main = convert_coreml_module.main
 
 
+class TestConvertPytorchToCoreML:
+    """Test PyTorch to CoreML conversion functionality."""
+
+    @patch("conversion.convert_coreml.ct")
+    @patch("conversion.convert_coreml.torch")
+    def test_convert_pytorch_to_coreml_success(self, mock_torch, mock_ct, tmp_path):
+        """Test successful PyTorch to CoreML conversion."""
+        # Mock PyTorch and CoreML
+        mock_model = Mock()
+        mock_traced = Mock()
+        mock_torch.jit.trace.return_value = mock_traced
+        mock_torch.nn.Module = Mock()
+
+        mock_mlmodel = Mock()
+        mock_spec = Mock()
+        mock_output = Mock()
+        mock_output.name = "logits"
+        mock_spec.description.output = [mock_output]
+        mock_mlmodel.get_spec.return_value = mock_spec
+        mock_mlmodel.save = Mock()
+
+        mock_ct.convert.return_value = mock_mlmodel
+
+        output_path = str(tmp_path / "model.mlpackage")
+
+        result = convert_pytorch_to_coreml(
+            pytorch_model=mock_model,
+            output_path=output_path,
+            compute_units="cpuonly",
+            target="macOS13",
+        )
+
+        assert result == output_path
+        mock_ct.convert.assert_called_once()
+        mock_mlmodel.save.assert_called_once_with(output_path)
+
+    @patch("conversion.convert_coreml.ct")
+    @patch("conversion.convert_coreml.torch")
+    def test_convert_pytorch_to_coreml_with_halt_head(self, mock_torch, mock_ct, tmp_path):
+        """Test PyTorch to CoreML conversion with halt head."""
+        # Mock PyTorch and CoreML
+        mock_model = Mock()
+        mock_traced = Mock()
+        mock_torch.jit.trace.return_value = mock_traced
+
+        mock_mlmodel = Mock()
+        mock_spec = Mock()
+        mock_output1 = Mock()
+        mock_output1.name = "logits"
+        mock_output2 = Mock()
+        mock_output2.name = "halt_logits"
+        mock_spec.description.output = [mock_output1, mock_output2]
+        mock_mlmodel.get_spec.return_value = mock_spec
+        mock_mlmodel.save = Mock()
+
+        mock_ct.convert.return_value = mock_mlmodel
+
+        # Mock contract loading
+        contract_path = str(tmp_path / "contract.json")
+        with open(contract_path, "w") as f:
+            json.dump({"use_halt_head": True}, f)
+
+        output_path = str(tmp_path / "model.mlpackage")
+
+        result = convert_pytorch_to_coreml(
+            pytorch_model=mock_model,
+            output_path=output_path,
+            compute_units="cpuonly",
+            target="macOS13",
+            contract_path=contract_path,
+        )
+
+        assert result == output_path
+        # Should rename outputs based on contract
+        assert mock_output1.name == "logits"
+        assert mock_output2.name == "halt_logits"
+
+    def test_convert_pytorch_to_coreml_missing_dependencies(self):
+        """Test PyTorch to CoreML conversion with missing dependencies."""
+        # Temporarily make torch unavailable
+        import sys
+        original_torch = sys.modules.get("torch")
+        if "torch" in sys.modules:
+            del sys.modules["torch"]
+
+        try:
+            with pytest.raises(ImportError):
+                convert_pytorch_to_coreml(
+                    pytorch_model=Mock(),
+                    output_path="dummy.mlpackage",
+                )
+        finally:
+            if original_torch:
+                sys.modules["torch"] = original_torch
+
+
+class TestConvertOnnxToCoreML:
+    """Test ONNX to CoreML conversion functionality."""
+
+    @patch("conversion.convert_coreml.ct")
+    @patch("conversion.convert_coreml.onnx")
+    def test_convert_onnx_to_coreml_success(self, mock_onnx, mock_ct, tmp_path):
+        """Test successful ONNX to CoreML conversion."""
+        # Mock ONNX and CoreML
+        mock_onnx_model = Mock()
+        mock_onnx.load.return_value = mock_onnx_model
+
+        mock_mlmodel = Mock()
+        mock_spec = Mock()
+        mock_output = Mock()
+        mock_output.name = "var_123"
+        mock_spec.description.output = [mock_output]
+        mock_mlmodel.get_spec.return_value = mock_spec
+        mock_mlmodel.save = Mock()
+
+        mock_ct.convert.return_value = mock_mlmodel
+        mock_ct.ComputeUnit.ALL = "all"
+        mock_ct.target.macOS13 = "macOS13"
+
+        output_path = str(tmp_path / "model.mlpackage")
+
+        result = convert_onnx_to_coreml(
+            onnx_path="dummy.onnx",
+            output_path=output_path,
+            compute_units="all",
+            target="macOS13",
+        )
+
+        assert result == output_path
+        mock_onnx.load.assert_called_once_with("dummy.onnx")
+        mock_ct.convert.assert_called_once()
+        # Should rename output to "logits"
+        assert mock_output.name == "logits"
+
+    @patch("conversion.convert_coreml.ct")
+    @patch("conversion.convert_coreml.onnx")
+    def test_convert_onnx_to_coreml_conversion_failure(self, mock_onnx, mock_ct, tmp_path):
+        """Test ONNX to CoreML conversion failure with placeholder creation."""
+        mock_onnx.load.side_effect = Exception("Conversion failed")
+        mock_ct.ComputeUnit.ALL = "all"
+        mock_ct.target.macOS13 = "macOS13"
+
+        output_path = str(tmp_path / "model.mlpackage")
+
+        result = convert_onnx_to_coreml(
+            onnx_path="dummy.onnx",
+            output_path=output_path,
+            compute_units="all",
+            target="macOS13",
+            allow_placeholder=True,
+        )
+
+        # Should create placeholder and return None
+        assert result is None
+        assert (tmp_path / "model.mlpackage" / ".placeholder").exists()
+
+
+class TestCreatePlaceholder:
+    """Test placeholder creation functionality."""
+
+    def test_create_placeholder_basic(self, tmp_path):
+        """Test basic placeholder creation."""
+        output_path = str(tmp_path / "placeholder.mlpackage")
+        error_msg = "Test conversion failure"
+
+        result = create_placeholder(output_path, "dummy.onnx", error_msg)
+
+        assert result is None  # Placeholder creation returns None
+
+        # Check that placeholder directory and marker were created
+        placeholder_dir = tmp_path / "placeholder.mlpackage"
+        assert placeholder_dir.exists()
+        assert (placeholder_dir / ".placeholder").exists()
+
+        # Check error message file
+        error_file = placeholder_dir / "conversion_error.txt"
+        assert error_file.exists()
+        with open(error_file, "r") as f:
+            content = f.read()
+            assert error_msg in content
+
+    def test_create_placeholder_nested_directory(self, tmp_path):
+        """Test placeholder creation with nested output path."""
+        nested_path = tmp_path / "nested" / "deep" / "model.mlpackage"
+        error_msg = "Nested path test"
+
+        result = create_placeholder(str(nested_path), "dummy.onnx", error_msg)
+
+        assert result is None
+        assert nested_path.exists()
+        assert (nested_path / ".placeholder").exists()
+
+
 class TestLoadContract:
     """Test contract loading functionality."""
 
