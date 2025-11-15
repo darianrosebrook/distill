@@ -286,102 +286,87 @@ def test_training_step_with_process_step_targets(
     temp_process_step_dataset, mock_tokenizer, device, small_model_cfg
 ):
     """Test that training step works with process-step supervision targets."""
-    import sys
-    from unittest.mock import MagicMock
+    from unittest.mock import patch
     from torch.utils.data import DataLoader
 
-    mock_transformers = MagicMock()
-    mock_auto_tokenizer_class = MagicMock()
-    mock_auto_tokenizer_class.from_pretrained = MagicMock(return_value=mock_tokenizer)
-    mock_transformers.AutoTokenizer = mock_auto_tokenizer_class
-    sys.modules["transformers"] = mock_transformers
+    # Patch safe_from_pretrained_tokenizer to return mock_tokenizer
+    with patch("training.safe_model_loading.safe_from_pretrained_tokenizer", return_value=mock_tokenizer):
+        from training.dataset import collate_kd_batch
 
-    if "training.dataset" in sys.modules:
-        import importlib
+        # Create model
+        model = StudentLM(small_model_cfg)
+        model = model.to(device)
+        model.train()
 
-        importlib.reload(sys.modules["training.dataset"])
+        # Create optimizer
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
-    from training.dataset import collate_kd_batch
-    import training.dataset as dataset_module
-
-    dataset_module.HF_TOKENIZER_AVAILABLE = True
-    dataset_module.AutoTokenizer = mock_auto_tokenizer_class
-
-    # Create model
-    model = StudentLM(small_model_cfg)
-    model = model.to(device)
-    model.train()
-
-    # Create optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-
-    # Create dataset and dataloader
-    dataset = KDDataset(
-        jsonl_path=str(temp_process_step_dataset),
-        tokenizer_path="dummy",
-        max_seq_length=512,
-    )
-
-    dataloader = DataLoader(
-        dataset,
-        batch_size=2,
-        collate_fn=collate_kd_batch,
-    )
-
-    # Get a batch
-    batch = next(iter(dataloader))
-
-    # Move batch to device
-    for key in batch:
-        if isinstance(batch[key], torch.Tensor):
-            batch[key] = batch[key].to(device)
-
-    # Training config
-    cfg = {
-        "distillation": {
-            "kl_weight": 0.5,
-            "ce_teacher_weight": 0.3,
-            "ce_ground_truth_weight": 0.2,
-            "process_supervision_weight": 0.7,
-        },
-        "kd": {
-            "kd_temperature": 2.0,
-        },
-        "optimizer": {
-            "grad_clip": 1.0,
-        },
-    }
-
-    proc_cfg = {
-        "loss_json_validity_weight": 0.3,
-        "loss_tool_select_weight": 0.7,
-        "tool_names": ["read_file", "web.search"],
-    }
-
-    # Run training step
-    try:
-        loss_dict = train_step_process(
-            model=model,
-            batch=batch,
-            optimizer=optimizer,
-            scaler=None,
-            cfg=cfg,
-            device=device,
-            tokenizer=mock_tokenizer,
-            proc_cfg=proc_cfg,
+        # Create dataset and dataloader
+        dataset = KDDataset(
+            jsonl_path=str(temp_process_step_dataset),
+            tokenizer_path="dummy",
+            max_seq_length=512,
         )
 
-        # Verify loss dict structure
-        assert "total" in loss_dict, "Loss dict should have 'total' key"
-        assert "proc_total" in loss_dict or "proc_json_validity" in loss_dict, (
-            "Loss dict should have process supervision losses"
+        dataloader = DataLoader(
+            dataset,
+            batch_size=2,
+            collate_fn=collate_kd_batch,
         )
 
-        # Verify losses are reasonable
-        assert isinstance(loss_dict["total"], float)
-        assert not (loss_dict["total"] != loss_dict["total"]), "Total loss should not be NaN"
-        assert loss_dict["total"] >= 0, "Total loss should be non-negative"
+        # Get a batch
+        batch = next(iter(dataloader))
 
-    except Exception as e:
-        # If training step fails, provide helpful error message
-        pytest.fail(f"Training step failed: {e}")
+        # Move batch to device
+        for key in batch:
+            if isinstance(batch[key], torch.Tensor):
+                batch[key] = batch[key].to(device)
+
+        # Training config
+        cfg = {
+            "distillation": {
+                "kl_weight": 0.5,
+                "ce_teacher_weight": 0.3,
+                "ce_ground_truth_weight": 0.2,
+                "process_supervision_weight": 0.7,
+            },
+            "kd": {
+                "kd_temperature": 2.0,
+            },
+            "optimizer": {
+                "grad_clip": 1.0,
+            },
+        }
+
+        proc_cfg = {
+            "loss_json_validity_weight": 0.3,
+            "loss_tool_select_weight": 0.7,
+            "tool_names": ["read_file", "web.search"],
+        }
+
+        # Run training step
+        try:
+            loss_dict = train_step_process(
+                model=model,
+                batch=batch,
+                optimizer=optimizer,
+                scaler=None,
+                cfg=cfg,
+                device=device,
+                tokenizer=mock_tokenizer,
+                proc_cfg=proc_cfg,
+            )
+
+            # Verify loss dict structure
+            assert "total" in loss_dict, "Loss dict should have 'total' key"
+            assert "proc_total" in loss_dict or "proc_json_validity" in loss_dict, (
+                "Loss dict should have process supervision losses"
+            )
+
+            # Verify losses are reasonable
+            assert isinstance(loss_dict["total"], float)
+            assert not (loss_dict["total"] != loss_dict["total"]), "Total loss should not be NaN"
+            assert loss_dict["total"] >= 0, "Total loss should be non-negative"
+        except Exception as e:
+            # If training step fails, provide helpful error message
+            pytest.fail(f"Training step failed: {e}")
