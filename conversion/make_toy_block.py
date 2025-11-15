@@ -43,11 +43,11 @@ class SwiGLU(nn.Module):
 
 class MultiHeadAttention(nn.Module):
     """Simplified attention for parity testing.
-    
+
     This is intentionally simplified for parity testing purposes:
     - No GQA (Grouped Query Attention) - uses standard multi-head attention
     - No RoPE (Rotary Position Embeddings) - uses standard positional encoding
-    
+
     This simplification makes it easier to verify CoreML conversion correctness
     without the complexity of production attention mechanisms.
     """
@@ -67,9 +67,12 @@ class MultiHeadAttention(nn.Module):
         # x: [B, T, D]
         b, t, d = x.shape
 
-        q = self.wq(x).view(b, t, self.n_heads, self.d_head).transpose(1, 2)  # [B,H,T,Dh]
-        k = self.wk(x).view(b, t, self.n_heads, self.d_head).transpose(1, 2)  # [B,H,T,Dh]
-        v = self.wv(x).view(b, t, self.n_heads, self.d_head).transpose(1, 2)  # [B,H,T,Dh]
+        q = self.wq(x).view(b, t, self.n_heads,
+                            self.d_head).transpose(1, 2)  # [B,H,T,Dh]
+        k = self.wk(x).view(b, t, self.n_heads,
+                            self.d_head).transpose(1, 2)  # [B,H,T,Dh]
+        v = self.wv(x).view(b, t, self.n_heads,
+                            self.d_head).transpose(1, 2)  # [B,H,T,Dh]
 
         # Attention
         scale = 1.0 / math.sqrt(self.d_head)
@@ -100,7 +103,8 @@ class TransformerBlock(nn.Module):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dmodel", type=int, default=64, help="Model dimension")
-    ap.add_argument("--nheads", type=int, default=4, help="Number of attention heads")
+    ap.add_argument("--nheads", type=int, default=4,
+                    help="Number of attention heads")
     ap.add_argument("--seq", type=int, default=128, help="Sequence length")
     ap.add_argument(
         "--out", type=str, default="models/toy_block.pt", help="Output TorchScript path"
@@ -111,7 +115,8 @@ def main():
     model.eval()
 
     # Create example input
-    example_input = torch.randn((1, args.seq, args.dmodel), dtype=torch.float32)
+    example_input = torch.randn(
+        (1, args.seq, args.dmodel), dtype=torch.float32)
 
     # Trace the model
     with torch.no_grad():

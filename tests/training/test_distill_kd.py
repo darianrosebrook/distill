@@ -50,7 +50,7 @@ class TestUtilityFunctions:
 
         # Should return a tensor
         assert isinstance(result, torch.Tensor)
-        assert result.device == device
+        assert str(result.device) == str(device)  # Device comparison
 
     def test_get_sequence_length_basic(self):
         """Test get_sequence_length function."""
@@ -58,7 +58,7 @@ class TestUtilityFunctions:
 
         # Test basic functionality
         seq_lengths = [128, 256, 512, 1024]
-        schedule = {"type": "linear", "start": 128, "end": 1024}
+        schedule = [1000, 5000, 10000]  # Step boundaries
 
         # Early step
         length = get_sequence_length(0, seq_lengths, schedule)

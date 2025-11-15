@@ -155,7 +155,8 @@ class SpeculativeDecoder:
 
             # If all rejected, generate one token normally with worker
             if len(accepted) == 0:
-                next_token = self._generate_one_token_worker(current_input, worker_state)
+                next_token = self._generate_one_token_worker(
+                    current_input, worker_state)
                 tokens.append(next_token)
                 self.accepted_tokens += 1
 

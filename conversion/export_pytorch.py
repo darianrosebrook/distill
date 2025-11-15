@@ -28,7 +28,8 @@ class PrefillWrapper(nn.Module):
 
     def forward(self, input_ids: torch.Tensor, attn_mask: torch.Tensor = None) -> tuple:
         outputs = self.model(
-            input_ids, attn_mask, return_halt_logits=getattr(self.model, "use_halt_head", False)
+            input_ids, attn_mask, return_halt_logits=getattr(
+                self.model, "use_halt_head", False)
         )
         if isinstance(outputs, tuple):
             return outputs  # (logits, halt_logits) or (logits,)
@@ -117,12 +118,14 @@ def export_prefill(
 
     # Add halt logits if model supports it
     if getattr(model, "use_halt_head", False):
-        outputs.append({"name": "halt_logits", "dtype": "float16", "shape": ["B", "2"]})
+        outputs.append(
+            {"name": "halt_logits", "dtype": "float16", "shape": ["B", "2"]})
 
     contract = {
         "inputs": [
             {"name": "input_ids", "dtype": "int32", "shape": ["B", "T"]},
-            {"name": "attn_mask", "dtype": "int32", "shape": ["B", "T"], "optional": True},
+            {"name": "attn_mask", "dtype": "int32",
+                "shape": ["B", "T"], "optional": True},
         ],
         "outputs": outputs,
         "mode": "prefill",
@@ -146,12 +149,14 @@ def export_decode(model: StudentLM, output_path: Path, n_layers: int, n_kv_heads
     example_input_ids = torch.zeros((1, 1), dtype=torch.int32)
     example_kv_inputs = []
     for _ in range(n_layers):
-        k_cache = torch.zeros((1, n_kv_heads, 0, d_head), dtype=torch.float16)  # Empty cache
+        k_cache = torch.zeros((1, n_kv_heads, 0, d_head),
+                              dtype=torch.float16)  # Empty cache
         v_cache = torch.zeros((1, n_kv_heads, 0, d_head), dtype=torch.float16)
         example_kv_inputs.extend([k_cache, v_cache])
 
     with torch.no_grad():
-        traced = torch.jit.trace(wrapper, (example_input_ids, *example_kv_inputs))
+        traced = torch.jit.trace(
+            wrapper, (example_input_ids, *example_kv_inputs))
         traced.eval()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -166,7 +171,8 @@ def export_decode(model: StudentLM, output_path: Path, n_layers: int, n_kv_heads
     kv_cache_start_idx = 1  # After logits
     # Add halt logits if model supports it
     if getattr(model, "use_halt_head", False):
-        outputs.append({"name": "halt_logits", "dtype": "float16", "shape": ["B", "2"]})
+        outputs.append(
+            {"name": "halt_logits", "dtype": "float16", "shape": ["B", "2"]})
         kv_cache_start_idx = 2  # After logits and halt_logits
 
     contract = {
@@ -209,7 +215,8 @@ def export_decode(model: StudentLM, output_path: Path, n_layers: int, n_kv_heads
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--checkpoint", required=True, help="Model checkpoint path (.pt)")
+    ap.add_argument("--checkpoint", required=True,
+                    help="Model checkpoint path (.pt)")
     ap.add_argument("--out", required=True, help="Output directory")
     ap.add_argument(
         "--mode",
@@ -240,7 +247,8 @@ def main():
             print(f"[export_pytorch] ERROR: Version check failed: {e}")
             print("\nTo fix this issue:")
             print("1. Install Python 3.11: brew install python@3.11")
-            print("2. Use Python 3.11 for export: python3.11 -m conversion.export_pytorch ...")
+            print(
+                "2. Use Python 3.11 for export: python3.11 -m conversion.export_pytorch ...")
             print(
                 "3. For toy models only, use --toy flag to bypass: python -m conversion.export_pytorch --toy ..."
             )
@@ -298,7 +306,8 @@ def main():
         )
     else:
         # Production checkpoint schema - require all essential fields
-        required_fields = ["d_model", "n_layers", "n_heads", "n_kv_heads", "d_head", "vocab_size"]
+        required_fields = ["d_model", "n_layers",
+                           "n_heads", "n_kv_heads", "d_head", "vocab_size"]
         missing_fields = [f for f in required_fields if f not in arch_cfg]
         if missing_fields:
             raise ValueError(
@@ -327,7 +336,8 @@ def main():
     else:
         state_dict = checkpoint
 
-    model = StudentLM(cfg, use_self_evaluation=use_self_evaluation, use_halt_head=use_halt_head)
+    model = StudentLM(
+        cfg, use_self_evaluation=use_self_evaluation, use_halt_head=use_halt_head)
 
     # Load state dict with strict=True to catch mismatches
     try:
@@ -349,12 +359,14 @@ def main():
         for T in args.enumerated_T:
             example_input = torch.zeros((1, T), dtype=torch.int32)
             prefill_path = output_dir / f"student_prefill_T{T}.pt"
-            export_prefill(model, example_input, prefill_path, args.enumerated_T)
+            export_prefill(model, example_input,
+                           prefill_path, args.enumerated_T)
 
     # Export decode model
     if args.mode in ["decode", "both"]:
         decode_path = output_dir / "student_decode.pt"
-        export_decode(model, decode_path, cfg.n_layers, cfg.n_kv_heads, cfg.d_head)
+        export_decode(model, decode_path, cfg.n_layers,
+                      cfg.n_kv_heads, cfg.d_head)
 
     print(f"[export_pytorch] ✅ Export complete: {output_dir}")
 

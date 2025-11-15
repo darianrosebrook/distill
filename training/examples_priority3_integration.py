@@ -238,11 +238,13 @@ def compute_teacher_quality_score(
             candidate_unigrams = set(candidate_tokens)
 
             matches = len(reference_unigrams & candidate_unigrams)
-            precision = matches / len(candidate_unigrams) if candidate_unigrams else 0.0
+            precision = matches / \
+                len(candidate_unigrams) if candidate_unigrams else 0.0
 
             # Brevity penalty (simplified)
             brevity_penalty = (
-                min(1.0, len(candidate_tokens) / len(reference_tokens)) if reference_tokens else 0.0
+                min(1.0, len(candidate_tokens) / len(reference_tokens)
+                    ) if reference_tokens else 0.0
             )
 
             # Simplified BLEU score (unigram precision with brevity penalty)

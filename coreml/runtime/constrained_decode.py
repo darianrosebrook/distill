@@ -60,7 +60,8 @@ class TokenLexicon:
         # Build id->string map robustly from ids:
         for tid in range(tokenizer.vocab_size):
             try:
-                self.id2str[tid] = tokenizer.decode([tid], clean_up_tokenization_spaces=False)
+                self.id2str[tid] = tokenizer.decode(
+                    [tid], clean_up_tokenization_spaces=False)
             except Exception:
                 self.id2str[tid] = ""
 
@@ -395,7 +396,8 @@ class JSONConstrainedDecoder:
 
         # Get tool-specific schema from registry
         # Registry should have a get() method that returns schema dict or None
-        tool_schema = self.registry.get(tool_name) if hasattr(self.registry, "get") else None
+        tool_schema = self.registry.get(tool_name) if hasattr(
+            self.registry, "get") else None
 
         if tool_schema:
             self.validator.set_schema(tool_schema)

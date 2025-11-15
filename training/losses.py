@@ -54,7 +54,8 @@ def kl_divergence(
 
     # KL(P_teacher || P_student) = sum(P_teacher * log(P_teacher / P_student))
     # = sum(P_teacher * log(P_teacher)) - sum(P_teacher * log(P_student))
-    kl = F.kl_div(student_probs, teacher_probs, reduction="none", log_target=False)
+    kl = F.kl_div(student_probs, teacher_probs,
+                  reduction="none", log_target=False)
     kl = kl.sum(dim=-1)  # Sum over vocabulary
 
     if reduction == "mean":
@@ -444,16 +445,18 @@ def early_tool_call_loss(
         mask = mask.expand(-1, prefix_length)  # [B, prefix_length]
 
         # Extract target IDs (pad with -100 if shorter)
-        targets = teacher_prefix_ids[:, :prefix_length].long()  # [B, prefix_length]
-        
+        # [B, prefix_length]
+        targets = teacher_prefix_ids[:, :prefix_length].long()
+
         # Flatten for cross-entropy
         logits_flat = prefix_logits.reshape(-1, V)  # [B*prefix_length, V]
         targets_flat = targets.reshape(-1)  # [B*prefix_length]
         mask_flat = mask.reshape(-1)  # [B*prefix_length]
 
         # Compute CE loss (ignore -100)
-        ce_loss = F.cross_entropy(logits_flat, targets_flat, ignore_index=-100, reduction='none')  # [B*prefix_length]
-        
+        ce_loss = F.cross_entropy(
+            logits_flat, targets_flat, ignore_index=-100, reduction='none')  # [B*prefix_length]
+
         # Apply mask
         ce_loss_masked = ce_loss * mask_flat
         ce_loss_mean = ce_loss_masked.sum() / (mask_flat.sum() + 1e-8)
@@ -484,13 +487,15 @@ def early_tool_call_loss(
 
             if json_log_probs_list:
                 # Take max log-prob across JSON tokens at each position
-                json_log_probs = torch.stack(json_log_probs_list, dim=0).max(dim=0)[0]  # [B, N]
-                
+                json_log_probs = torch.stack(
+                    json_log_probs_list, dim=0).max(dim=0)[0]  # [B, N]
+
                 # Negative log-likelihood (we want high probability, so minimize negative)
                 json_nll = -json_log_probs  # [B, N]
 
                 # Apply mask and average
-                mask_expanded = should_use_mask.unsqueeze(1).expand(-1, N)  # [B, N]
+                mask_expanded = should_use_mask.unsqueeze(
+                    1).expand(-1, N)  # [B, N]
                 json_nll_masked = json_nll * mask_expanded
                 json_nll_mean = json_nll_masked.sum() / (mask_expanded.sum() + 1e-8)
 
@@ -591,11 +596,13 @@ def combined_kd_loss(
     student_logits = student_logits.float()
 
     losses = {}
-    total_loss = torch.tensor(0.0, device=student_logits.device, dtype=student_logits.dtype)
+    total_loss = torch.tensor(
+        0.0, device=student_logits.device, dtype=student_logits.dtype)
 
     # KL divergence loss (if teacher logits available)
     if teacher_logits is not None and kl_weight > 0:
-        kl_loss = kl_divergence(student_logits, teacher_logits, temperature=kd_temperature)
+        kl_loss = kl_divergence(
+            student_logits, teacher_logits, temperature=kd_temperature)
         losses["kl_div"] = kl_loss
         total_loss = total_loss + kl_weight * kl_loss
 
@@ -610,7 +617,8 @@ def combined_kd_loss(
             ):
                 # Mask out latent slots: set to ignore_index where mask is False
                 teacher_targets_masked = torch.where(
-                    loss_mask, teacher_targets, torch.full_like(teacher_targets, ignore_index)
+                    loss_mask, teacher_targets, torch.full_like(
+                        teacher_targets, ignore_index)
                 )
             else:
                 teacher_targets_masked = teacher_targets
@@ -667,7 +675,8 @@ def combined_kd_loss(
 
         logits_flat = student_logits.view(-1, student_logits.size(-1))
         targets_flat = ground_truth_masked.view(-1)
-        ce_gt = F.cross_entropy(logits_flat, targets_flat, ignore_index=ignore_index)
+        ce_gt = F.cross_entropy(logits_flat, targets_flat,
+                                ignore_index=ignore_index)
         losses["ce_ground_truth"] = ce_gt
         total_loss = total_loss + ce_ground_truth_weight * ce_gt
 
@@ -733,7 +742,8 @@ class CodeModePreferenceLoss(nn.Module):
         self.rules = eligibility_rules
         self.reward_cfg = reward
         self.min_tools = eligibility_rules.get("min_tools", 2)
-        self.min_intermediate_chars = eligibility_rules.get("min_intermediate_chars", 10000)
+        self.min_intermediate_chars = eligibility_rules.get(
+            "min_intermediate_chars", 10000)
         self.pii_patterns = eligibility_rules.get("pii_patterns", [])
         self.vocab_ids = vocab_ids or {}
         self.weights = weights or {"pos": 1.0, "neg": 1.0}
@@ -757,7 +767,8 @@ class CodeModePreferenceLoss(nn.Module):
             # Explicit type casting for TorchScript compatibility
             tool_count: int = int(meta.get("tool_count", 0))
             intermediate_sizes_raw = meta.get("intermediate_sizes", [])
-            intermediate_sizes: List[int] = intermediate_sizes_raw if isinstance(intermediate_sizes_raw, list) else []
+            intermediate_sizes: List[int] = intermediate_sizes_raw if isinstance(
+                intermediate_sizes_raw, list) else []
             pii_tags_present: bool = bool(meta.get("pii_tags_present", False))
 
             # Compute eligibility with explicit boolean logic
@@ -797,7 +808,8 @@ class CodeModePreferenceLoss(nn.Module):
 
         # Check eligibility for the batch
         batch_size = len(batch_meta)
-        eligibility_mask = self._compute_eligibility_mask(batch_meta, batch_size)
+        eligibility_mask = self._compute_eligibility_mask(
+            batch_meta, batch_size)
 
         # If no items in batch are eligible, return zero loss
         if not eligibility_mask.any():
@@ -809,9 +821,10 @@ class CodeModePreferenceLoss(nn.Module):
 
         # Compute log probabilities from logits
         log_probs = F.log_softmax(student_logits, dim=-1)  # [B, T, V]
-        
+
         # Accumulate loss across eligible samples
-        total_loss = torch.tensor(0.0, device=student_logits.device, requires_grad=True)
+        total_loss = torch.tensor(
+            0.0, device=student_logits.device, requires_grad=True)
         num_eligible = 0
 
         for i in range(batch_size):
@@ -819,7 +832,8 @@ class CodeModePreferenceLoss(nn.Module):
                 continue
 
             num_eligible += 1
-            sample_loss = torch.tensor(0.0, device=student_logits.device, requires_grad=True)
+            sample_loss = torch.tensor(
+                0.0, device=student_logits.device, requires_grad=True)
 
             # Get span targets for this sample
             sample_spans = span_targets[i] if i < len(span_targets) else {}
@@ -834,7 +848,8 @@ class CodeModePreferenceLoss(nn.Module):
                         span_log_probs = log_probs[i, start:end, :]
                         # Sum log probabilities for tokens in this span
                         # Negative because we want to maximize (minimize negative)
-                        sample_loss = sample_loss - self.weights["pos"] * span_log_probs.sum()
+                        sample_loss = sample_loss - \
+                            self.weights["pos"] * span_log_probs.sum()
 
             # Negative penalty: discourage direct tool call spans
             if self.reward_cfg.get("penalize_tool_result_roundtrip", True):
@@ -843,7 +858,8 @@ class CodeModePreferenceLoss(nn.Module):
                     if start < log_probs.size(1) and end <= log_probs.size(1):
                         span_log_probs = log_probs[i, start:end, :]
                         # Positive penalty to discourage these spans
-                        sample_loss = sample_loss + self.weights["neg"] * span_log_probs.sum()
+                        sample_loss = sample_loss + \
+                            self.weights["neg"] * span_log_probs.sum()
 
             total_loss = total_loss + sample_loss
 
@@ -885,7 +901,8 @@ def caws_compliance_loss(
     budget_penalty = _evaluate_budget_compliance(student_output)
 
     # 2. Evaluate quality compliance (claim support, reasoning structure)
-    quality_penalty = _evaluate_quality_compliance(student_output, teacher_output, claim_extractor)
+    quality_penalty = _evaluate_quality_compliance(
+        student_output, teacher_output, claim_extractor)
 
     # 3. Evaluate feature usage compliance (appropriate use of code-mode, latent reasoning)
     feature_penalty = _evaluate_feature_usage_compliance(student_output)
@@ -956,7 +973,8 @@ def entropy_weighting(
     # Compute entropy of teacher predictions
     # entropy = -sum(p * log(p)) where p = softmax(logits)
     teacher_probs = F.softmax(teacher_logits, dim=-1)
-    entropy = -torch.sum(teacher_probs * torch.log(teacher_probs + 1e-10), dim=-1)
+    entropy = -torch.sum(teacher_probs *
+                         torch.log(teacher_probs + 1e-10), dim=-1)
     avg_entropy = torch.mean(entropy).item()
 
     # Map entropy to temperature
@@ -1011,7 +1029,8 @@ def _evaluate_budget_compliance(student_output: str) -> float:
         penalty += (bot_count - max_allowed_latent) * 0.5
 
     # Penalize excessive refinement loops (rough heuristic: multiple "Step X:" patterns)
-    step_patterns = len(re.findall(r"Step \d+:", student_output, re.IGNORECASE))
+    step_patterns = len(re.findall(
+        r"Step \d+:", student_output, re.IGNORECASE))
     max_allowed_steps = 5  # Reasonable limit
     if step_patterns > max_allowed_steps:
         penalty += (step_patterns - max_allowed_steps) * 0.2
@@ -1058,7 +1077,8 @@ def _evaluate_quality_compliance(
         penalty += 1.0
 
     # Penalize outputs with contradiction markers
-    contradiction_indicators = ["however", "but", "contrary", "despite", "although"]
+    contradiction_indicators = ["however",
+                                "but", "contrary", "despite", "although"]
     contradiction_count = sum(
         1 for word in contradiction_indicators if word.lower() in student_output.lower()
     )
@@ -1086,11 +1106,14 @@ def _evaluate_feature_usage_compliance(student_output: str) -> float:
     penalty = 0.0
 
     # Check for code-mode indicators when no API usage
-    code_indicators = ["import", "from", "callMCPTool", "await", "function", "const", "let"]
-    has_code_patterns = any(indicator in student_output for indicator in code_indicators)
+    code_indicators = ["import", "from", "callMCPTool",
+                       "await", "function", "const", "let"]
+    has_code_patterns = any(
+        indicator in student_output for indicator in code_indicators)
 
     # Check for actual tool usage (rough heuristic)
-    tool_usage_indicators = ["google_drive", "salesforce", "api", "tool", "call"]
+    tool_usage_indicators = ["google_drive",
+                             "salesforce", "api", "tool", "call"]
     has_tool_usage = any(
         indicator.lower() in student_output.lower() for indicator in tool_usage_indicators
     )

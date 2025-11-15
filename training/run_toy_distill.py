@@ -55,14 +55,19 @@ def main():
         choices=[0, 1],
         help="Use MPS (Metal Performance Shaders) if available (0=no, 1=yes)",
     )
-    ap.add_argument("--micro-batch-size", type=int, default=4, help="Micro batch size")
+    ap.add_argument("--micro-batch-size", type=int,
+                    default=4, help="Micro batch size")
     ap.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
-    ap.add_argument("--vocab-size", type=int, default=512, help="Vocabulary size")
+    ap.add_argument("--vocab-size", type=int,
+                    default=512, help="Vocabulary size")
     ap.add_argument("--d-model", type=int, default=128, help="Model dimension")
     ap.add_argument("--n-layers", type=int, default=2, help="Number of layers")
-    ap.add_argument("--n-heads", type=int, default=4, help="Number of attention heads")
-    ap.add_argument("--n-kv-heads", type=int, default=2, help="Number of KV heads (GQA)")
-    ap.add_argument("--max-seq-len", type=int, default=256, help="Maximum sequence length")
+    ap.add_argument("--n-heads", type=int, default=4,
+                    help="Number of attention heads")
+    ap.add_argument("--n-kv-heads", type=int, default=2,
+                    help="Number of KV heads (GQA)")
+    ap.add_argument("--max-seq-len", type=int, default=256,
+                    help="Maximum sequence length")
     ap.add_argument(
         "--tokenizer", type=str, default="models/student/tokenizer", help="Tokenizer path"
     )
@@ -151,7 +156,8 @@ def main():
         if tokenizer_vocab_size is None:
             print("[run_toy_distill] WARNING: Cannot determine tokenizer vocab size")
         else:
-            print(f"[run_toy_distill] Tokenizer vocab size: {tokenizer_vocab_size}")
+            print(
+                f"[run_toy_distill] Tokenizer vocab size: {tokenizer_vocab_size}")
             if tokenizer_vocab_size > args.vocab_size * 2:
                 print("[run_toy_distill] ⚠️  VOCAB MISMATCH WARNING:")
                 print(f"  Model vocab_size: {args.vocab_size}")
@@ -178,7 +184,7 @@ def main():
         # Detect if dataset has teacher_logits by checking first sample
         # This is more robust than assuming based on dataset type
         teacher_logits_available = args.eight_ball
-        
+
         # Try to peek at first sample to detect teacher_logits availability
         try:
             import json
@@ -188,7 +194,8 @@ def main():
                     first_sample = json.loads(first_line)
                     if "teacher_logits" in first_sample and first_sample["teacher_logits"]:
                         teacher_logits_available = True
-                        print("[run_toy_distill] Detected teacher_logits in dataset")
+                        print(
+                            "[run_toy_distill] Detected teacher_logits in dataset")
         except Exception:
             # If detection fails, fall back to command-line flag
             pass
@@ -223,7 +230,8 @@ def main():
     print(f"[run_toy_distill] Total steps: {total_steps}")
 
     # Create learning rate scheduler with warmup
-    warmup_steps = min(10, steps_per_epoch // 4)  # Warmup for first 10 steps or 25% of epoch
+    # Warmup for first 10 steps or 25% of epoch
+    warmup_steps = min(10, steps_per_epoch // 4)
     total_training_steps = steps_per_epoch * args.epochs
 
     def lr_lambda(step):
@@ -232,7 +240,8 @@ def main():
             return step / max(1, warmup_steps)
         else:
             # Cosine annealing
-            progress = (step - warmup_steps) / max(1, total_training_steps - warmup_steps)
+            progress = (step - warmup_steps) / \
+                max(1, total_training_steps - warmup_steps)
             return 0.5 * (1 + torch.cos(torch.tensor(progress * 3.14159)))
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
@@ -253,7 +262,8 @@ def main():
             labels = batch["labels"].to(device)
 
             # Clamp token IDs to fit toy vocab size (tokenizer may have larger vocab)
-            pre_violate = (input_ids.ge(args.vocab_size) | input_ids.lt(0)).any().item()
+            pre_violate = (input_ids.ge(args.vocab_size)
+                           | input_ids.lt(0)).any().item()
             input_ids = torch.clamp(input_ids, 0, args.vocab_size - 1)
             labels = torch.clamp(labels, 0, args.vocab_size - 1)
             if pre_violate and step % 50 == 0:
@@ -270,7 +280,8 @@ def main():
                 # Use pre-computed teacher logits from ndjson dataset
                 teacher_logits_tensor = batch["teacher_logits"].to(device)
                 if batch_idx == 0 and epoch == 0:
-                    print("[run_toy_distill] Using pre-computed teacher logits from dataset")
+                    print(
+                        "[run_toy_distill] Using pre-computed teacher logits from dataset")
             else:
                 # Generate teacher logits on-the-fly with improved stub
                 if args.ternary_classifier:
@@ -278,19 +289,22 @@ def main():
                         input_ids, vocab_size=args.vocab_size, tokenizer=tokenizer
                     ).to(device)
                     if batch_idx == 0 and epoch == 0:
-                        print("[run_toy_distill] Generated ternary classifier teacher logits")
+                        print(
+                            "[run_toy_distill] Generated ternary classifier teacher logits")
                 elif args.binary_classifier:
                     teacher_logits_tensor = eight_ball_teacher_logits(
                         input_ids, vocab_size=args.vocab_size, tokenizer=tokenizer
                     ).to(device)
                     if batch_idx == 0 and epoch == 0:
-                        print("[run_toy_distill] Generated binary classifier teacher logits")
+                        print(
+                            "[run_toy_distill] Generated binary classifier teacher logits")
                 elif args.eight_ball:
                     teacher_logits_tensor = eight_ball_teacher_logits(
                         input_ids, vocab_size=args.vocab_size, tokenizer=tokenizer
                     ).to(device)
                     if batch_idx == 0 and epoch == 0:
-                        print("[run_toy_distill] Generated 8-ball teacher logits with tokenizer")
+                        print(
+                            "[run_toy_distill] Generated 8-ball teacher logits with tokenizer")
                 else:
                     teacher_logits_tensor = teacher_logits(
                         input_ids, vocab_size=args.vocab_size
@@ -305,7 +319,8 @@ def main():
             ) and teacher_logits_tensor is None:
                 # Create position weights that heavily weight mystical answer positions
                 # Base weight for all positions, higher weight for answer positions
-                position_weights = torch.ones_like(labels, dtype=torch.float32, device=device)
+                position_weights = torch.ones_like(
+                    labels, dtype=torch.float32, device=device)
                 answer_position_weight = 3.0  # 3x higher weight for answer positions
                 base_weight = 1.0
 
@@ -315,16 +330,19 @@ def main():
 
                     # Get mystical answer and find its position in the sequence
                     mystical_answer = sample_data["metadata"]["mystical_answer"]
-                    full_text = sample_data["prompt"] + " " + sample_data["teacher_text"]
+                    full_text = sample_data["prompt"] + \
+                        " " + sample_data["teacher_text"]
 
                     # Tokenize and find answer positions
-                    full_tokens = tokenizer.encode(full_text, add_special_tokens=False)
-                    answer_tokens = tokenizer.encode(mystical_answer, add_special_tokens=False)
+                    full_tokens = tokenizer.encode(
+                        full_text, add_special_tokens=False)
+                    answer_tokens = tokenizer.encode(
+                        mystical_answer, add_special_tokens=False)
 
                     # Find where answer appears in the sequence and weight those positions
                     answer_start_pos = None
                     for start_pos in range(len(full_tokens) - len(answer_tokens) + 1):
-                        if full_tokens[start_pos : start_pos + len(answer_tokens)] == answer_tokens:
+                        if full_tokens[start_pos: start_pos + len(answer_tokens)] == answer_tokens:
                             answer_start_pos = start_pos
                             break
 
@@ -332,11 +350,13 @@ def main():
                     if answer_start_pos is not None:
                         # Map token positions to sequence positions (accounting for padding/truncation)
                         seq_len = labels.shape[1]
-                        answer_end_pos = min(answer_start_pos + len(answer_tokens), seq_len)
+                        answer_end_pos = min(
+                            answer_start_pos + len(answer_tokens), seq_len)
                         answer_start_seq = min(answer_start_pos, seq_len)
-                        
+
                         # Set higher weight for answer token positions
-                        position_weights[batch_idx_in_batch, answer_start_seq:answer_end_pos] = answer_position_weight
+                        position_weights[batch_idx_in_batch,
+                                         answer_start_seq:answer_end_pos] = answer_position_weight
 
                 # Compute weighted cross-entropy loss manually for ground truth
                 logits_flat = student_logits.float().view(-1, student_logits.size(-1))
@@ -358,7 +378,8 @@ def main():
                     total_weight = weights_flat[valid_mask].sum()
                     ce_gt = total_weighted_loss / (total_weight + 1e-8)
                 else:
-                    ce_gt = torch.tensor(0.0, device=device, requires_grad=True)
+                    ce_gt = torch.tensor(
+                        0.0, device=device, requires_grad=True)
 
                 loss_dict = {
                     "ce_ground_truth": ce_gt,

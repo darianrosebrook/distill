@@ -305,7 +305,8 @@ class ANEResidencyMonitor:
                         ops.append(b.type)
             else:
                 # Fallback for neuralNetwork
-                layer_names = [layer.WhichOneof("layer") for layer in spec.neuralNetwork.layers]
+                layer_names = [layer.WhichOneof("layer")
+                               for layer in spec.neuralNetwork.layers]
                 ops.extend(filter(None, layer_names))
 
             op_counts = Counter(ops)

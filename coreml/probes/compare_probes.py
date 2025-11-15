@@ -34,7 +34,7 @@ def run_onnx(onnx_path, input_ids):
 
 def run_coreml(mlpackage_path, input_ids):
     """Run CoreML model inference.
-    
+
     Note: Placeholder check should be performed in main() before calling this function.
     This function assumes a valid CoreML model (not a placeholder).
     """
@@ -43,7 +43,8 @@ def run_coreml(mlpackage_path, input_ids):
     try:
         ml = ct.models.MLModel(mlpackage_path)
         mask = np.ones_like(input_ids).astype(np.int32)
-        out = ml.predict({"input_ids": input_ids.astype(np.int32), "attention_mask": mask})
+        out = ml.predict({"input_ids": input_ids.astype(
+            np.int32), "attention_mask": mask})
         key = list(out.keys())[0]
         return out[key]
     except Exception as e:
@@ -73,7 +74,8 @@ def main():
             print("[probes] SKIP parity – placeholder model detected")
             # Write results JSON
             results_path = Path(args.ml).parent / "results.json"
-            write_results_json(str(results_path), passed=0, skipped=1, failed=0)
+            write_results_json(str(results_path), passed=0,
+                               skipped=1, failed=0)
             return 0  # Return code 0 for SKIP (CI can detect via output)
 
     # Support both ONNX→CoreML parity and PyTorch→CoreML probe comparison
@@ -84,7 +86,8 @@ def main():
         keys = sorted(set(a.files) & set(b.files))
 
         if not keys:
-            print("[probes] WARN: No matching keys found between PyTorch and CoreML probes")
+            print(
+                "[probes] WARN: No matching keys found between PyTorch and CoreML probes")
             print(f"[probes] PyTorch keys: {list(a.files)}")
             print(f"[probes] CoreML keys: {list(b.files)}")
             # Try to match by output name
@@ -92,11 +95,14 @@ def main():
                 # Try to find matching output in CoreML
                 ml_keys = list(b.files)
                 if ml_keys:
-                    keys = [("output", ml_keys[0])]  # Map output to first CoreML key
-                    print(f"[probes] Attempting comparison: output -> {ml_keys[0]}")
+                    # Map output to first CoreML key
+                    keys = [("output", ml_keys[0])]
+                    print(
+                        f"[probes] Attempting comparison: output -> {ml_keys[0]}")
                 else:
                     results_path = Path(args.ml).parent / "results.json"
-                    write_results_json(str(results_path), passed=0, skipped=0, failed=1)
+                    write_results_json(str(results_path),
+                                       passed=0, skipped=0, failed=1)
                     return 1
         worst = (None, 0.0, 0.0)
         for k in keys:
@@ -138,7 +144,8 @@ def main():
                     f"FAIL {k_display}: rel={rel:.3e} mse={mse:.3e} > tol (rel_tol={tol_rel:.3e}, mse_tol={args.mse_tol:.3e})"
                 )
                 results_path = Path(args.ml).parent / "results.json"
-                write_results_json(str(results_path), passed=0, skipped=0, failed=1)
+                write_results_json(str(results_path),
+                                   passed=0, skipped=0, failed=1)
                 return 1
         print(f"OK. worst={worst}")
         results_path = Path(args.ml).parent / "results.json"
@@ -147,7 +154,8 @@ def main():
     elif args.onnx and args.ml:
         # ONNX→CoreML parity mode
         rng = np.random.default_rng(1337)
-        input_ids = rng.integers(low=0, high=256, size=(1, args.seq), dtype=np.int32)
+        input_ids = rng.integers(
+            low=0, high=256, size=(1, args.seq), dtype=np.int32)
 
         y_onnx = run_onnx(args.onnx, input_ids)
         y_coreml = run_coreml(args.ml, input_ids)
@@ -163,7 +171,8 @@ def main():
         y_onnx = np.array(y_onnx).astype(np.float32)
 
         if y_coreml.shape != y_onnx.shape:
-            print(f"[probes] shape mismatch: onnx {y_onnx.shape} vs coreml {y_coreml.shape}")
+            print(
+                f"[probes] shape mismatch: onnx {y_onnx.shape} vs coreml {y_coreml.shape}")
             return 1
 
         mse = float(np.mean((y_coreml - y_onnx) ** 2))
@@ -176,7 +185,8 @@ def main():
         if np.isnan(mse) or np.isnan(rel) or rel > 0.2:
             print("[probes] FAIL thresholds")
             results_path = Path(args.ml).parent / "results.json"
-            write_results_json(str(results_path), passed=0, skipped=0, failed=1)
+            write_results_json(str(results_path), passed=0,
+                               skipped=0, failed=1)
             return 2
 
         print("[probes] PASS")

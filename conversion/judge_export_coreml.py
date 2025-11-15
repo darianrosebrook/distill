@@ -28,11 +28,11 @@ def main(
 
     IMPORTANT: CoreMLTools does not natively support ONNX→CoreML conversion.
     This function attempts conversion but may create a placeholder if conversion fails.
-    
+
     Production workflow:
     1. Convert ONNX→PyTorch first (using export_pytorch.py or similar)
     2. Use PyTorch→CoreML conversion (--backend pytorch) for production
-    
+
     INT8 quantization should be applied at the ONNX level before conversion,
     or use PyTorch quantization APIs.
 
@@ -48,8 +48,10 @@ def main(
         print(f"Error: ONNX model not found: {onnx_path}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"[judge_export_coreml] Converting judge model: {onnx_path} -> {output_path}")
-    print(f"[judge_export_coreml] Target: {target}, Compute units: {compute_units}")
+    print(
+        f"[judge_export_coreml] Converting judge model: {onnx_path} -> {output_path}")
+    print(
+        f"[judge_export_coreml] Target: {target}, Compute units: {compute_units}")
     print("[judge_export_coreml] Note: Judge should use INT8 weights + FP16 activations")
     print(
         "[judge_export_coreml] INT8 quantization should be applied at ONNX level before conversion"
@@ -57,7 +59,8 @@ def main(
 
     # Use existing conversion utility
     if convert_onnx_to_coreml is None:
-        print("[judge_export_coreml] Error: Could not import conversion utilities", file=sys.stderr)
+        print(
+            "[judge_export_coreml] Error: Could not import conversion utilities", file=sys.stderr)
         print(
             "[judge_export_coreml] Ensure conversion.convert_coreml is available", file=sys.stderr
         )
@@ -73,13 +76,16 @@ def main(
         )
 
         if result_path:
-            print(f"[judge_export_coreml] Successfully converted judge model: {result_path}")
+            print(
+                f"[judge_export_coreml] Successfully converted judge model: {result_path}")
         else:
-            print("[judge_export_coreml] Placeholder created (conversion not supported)")
+            print(
+                "[judge_export_coreml] Placeholder created (conversion not supported)")
             sys.exit(0)
 
     except Exception as e:
-        print(f"[judge_export_coreml] Error during conversion: {e}", file=sys.stderr)
+        print(
+            f"[judge_export_coreml] Error during conversion: {e}", file=sys.stderr)
         if not allow_placeholder:
             sys.exit(1)
         else:

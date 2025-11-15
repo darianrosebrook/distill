@@ -881,7 +881,7 @@ def save_checkpoint(
     scaler: Optional[torch.cuda.amp.GradScaler] = None,
 ):
     """Save training checkpoint.
-    
+
     Args:
         model: Model to save
         optimizer: Optimizer to save state
@@ -901,15 +901,17 @@ def save_checkpoint(
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
     except (PermissionError, OSError) as e:
-        raise RuntimeError(f"Cannot create checkpoint directory {output_dir}: {e}") from e
-    
+        raise RuntimeError(
+            f"Cannot create checkpoint directory {output_dir}: {e}") from e
+
     # Check available disk space (rough estimate: checkpoint ~500MB-2GB)
     import shutil
     try:
         stat = shutil.disk_usage(output_dir)
         free_space_gb = stat.free / (1024**3)
         if free_space_gb < 1.0:  # Less than 1GB free
-            print(f"[distill_kd] WARN: Low disk space: {free_space_gb:.2f}GB free")
+            print(
+                f"[distill_kd] WARN: Low disk space: {free_space_gb:.2f}GB free")
     except Exception:
         pass  # Disk space check is best-effort
 
@@ -2425,7 +2427,8 @@ def main():
             start_step = checkpoint["step"]
             print(f"[distill_kd] Resuming from step {start_step}")
         else:
-            print("[distill_kd] WARN: Checkpoint missing 'step' field, starting from step 0")
+            print(
+                "[distill_kd] WARN: Checkpoint missing 'step' field, starting from step 0")
 
         # Restore optimizer state if available
         if "optimizer_state_dict" in checkpoint:
@@ -2434,23 +2437,28 @@ def main():
                 optimizer_state_restored = True
                 print("[distill_kd] Optimizer state restored from checkpoint")
             except Exception as e:
-                print(f"[distill_kd] WARN: Failed to restore optimizer state: {e}")
+                print(
+                    f"[distill_kd] WARN: Failed to restore optimizer state: {e}")
                 print("[distill_kd] Continuing with fresh optimizer state")
         else:
-            print("[distill_kd] WARN: Checkpoint missing optimizer state, using fresh optimizer")
+            print(
+                "[distill_kd] WARN: Checkpoint missing optimizer state, using fresh optimizer")
 
         # Restore scaler state if using FP16 and available
         if use_fp16 and scaler is not None:
             if "meta" in checkpoint and "scaler_state_dict" in checkpoint.get("meta", {}):
                 try:
-                    scaler.load_state_dict(checkpoint["meta"]["scaler_state_dict"])
+                    scaler.load_state_dict(
+                        checkpoint["meta"]["scaler_state_dict"])
                     scaler_state_restored = True
                     print("[distill_kd] GradScaler state restored from checkpoint")
                 except Exception as e:
-                    print(f"[distill_kd] WARN: Failed to restore scaler state: {e}")
+                    print(
+                        f"[distill_kd] WARN: Failed to restore scaler state: {e}")
                     print("[distill_kd] Continuing with fresh scaler state")
             else:
-                print("[distill_kd] WARN: Checkpoint missing scaler state, using fresh scaler")
+                print(
+                    "[distill_kd] WARN: Checkpoint missing scaler state, using fresh scaler")
 
         # Restore RNG states if available (for reproducibility)
         if "meta" in checkpoint and "rng_states" in checkpoint["meta"]:

@@ -26,7 +26,8 @@ class MinMaxObserver(nn.Module):
         super().__init__()
         self.register_buffer("min_val", torch.zeros(num_channels))
         self.register_buffer("max_val", torch.zeros(num_channels))
-        self.register_buffer("num_observations", torch.zeros(1, dtype=torch.long))
+        self.register_buffer("num_observations",
+                             torch.zeros(1, dtype=torch.long))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: [..., C, ...] - observe per-channel min/max
@@ -89,7 +90,8 @@ class FakeQuantize(nn.Module):
 
         # Quantize
         qmin = -(2 ** (self.num_bits - 1)) if self.signed else 0
-        qmax = (2 ** (self.num_bits - 1)) - 1 if self.signed else (2**self.num_bits) - 1
+        qmax = (2 ** (self.num_bits - 1)) - \
+            1 if self.signed else (2**self.num_bits) - 1
 
         # Per-channel quantization
         if self.scale.dim() > 0:
@@ -111,7 +113,7 @@ class FakeQuantize(nn.Module):
 
 class QuantizedEmbedding(nn.Module):
     """Quantized embedding layer with fake quantization for QAT.
-    
+
     Performs per-embedding-vector quantization of embedding weights during training.
     Each embedding vector (vocab entry) is quantized independently with its own
     scale/zero_point. During forward pass, embeddings are quantized/dequantized
@@ -121,7 +123,7 @@ class QuantizedEmbedding(nn.Module):
     def __init__(self, embedding: nn.Embedding, weight_bits: int = 8):
         super().__init__()
         self.weight_bits = weight_bits
-        
+
         # Store embedding parameters
         vocab_size, embed_dim = embedding.weight.shape
         self.num_embeddings = embedding.num_embeddings
@@ -131,10 +133,11 @@ class QuantizedEmbedding(nn.Module):
         self.norm_type = embedding.norm_type
         self.scale_grad_by_freq = embedding.scale_grad_by_freq
         self.sparse = embedding.sparse
-        
+
         # Create weight parameter (will be quantized during forward)
-        self.register_parameter("weight", nn.Parameter(embedding.weight.data.clone()))
-        
+        self.register_parameter("weight", nn.Parameter(
+            embedding.weight.data.clone()))
+
         # Create observer for per-embedding-vector quantization
         # Each vocab entry gets its own min/max for quantization
         self.weight_observer = MinMaxObserver(num_channels=vocab_size)
@@ -148,7 +151,7 @@ class QuantizedEmbedding(nn.Module):
         # Weight shape: [vocab_size, embed_dim]
         # We quantize each row (embedding vector) independently
         weight_quantized = self.weight_fake_quant(self.weight)
-        
+
         # Perform embedding lookup with quantized weights
         output = F.embedding(
             input_ids,
@@ -159,7 +162,7 @@ class QuantizedEmbedding(nn.Module):
             self.scale_grad_by_freq,
             self.sparse
         )
-        
+
         return output
 
     def extra_repr(self) -> str:
@@ -179,16 +182,20 @@ class QuantizedLinear(nn.Module):
 
         # Weight observer (per output channel)
         self.weight_observer = MinMaxObserver(linear.out_features)
-        self.weight_fake_quant = FakeQuantize(self.weight_observer, weight_bits, signed=True)
+        self.weight_fake_quant = FakeQuantize(
+            self.weight_observer, weight_bits, signed=True)
 
         # Activation observer (per channel)
         self.act_observer = MinMaxObserver(linear.in_features)
-        self.act_fake_quant = FakeQuantize(self.act_observer, act_bits, signed=False)
+        self.act_fake_quant = FakeQuantize(
+            self.act_observer, act_bits, signed=False)
 
         # Store original weight
-        self.register_parameter("weight", nn.Parameter(linear.weight.data.clone()))
+        self.register_parameter(
+            "weight", nn.Parameter(linear.weight.data.clone()))
         if linear.bias is not None:
-            self.register_parameter("bias", nn.Parameter(linear.bias.data.clone()))
+            self.register_parameter(
+                "bias", nn.Parameter(linear.bias.data.clone()))
         else:
             self.bias = None
 
@@ -236,9 +243,12 @@ class QuantizedAttention(nn.Module):
         b, t, d = x.shape
 
         # Quantized Q/K/V projections
-        q = self.wq_quant(x).view(b, t, self.n_heads, self.d_head).transpose(1, 2)
-        k = self.wk_quant(x).view(b, t, self.n_kv_heads, self.d_head).transpose(1, 2)
-        v = self.wv_quant(x).view(b, t, self.n_kv_heads, self.d_head).transpose(1, 2)
+        q = self.wq_quant(x).view(b, t, self.n_heads,
+                                  self.d_head).transpose(1, 2)
+        k = self.wk_quant(x).view(b, t, self.n_kv_heads,
+                                  self.d_head).transpose(1, 2)
+        v = self.wv_quant(x).view(b, t, self.n_kv_heads,
+                                  self.d_head).transpose(1, 2)
 
         # RoPE on Q/K
         q, k = self.rope.apply(q, k)
@@ -264,7 +274,8 @@ class QuantizedAttention(nn.Module):
         attn = self.attn_dropout(attn)
 
         y = torch.matmul(attn, v)
-        y = y.transpose(1, 2).contiguous().view(b, t, self.n_heads * self.d_head)
+        y = y.transpose(1, 2).contiguous().view(
+            b, t, self.n_heads * self.d_head)
 
         return self.wo_quant(y)
 
@@ -336,12 +347,15 @@ def quantize_model(
             # Replace with quantized embedding wrapper
             print("[quant_qat_int8] Quantizing embedding layer with fake quantization")
             print("[quant_qat_int8] WARN: Embedding quantization may degrade quality")
-            print("[quant_qat_int8] Consider keeping embeddings FP16 for better quality")
-            
+            print(
+                "[quant_qat_int8] Consider keeping embeddings FP16 for better quality")
+
             # Create quantized embedding wrapper
-            quantized_embedding = QuantizedEmbedding(model.embed, weight_bits=weight_bits)
+            quantized_embedding = QuantizedEmbedding(
+                model.embed, weight_bits=weight_bits)
             model.embed = quantized_embedding
-            print(f"[quant_qat_int8] Created QuantizedEmbedding: {quantized_embedding.extra_repr()}")
+            print(
+                f"[quant_qat_int8] Created QuantizedEmbedding: {quantized_embedding.extra_repr()}")
         else:
             print(
                 "[quant_qat_int8] WARN: Model does not have 'embed' attribute, skipping embedding quantization"
@@ -355,13 +369,18 @@ def quantize_model(
     for block in model.blocks:
         # Quantize attention
         if fake_quant_in_attention:
-            block.attn = quantize_attention(block.attn, weight_bits, act_bits, clamp_pre_softmax)
+            block.attn = quantize_attention(
+                block.attn, weight_bits, act_bits, clamp_pre_softmax)
         else:
             # Still quantize linear layers in attention
-            block.attn.wq = quantize_linear(block.attn.wq, weight_bits, act_bits)
-            block.attn.wk = quantize_linear(block.attn.wk, weight_bits, act_bits)
-            block.attn.wv = quantize_linear(block.attn.wv, weight_bits, act_bits)
-            block.attn.wo = quantize_linear(block.attn.wo, weight_bits, act_bits)
+            block.attn.wq = quantize_linear(
+                block.attn.wq, weight_bits, act_bits)
+            block.attn.wk = quantize_linear(
+                block.attn.wk, weight_bits, act_bits)
+            block.attn.wv = quantize_linear(
+                block.attn.wv, weight_bits, act_bits)
+            block.attn.wo = quantize_linear(
+                block.attn.wo, weight_bits, act_bits)
 
         # Quantize MLP (SwiGLU)
         block.mlp = quantize_swiglu(block.mlp, weight_bits, act_bits)
@@ -409,13 +428,20 @@ def load_model_from_checkpoint(checkpoint_path: str, device: torch.device) -> St
 
 
 def main():
-    ap = argparse.ArgumentParser(description="QAT training with INT8 quantization")
-    ap.add_argument("--checkpoint", required=True, help="Checkpoint to continue from")
-    ap.add_argument("--config", nargs="+", required=True, help="Config file(s)")
-    ap.add_argument("--output-dir", default="models/student/checkpoints", help="Output directory")
-    ap.add_argument("--steps", type=int, default=30000, help="Number of training steps")
-    ap.add_argument("--save-every", type=int, default=2000, help="Save checkpoint every N steps")
-    ap.add_argument("--log-every", type=int, default=100, help="Log every N steps")
+    ap = argparse.ArgumentParser(
+        description="QAT training with INT8 quantization")
+    ap.add_argument("--checkpoint", required=True,
+                    help="Checkpoint to continue from")
+    ap.add_argument("--config", nargs="+",
+                    required=True, help="Config file(s)")
+    ap.add_argument(
+        "--output-dir", default="models/student/checkpoints", help="Output directory")
+    ap.add_argument("--steps", type=int, default=30000,
+                    help="Number of training steps")
+    ap.add_argument("--save-every", type=int, default=2000,
+                    help="Save checkpoint every N steps")
+    ap.add_argument("--log-every", type=int, default=100,
+                    help="Log every N steps")
     args = ap.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -486,7 +512,8 @@ def main():
         jsonl_path=train_shards[0],
         tokenizer_path=tokenizer_path,
         max_seq_length=seq_lengths[0],
-        teacher_logits_available=cfg.get("kd", {}).get("teacher_logits_available", False),
+        teacher_logits_available=cfg.get("kd", {}).get(
+            "teacher_logits_available", False),
     )
 
     dataloader = DataLoader(
@@ -534,8 +561,10 @@ def main():
                     ground_truth_targets=labels,
                     kl_weight=kd_cfg.get("kl_weight", 0.5),
                     ce_teacher_weight=kd_cfg.get("ce_teacher_weight", 0.3),
-                    ce_ground_truth_weight=kd_cfg.get("ce_ground_truth_weight", 0.2),
-                    kd_temperature=cfg.get("kd", {}).get("kd_temperature", 2.0),
+                    ce_ground_truth_weight=kd_cfg.get(
+                        "ce_ground_truth_weight", 0.2),
+                    kd_temperature=cfg.get("kd", {}).get(
+                        "kd_temperature", 2.0),
                 )
 
                 loss = loss_dict["total"]
@@ -560,7 +589,8 @@ def main():
             step += 1
 
             if step % args.log_every == 0:
-                loss_str = ", ".join([f"{k}={v:.4f}" for k, v in loss_dict.items()])
+                loss_str = ", ".join(
+                    [f"{k}={v:.4f}" for k, v in loss_dict.items()])
                 print(f"[quant_qat_int8] Step {step}/{args.steps}: {loss_str}")
 
             if step % args.save_every == 0:
