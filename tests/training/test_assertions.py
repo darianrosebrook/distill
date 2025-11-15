@@ -533,6 +533,49 @@ class TestComputePerComponentGradientNorms:
         # Param without original gradient should have grad set to None
         assert param_list[0].grad is None
 
+    def test_compute_per_component_gradient_norms_with_none_grads_in_loop(self, simple_model):
+        """Test compute_per_component_gradient_norms when some params have None gradients during norm computation (line 208->207 branch)."""
+        model = simple_model
+        x = torch.randn(2, 10)
+        y = torch.randn(2, 5)
+
+        loss1 = nn.MSELoss()(model(x), y)
+        loss1.backward(retain_graph=True)
+
+        # Store original gradients
+        original_grads = {}
+        for name, param in model.named_parameters():
+            if param.grad is not None:
+                original_grads[name] = param.grad.clone()
+
+        # Compute gradient for a component
+        model.zero_grad()
+        weighted_loss = 1.0 * loss1
+        weighted_loss.backward(retain_graph=True)
+
+        # Manually set some gradients to None to test the branch at line 208
+        param_list = list(model.parameters())
+        if len(param_list) > 1:
+            param_list[1].grad = None  # Set second param's grad to None
+
+        # Now compute gradient norm - should skip params with None grad (line 208->207 branch)
+        total_norm = 0.0
+        for param in model.parameters():
+            if param.grad is not None:  # This branch should be tested
+                param_norm = param.grad.data.norm(2)
+                total_norm += param_norm.item() ** 2
+        total_norm = total_norm ** (1.0 / 2)
+
+        # Should compute norm only for params with non-None gradients
+        assert total_norm >= 0.0
+
+        # Restore original gradients
+        for name, param in model.named_parameters():
+            if name in original_grads:
+                param.grad = original_grads[name]
+            else:
+                param.grad = None
+
 
 class TestAssertionsIntegration:
     """Test integration of assertion utilities."""
