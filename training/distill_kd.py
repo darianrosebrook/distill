@@ -2930,18 +2930,18 @@ def main():
                         f"[distill_kd] CRITICAL: {train_step._consecutive_failures} consecutive failures. Saving emergency checkpoint and exiting."
                     )
                     try:
-                save_checkpoint(
-                    model=model,
-                    optimizer=optimizer,
-                    step=step,
-                    loss=loss_dict.get("total", float("inf")),
-                    output_dir=output_dir,
-                    config=cfg,
-                    rng_states=None,  # Skip RNG states in emergency
-                    data_shard_index=current_shard_index,
-                    dataset_fingerprint=None,
-                    scaler=scaler,
-                )
+                        save_checkpoint(
+                            model=model,
+                            optimizer=optimizer,
+                            step=step,
+                            loss=loss_dict.get("total", float("inf")),
+                            output_dir=output_dir,
+                            config=cfg,
+                            rng_states=None,  # Skip RNG states in emergency
+                            data_shard_index=current_shard_index,
+                            dataset_fingerprint=None,
+                            scaler=scaler,
+                        )
                         print(
                             "[distill_kd] Emergency checkpoint saved successfully")
                     except Exception as ckpt_e:
