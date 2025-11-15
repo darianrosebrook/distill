@@ -211,3 +211,7 @@ internal/
 # Smoke test artifacts
 **/report.smoke.json
 **/results.smoke.jsonlmutants/
+
+# Large generated files
+reports/readiness/todos.json
+mutants/training/distill_kd.py
