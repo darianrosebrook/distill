@@ -484,7 +484,8 @@ def early_tool_call_loss(
             json_log_probs_list = []
             for token_id in json_token_ids:
                 try:
-                    json_log_probs_list.append(log_probs[:, :, token_id])  # [B, N]
+                    json_log_probs_list.append(
+                        log_probs[:, :, token_id])  # [B, N]
                 except IndexError:
                     # Skip token IDs that are out of vocabulary bounds
                     pass

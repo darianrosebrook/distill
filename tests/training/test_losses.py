@@ -4227,6 +4227,43 @@ class TestEarlyToolCallLossEdgeCases:
         assert loss.item() == 0.0  # Should be zero when no JSON tokens
         assert diagnostics["early_tool.mean_json_prior_nll0"] == 0.0
 
+    def test_early_tool_call_loss_json_tokens_out_of_bounds(self, device):
+        """Test early_tool_call_loss when JSON token IDs are out of vocabulary bounds (line 507)."""
+        batch_size = 2
+        seq_len = 20
+        vocab_size = 100  # Small vocab
+
+        logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+        input_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        tool_should_be_used = torch.tensor([True, False], device=device)
+
+        # Mock tokenizer that returns token IDs outside vocab bounds
+        mock_tokenizer = Mock()
+        def mock_convert_tokens_to_ids(token):
+            # Return IDs that are >= vocab_size (100)
+            if token == "{":
+                return 150  # Out of bounds
+            elif token == "[":
+                return 151  # Out of bounds
+            elif token == '"':
+                return 152  # Out of bounds
+            return None
+
+        mock_tokenizer.convert_tokens_to_ids = Mock(side_effect=mock_convert_tokens_to_ids)
+
+        loss, diagnostics = early_tool_call_loss(
+            logits,
+            input_ids,
+            tool_should_be_used,
+            mock_tokenizer,
+            teacher_prefix_ids=None,
+            N=10,
+            json_prior_weight=0.02,
+        )
+
+        assert isinstance(loss, torch.Tensor)
+        assert loss.item() == 0.0  # Should be zero when no valid JSON tokens
+        assert diagnostics["early_tool.mean_json_prior_nll0"] == 0.0
 
 
 class TestCombinedKDLossEdgeCases:
