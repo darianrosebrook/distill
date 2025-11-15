@@ -223,48 +223,51 @@ def halt_head_loss(
 
 
 def intermediate_layer_loss(
-    student_hidden_states: List[torch.Tensor],
-    teacher_hidden_states: List[torch.Tensor],
-    layer_mapping: Dict[int, int],
-    projection_layers: Optional[List[nn.Module]] = None,
-) -> torch.Tensor:
+    aligned_pairs: Optional[
+        Dict[Tuple[int, int], Tuple[torch.Tensor, torch.Tensor]]
+    ],
+    *,
+    use_layer_norm: bool = True,
+    mse_weight: float = 0.1,
+    cosine_weight: float = 0.1,
+) -> Dict[str, torch.Tensor]:
     """
-    MSE loss between intermediate hidden states of student and teacher.
+    Compute combined MSE + cosine loss over aligned (student, teacher) pairs.
 
-    Args:
-        student_hidden_states: List of [B, T, D_s] hidden states per layer
-        teacher_hidden_states: List of [B, T, D_t] hidden states per layer
-        layer_mapping: Dict mapping student layer indices to teacher layer indices
-        projection_layers: Optional list of projection layers to align dimensions
+    aligned_pairs: dict mapping (si, ti) -> (h_s_proj, h_t_detached), each [B, T, D].
 
     Returns:
-        MSE loss averaged over matched layers
+        Dict with 'total' loss and per-layer breakdowns for monitoring.
     """
+    out: Dict[str, torch.Tensor] = {}
+    if not aligned_pairs:
+        zero = torch.zeros((), device="cuda" if torch.cuda.is_available() else "cpu")
+        out["total"] = zero
+        return out
+
     losses = []
-    for student_idx, teacher_idx in layer_mapping.items():
-        if student_idx >= len(student_hidden_states) or teacher_idx >= len(teacher_hidden_states):
-            continue
+    for (si, ti), (h_s_proj, h_t) in aligned_pairs.items():
+        # optional normalization
+        if use_layer_norm:
+            h_s_proj = F.layer_norm(h_s_proj, (h_s_proj.size(-1),))
+            h_t = F.layer_norm(h_t, (h_t.size(-1),))
 
-        student_h = student_hidden_states[student_idx]  # [B, T, D_s]
-        teacher_h = teacher_hidden_states[teacher_idx]  # [B, T, D_t]
+        mse = F.mse_loss(h_s_proj, h_t)
+        # flatten batch+time, keep feature dim
+        hs_flat = h_s_proj.reshape(-1, h_s_proj.size(-1))
+        ht_flat = h_t.reshape(-1, h_t.size(-1))
+        cos = 1 - F.cosine_similarity(hs_flat, ht_flat, dim=-1).mean()
 
-        # Project student hidden state if needed
-        if projection_layers and student_idx < len(projection_layers):
-            student_h = projection_layers[student_idx](student_h)
+        loss = mse_weight * mse + cosine_weight * cos
+        losses.append(loss)
 
-        # Ensure same shape
-        min_seq_len = min(student_h.size(1), teacher_h.size(1))
-        student_h = student_h[:, :min_seq_len, :]
-        teacher_h = teacher_h[:, :min_seq_len, :]
+        out[f"layer_s{si}_t{ti}_mse"] = mse.detach()
+        out[f"layer_s{si}_t{ti}_cosine"] = cos.detach()
+        out[f"layer_s{si}_t{ti}_total"] = loss.detach()
 
-        # MSE loss
-        mse = F.mse_loss(student_h, teacher_h)
-        losses.append(mse)
-
-    if losses:
-        return torch.stack(losses).mean()
-    else:
-        return torch.tensor(0.0, device=student_hidden_states[0].device, requires_grad=True)
+    total = torch.stack(losses).mean()
+    out["total"] = total
+    return out
 
 
 def self_evaluation_loss(
