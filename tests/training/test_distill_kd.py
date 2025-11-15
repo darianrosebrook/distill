@@ -33,6 +33,115 @@ from training.distill_kd import (
 )
 
 
+class TestUtilityFunctions:
+    """Test utility functions that may not be covered by integration tests."""
+
+    def test_compute_required_fields_present_basic(self, device):
+        """Test compute_required_fields_present with basic inputs."""
+        from training.distill_kd import compute_required_fields_present
+
+        # Create mock batch
+        batch = {
+            "input_ids": torch.tensor([[1, 2, 3]], device=device),
+            "attention_mask": torch.tensor([[1, 1, 1]], device=device),
+        }
+
+        result = compute_required_fields_present(batch, None, device)
+
+        # Should return a tensor
+        assert isinstance(result, torch.Tensor)
+        assert result.device == device
+
+    def test_get_sequence_length_basic(self):
+        """Test get_sequence_length function."""
+        from training.distill_kd import get_sequence_length
+
+        # Test basic functionality
+        seq_lengths = [128, 256, 512, 1024]
+        schedule = {"type": "linear", "start": 128, "end": 1024}
+
+        # Early step
+        length = get_sequence_length(0, seq_lengths, schedule)
+        assert length == 128
+
+        # Middle step
+        length = get_sequence_length(50000, seq_lengths, schedule)
+        assert isinstance(length, int)
+        assert length >= 128
+
+        # Late step
+        length = get_sequence_length(100000, seq_lengths, schedule)
+        assert length == 1024
+
+    def test_sample_enumerated_shape_basic(self):
+        """Test sample_enumerated_shape function."""
+        from training.distill_kd import sample_enumerated_shape
+
+        shapes = [(128, 1000), (256, 1000), (512, 1000)]
+        step = 1000
+        total_steps = 10000
+
+        shape = sample_enumerated_shape(step, shapes, total_steps)
+
+        assert shape in shapes
+
+    def test_should_enable_qat_basic(self):
+        """Test should_enable_qat function."""
+        from training.distill_kd import should_enable_qat
+
+        qat_cfg = {"start_step": 1000, "total_steps": 10000}
+
+        # Before start
+        assert not should_enable_qat(500, 10000, qat_cfg)
+
+        # After start
+        assert should_enable_qat(1500, 10000, qat_cfg)
+
+    def test_apply_qat_to_model_basic(self, small_model_cfg, device):
+        """Test apply_qat_to_model function."""
+        from training.distill_kd import apply_qat_to_model
+
+        model = StudentLM(small_model_cfg).to(device)
+
+        qat_cfg = {
+            "weight_bits": 8,
+            "act_bits": 8,
+            "quantize_embeddings": False
+        }
+
+        quantized_model = apply_qat_to_model(model, qat_cfg, device)
+
+        # Should return a model
+        assert quantized_model is not None
+        assert quantized_model.device == device
+
+    def test_check_qat_stability_basic(self, small_model_cfg, device):
+        """Test check_qat_stability function."""
+        from training.distill_kd import check_qat_stability
+
+        model = StudentLM(small_model_cfg).to(device)
+
+        # Should not raise exception
+        check_qat_stability(model)
+
+    def test_truncate_batch_to_shape_basic(self, device):
+        """Test truncate_batch_to_shape function."""
+        from training.distill_kd import truncate_batch_to_shape
+
+        batch = {
+            "input_ids": torch.randn(2, 100, device=device),
+            "attention_mask": torch.ones(2, 100, device=device),
+            "labels": torch.randn(2, 100, device=device),
+        }
+
+        max_seq_len = 50
+        truncated = truncate_batch_to_shape(batch, max_seq_len)
+
+        assert truncated["input_ids"].shape[1] == max_seq_len
+        assert truncated["attention_mask"].shape[1] == max_seq_len
+        assert truncated["labels"].shape[1] == max_seq_len
+
+
 class TestConfigOperations:
     """Test configuration loading and merging."""
 
@@ -5352,6 +5461,54 @@ class TestMainFunction:
         )
 
         assert "total" in result
+
+    def test_train_step_real_execution(self, small_model_cfg, sample_batch, device):
+        """Test train_step with real model execution (no mocking) to improve coverage."""
+        # Create real model (not mocked)
+        model = StudentLM(small_model_cfg).to(device)
+        model.train()
+
+        # Create real optimizer
+        optimizer = AdamW(model.parameters(), lr=1e-3)
+
+        # Move batch to device
+        for k, v in sample_batch.items():
+            if isinstance(v, torch.Tensor):
+                sample_batch[k] = v.to(device)
+
+        # Basic training config
+        training_config = {
+            "distill": {
+                "code_mode": {"enabled": False}
+            },
+            "kd": {"kd_temperature": 2.0},
+            "distillation": {
+                "kl_weight": 0.4,
+                "ce_teacher_weight": 0.2,
+                "ce_ground_truth_weight": 0.2,
+            }
+        }
+
+        # Execute real training step (no mocking of forward pass)
+        result = train_step(
+            model=model,
+            batch=sample_batch,
+            optimizer=optimizer,
+            scaler=None,
+            cfg=training_config,
+            device=device,
+            grad_clip_norm=1.0,
+        )
+
+        # Verify results
+        assert isinstance(result, dict)
+        assert "total" in result
+        assert isinstance(result["total"], float)
+        assert result["total"] >= 0  # Loss should be non-negative
+
+        # Verify gradients were computed
+        has_gradients = any(p.grad is not None for p in model.parameters())
+        assert has_gradients, "Model parameters should have gradients after training step"
 
     def test_train_step_with_integration_mask(self, small_model, sample_batch, simple_optimizer, training_config, device):
         """Test training step with integration_mask (line 1200)."""
