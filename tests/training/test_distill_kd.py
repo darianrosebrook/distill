@@ -4459,7 +4459,8 @@ class TestMainFunction:
                                 with patch("training.distill_kd.DataLoader") as mock_dataloader_class:
                                     # Make DataLoader return an empty iterator to prevent infinite loops
                                     mock_dataloader = Mock()
-                                    mock_dataloader.__iter__ = Mock(return_value=iter([]))
+                                    mock_dataloader.__iter__ = Mock(
+                                        return_value=iter([]))
                                     mock_dataloader_class.return_value = mock_dataloader
                                     # Patch math.log to avoid issues with mpmath imports
                                     with patch("training.distill_kd.math") as mock_math:
@@ -4467,8 +4468,10 @@ class TestMainFunction:
                                         # Mock dataset creation to prevent file I/O
                                         with patch("training.distill_kd.KDDataset") as mock_kd_dataset_class:
                                             mock_dataset = Mock()
-                                            mock_dataset.__iter__ = Mock(return_value=iter([]))
-                                            mock_dataset.__len__ = Mock(return_value=0)
+                                            mock_dataset.__iter__ = Mock(
+                                                return_value=iter([]))
+                                            mock_dataset.__len__ = Mock(
+                                                return_value=0)
                                             mock_dataset.dataset_header = None
                                             mock_kd_dataset_class.return_value = mock_dataset
                                             # Mock collate function

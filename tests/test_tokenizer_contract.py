@@ -21,17 +21,25 @@ from models.student.tokenizer.constants import (
 )
 
 
-def load_student_tokenizer():
-    """Load student tokenizer."""
+@pytest.fixture
+def tokenizer():
+    """Load fresh student tokenizer for each test to ensure isolation."""
     from training.dataset import load_tokenizer
 
     tokenizer_path = "models/student/tokenizer"
     return load_tokenizer(tokenizer_path)
 
 
-def test_special_token_ids_match_constants():
+def load_student_tokenizer():
+    """Load student tokenizer (legacy function for backward compatibility)."""
+    from training.dataset import load_tokenizer
+
+    tokenizer_path = "models/student/tokenizer"
+    return load_tokenizer(tokenizer_path)
+
+
+def test_special_token_ids_match_constants(tokenizer):
     """Test that special token IDs match constants.py."""
-    tokenizer = load_student_tokenizer()
 
     # Get token IDs from tokenizer
     bos_id = tokenizer.bos_token_id
@@ -60,9 +68,8 @@ def test_special_token_ids_match_constants():
     assert eot_id == EOT_TOKEN_ID, f"EOT token ID mismatch: {eot_id} != {EOT_TOKEN_ID}"
 
 
-def test_special_tokens_are_single_tokens():
+def test_special_tokens_are_single_tokens(tokenizer):
     """Test that special tokens (BOT, EOT) form single tokens, not split."""
-    tokenizer = load_student_tokenizer()
 
     # Test BOT token
     bot_tokens = tokenizer.encode(BOT_TOKEN, add_special_tokens=False)
@@ -88,9 +95,8 @@ def test_special_tokens_are_single_tokens():
     )
 
 
-def test_round_trip_stability():
+def test_round_trip_stability(tokenizer):
     """Test round-trip stability for prompts with special tokens."""
-    tokenizer = load_student_tokenizer()
 
     # Test prompts with special tokens
     test_prompts = [
@@ -132,11 +138,9 @@ def test_round_trip_stability():
         # as long as special tokens are preserved
 
 
-def test_masking_safety():
+def test_masking_safety(tokenizer):
     """Test that padding mask never masks special tokens (BOS/EOS/BOT/EOT)."""
     import torch
-
-    tokenizer = load_student_tokenizer()
 
     # Create a sequence with special tokens
     prompt = f"{BOT_TOKEN} tool call {EOT_TOKEN}"
@@ -210,11 +214,9 @@ def test_masking_safety():
                 )
 
 
-def test_loss_masking_never_hides_supervised_tokens():
+def test_loss_masking_never_hides_supervised_tokens(tokenizer):
     """Test that loss masking (ignore_index) never hides supervised tool/JSON tokens."""
     import torch
-
-    tokenizer = load_student_tokenizer()
 
     # Create a sequence with tool tokens that should be supervised
     prompt = f"{BOT_TOKEN} search query {EOT_TOKEN}"

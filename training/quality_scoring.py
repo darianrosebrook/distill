@@ -52,7 +52,6 @@ def compute_heuristic_quality_score(
 
     # Check length appropriateness
     word_count = len(teacher_output.split())
-    len(teacher_output)
 
     # Reward reasonable length (not too short, not too long)
     if 50 <= word_count <= 500:

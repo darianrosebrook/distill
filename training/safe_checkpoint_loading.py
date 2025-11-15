@@ -68,7 +68,8 @@ def safe_load_checkpoint(
             # with metadata). Structure is validated immediately after loading (see below).
             # This is part of the safe wrapper function pattern: try secure path first, then
             # validate structure before using less secure fallback.
-            checkpoint = torch.load(checkpoint_path, map_location=map_location)  # nosec B614
+            # Explicitly set weights_only=False for PyTorch 2.6+ compatibility
+            checkpoint = torch.load(checkpoint_path, map_location=map_location, weights_only=False)  # nosec B614
         except Exception as load_error:
             raise RuntimeError(f"Failed to load checkpoint: {load_error}") from load_error
         
