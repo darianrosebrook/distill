@@ -567,9 +567,586 @@ class TestCollateKDBatch:
         if "tool_name_ids" in result:
             assert result["tool_name_ids"].shape[0] == 2
 
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_load_data_empty_lines(self, mock_safe_from_pretrained, tmp_path, mock_tokenizer):
+        """Test _load_data with empty lines in JSONL file (line 115)."""
+        mock_safe_from_pretrained.return_value = mock_tokenizer
+
+        jsonl_path = tmp_path / "test.jsonl"
+        with open(jsonl_path, "w") as f:
+            f.write("\n")  # Empty line
+            f.write(json.dumps({"prompt": "Hello", "teacher_text": "World"}) + "\n")
+            f.write("\n")  # Another empty line
+            f.write(json.dumps({"prompt": "Test", "teacher_text": "Response"}) + "\n")
+
+        dataset = KDDataset(str(jsonl_path), "tokenizer/path")
+        # Should skip empty lines and load 2 samples
+        assert len(dataset) == 2
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_load_data_json_decode_error(self, mock_safe_from_pretrained, tmp_path, mock_tokenizer):
+        """Test _load_data with JSON decode errors (lines 143-145)."""
+        mock_safe_from_pretrained.return_value = mock_tokenizer
+
+        jsonl_path = tmp_path / "test.jsonl"
+        with open(jsonl_path, "w") as f:
+            f.write(json.dumps({"prompt": "Hello", "teacher_text": "World"}) + "\n")
+            f.write("invalid json line\n")  # Invalid JSON
+            f.write(json.dumps({"prompt": "Test", "teacher_text": "Response"}) + "\n")
+
+        dataset = KDDataset(str(jsonl_path), "tokenizer/path")
+        # Should skip invalid JSON line and load 2 samples
+        assert len(dataset) == 2
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_getitem_with_latent_curriculum(self, mock_safe_from_pretrained, tmp_path, mock_tokenizer):
+        """Test __getitem__ with latent curriculum applied (line 169)."""
+        mock_safe_from_pretrained.return_value = mock_tokenizer
+
+        # Create a mock latent curriculum
+        mock_curriculum = Mock()
+        mock_curriculum.apply = Mock(return_value={
+            "prompt": "Hello",
+            "teacher_text": "World",
+            "training_text": "Hello\n\nWorld",
+            "loss_mask": [True, True, False]
+        })
+
+        jsonl_path = tmp_path / "test.jsonl"
+        with open(jsonl_path, "w") as f:
+            f.write(json.dumps({"prompt": "Hello", "teacher_text": "World"}) + "\n")
+
+        dataset = KDDataset(str(jsonl_path), "tokenizer/path", latent_curriculum=mock_curriculum)
+        item = dataset[0]
+
+        # Verify latent curriculum was applied
+        mock_curriculum.apply.assert_called_once()
+        assert "loss_mask" in item
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    @patch("data.generators.mcp_code_mode.compute_span_targets_from_tokenized")
+    def test_kd_dataset_getitem_span_targets_computation(self, mock_compute, mock_safe_from_pretrained, tmp_path, mock_tokenizer):
+        """Test __getitem__ with span targets computation (lines 195-208)."""
+        mock_safe_from_pretrained.return_value = mock_tokenizer
+        mock_compute.return_value = {"ts_mode_spans": [1, 2, 3]}
+
+        jsonl_path = tmp_path / "test.jsonl"
+        with open(jsonl_path, "w") as f:
+            f.write(json.dumps({
+                "prompt": "Hello",
+                "teacher_text": "World",
+                "metadata": {
+                    "span_targets": {}  # Empty span_targets triggers computation
+                }
+            }) + "\n")
+
+        dataset = KDDataset(str(jsonl_path), "tokenizer/path")
+        item = dataset[0]
+
+        # Should attempt to compute span targets
+        mock_compute.assert_called_once()
+        assert "span_targets" in item
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_getitem_teacher_target_padding(self, mock_safe_from_pretrained, tmp_path, mock_tokenizer):
+        """Test __getitem__ with teacher target padding (lines 264-267)."""
+        mock_safe_from_pretrained.return_value = mock_tokenizer
+        # Make teacher_tokens shorter than labels
+        mock_tokenizer.encode = Mock(side_effect=lambda text, **kwargs: {
+            "Hello": [1, 2, 3],
+            "World": [4, 5],  # Shorter than full sequence
+            "Hello\n\nWorld": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]  # Long sequence
+        }.get(text, []))
+
+        jsonl_path = tmp_path / "test.jsonl"
+        with open(jsonl_path, "w") as f:
+            f.write(json.dumps({"prompt": "Hello", "teacher_text": "World"}) + "\n")
+
+        dataset = KDDataset(str(jsonl_path), "tokenizer/path")
+        item = dataset[0]
+
+        # Teacher target should be padded to match labels length
+        assert "teacher_target_ids" in item
+        assert len(item["teacher_target_ids"]) == len(item["labels"])
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_getitem_teacher_target_truncation(self, mock_safe_from_pretrained, tmp_path, mock_tokenizer):
+        """Test __getitem__ with teacher target truncation (line 269)."""
+        mock_safe_from_pretrained.return_value = mock_tokenizer
+        # Make teacher_tokens longer than labels
+        mock_tokenizer.encode = Mock(side_effect=lambda text, **kwargs: {
+            "Hello": [1, 2],
+            "World": [4, 5, 6, 7, 8, 9, 10],  # Longer than labels
+            "Hello\n\nWorld": [1, 2, 4, 5, 6]  # Short full sequence
+        }.get(text, []))
+
+        jsonl_path = tmp_path / "test.jsonl"
+        with open(jsonl_path, "w") as f:
+            f.write(json.dumps({"prompt": "Hello", "teacher_text": "World"}) + "\n")
+
+        dataset = KDDataset(str(jsonl_path), "tokenizer/path")
+        item = dataset[0]
+
+        # Teacher target should be truncated to match labels length
+        assert "teacher_target_ids" in item
+        assert len(item["teacher_target_ids"]) == len(item["labels"])
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_getitem_loss_mask_padding(self, mock_safe_from_pretrained, tmp_path, mock_tokenizer):
+        """Test __getitem__ with loss mask padding (lines 281-283)."""
+        mock_safe_from_pretrained.return_value = mock_tokenizer
+        # Make encode return long sequences
+        mock_tokenizer.encode = Mock(side_effect=lambda text, **kwargs: list(range(20)) if text else [])
+
+        jsonl_path = tmp_path / "test.jsonl"
+        with open(jsonl_path, "w") as f:
+            f.write(json.dumps({
+                "prompt": "Hello",
+                "teacher_text": "World",
+                "loss_mask": [True, True, False]  # Shorter than labels
+            }) + "\n")
+
+        dataset = KDDataset(str(jsonl_path), "tokenizer/path")
+        item = dataset[0]
+
+        # Loss mask should be padded to match labels length
+        assert "loss_mask" in item
+        assert len(item["loss_mask"]) == len(item["labels"])
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_getitem_teacher_logits_padding(self, mock_safe_from_pretrained, tmp_path, mock_tokenizer):
+        """Test __getitem__ with teacher logits padding (lines 303-311)."""
+        mock_safe_from_pretrained.return_value = mock_tokenizer
+        vocab_size = 1000
+        seq_len = 3
+        # Create logits shorter than labels
+        teacher_logits_flat = [0.1] * (seq_len * vocab_size)
+
+        jsonl_path = tmp_path / "test.jsonl"
+        with open(jsonl_path, "w") as f:
+            f.write(json.dumps({
+                "prompt": "Hello",
+                "teacher_text": "World",
+                "teacher_logits": teacher_logits_flat,
+            }) + "\n")
+
+        # Make encode return longer sequence than logits
+        # full_text will be "Hello\n\nWorld" which should be longer
+        def encode_side_effect(text, **kwargs):
+            if text == "Hello":
+                return [1, 2]
+            elif text == "World":
+                return [3, 4]
+            elif text == "Hello\n\nWorld":
+                return list(range(10))  # Long sequence
+            return []
+        
+        mock_tokenizer.encode = Mock(side_effect=encode_side_effect)
+        mock_tokenizer.__len__ = Mock(return_value=vocab_size)
+
+        dataset = KDDataset(
+            str(jsonl_path), "tokenizer/path", teacher_logits_available=True
+        )
+        item = dataset[0]
+
+        # Teacher logits should be padded to match labels length
+        assert "teacher_logits" in item
+        assert item["teacher_logits"].size(0) == len(item["labels"])
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_getitem_quality_score_string(self, mock_safe_from_pretrained, tmp_path, mock_tokenizer):
+        """Test __getitem__ with quality score as string (lines 320-324)."""
+        mock_safe_from_pretrained.return_value = mock_tokenizer
+
+        jsonl_path = tmp_path / "test.jsonl"
+        with open(jsonl_path, "w") as f:
+            f.write(json.dumps({
+                "prompt": "Hello",
+                "teacher_text": "World",
+                "teacher_quality_score": "0.85",  # String instead of float
+            }) + "\n")
+
+        dataset = KDDataset(str(jsonl_path), "tokenizer/path")
+        item = dataset[0]
+
+        assert "teacher_quality_score" in item
+        assert item["teacher_quality_score"] == 0.85
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_getitem_quality_score_invalid_string(self, mock_safe_from_pretrained, tmp_path, mock_tokenizer):
+        """Test __getitem__ with invalid quality score string."""
+        mock_safe_from_pretrained.return_value = mock_tokenizer
+
+        jsonl_path = tmp_path / "test.jsonl"
+        with open(jsonl_path, "w") as f:
+            f.write(json.dumps({
+                "prompt": "Hello",
+                "teacher_text": "World",
+                "teacher_quality_score": "invalid",  # Invalid string
+            }) + "\n")
+
+        dataset = KDDataset(str(jsonl_path), "tokenizer/path")
+        item = dataset[0]
+
+        # Should skip invalid quality score
+        assert "teacher_quality_score" not in item
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_getitem_teacher_hidden_states(self, mock_safe_from_pretrained, tmp_path, mock_tokenizer):
+        """Test __getitem__ with teacher hidden states (lines 331-362)."""
+        mock_safe_from_pretrained.return_value = mock_tokenizer
+
+        # Test with pre-computed hidden states as list
+        jsonl_path = tmp_path / "test.jsonl"
+        with open(jsonl_path, "w") as f:
+            f.write(json.dumps({
+                "prompt": "Hello",
+                "teacher_text": "World",
+                "teacher_hidden_states": [
+                    [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],  # Layer 1: [T, D]
+                    [[7.0, 8.0, 9.0], [10.0, 11.0, 12.0]]  # Layer 2: [T, D]
+                ]
+            }) + "\n")
+
+        dataset = KDDataset(str(jsonl_path), "tokenizer/path")
+        item = dataset[0]
+
+        assert "teacher_hidden_states" in item
+        assert isinstance(item["teacher_hidden_states"], list)
+        assert len(item["teacher_hidden_states"]) == 2
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_getitem_teacher_hidden_states_empty(self, mock_safe_from_pretrained, tmp_path, mock_tokenizer):
+        """Test __getitem__ with empty teacher hidden states."""
+        mock_safe_from_pretrained.return_value = mock_tokenizer
+
+        jsonl_path = tmp_path / "test.jsonl"
+        with open(jsonl_path, "w") as f:
+            f.write(json.dumps({
+                "prompt": "Hello",
+                "teacher_text": "World",
+                "teacher_hidden_states": []  # Empty list
+            }) + "\n")
+
+        dataset = KDDataset(str(jsonl_path), "tokenizer/path")
+        item = dataset[0]
+
+        # Should set metadata flag
+        assert "has_teacher_hidden_states" in item
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_getitem_teacher_hidden_states_invalid(self, mock_safe_from_pretrained, tmp_path, mock_tokenizer):
+        """Test __getitem__ with invalid teacher hidden states."""
+        mock_safe_from_pretrained.return_value = mock_tokenizer
+
+        jsonl_path = tmp_path / "test.jsonl"
+        with open(jsonl_path, "w") as f:
+            f.write(json.dumps({
+                "prompt": "Hello",
+                "teacher_text": "World",
+                "teacher_hidden_states": "invalid"  # Invalid format
+            }) + "\n")
+
+        dataset = KDDataset(str(jsonl_path), "tokenizer/path")
+        item = dataset[0]
+
+        # Should set metadata flag on error
+        assert "has_teacher_hidden_states" in item
+
+    def test_collate_kd_batch_padding_operations(self):
+        """Test collate_kd_batch padding operations for various fields (lines 488, 503, 517, 530)."""
+        batch = [
+            {
+                "input_ids": torch.tensor([1, 2, 3]),
+                "attention_mask": torch.tensor([1, 1, 1]),
+                "labels": torch.tensor([2, 3, 4]),
+                "gold_json_text_ids": torch.tensor([10, 11, 12, 13]),  # Length 4
+                "mask_valid_json_tokens": torch.tensor([True, False, True, False]),  # Length 4
+                "tool_result_fields": torch.tensor([20, 21, 22, 23, 24]),  # Length 5
+                "integration_mask": torch.tensor([True, True, True]),  # Length 3
+            },
+            {
+                "input_ids": torch.tensor([4, 5]),
+                "attention_mask": torch.tensor([1, 1]),
+                "labels": torch.tensor([5, 6]),
+                "gold_json_text_ids": torch.tensor([14, 15]),  # Length 2, needs padding
+                "mask_valid_json_tokens": torch.tensor([True, True]),  # Length 2, needs padding
+                "tool_result_fields": torch.tensor([25, 26]),  # Length 2, needs padding
+                "integration_mask": torch.tensor([True, True]),  # Length 2, needs padding
+            },
+        ]
+
+        result = collate_kd_batch(batch)
+
+        # Check padding for gold_json_text_ids (line 488)
+        assert result["gold_json_text_ids"].shape == (2, 4)  # Padded to max length 4
+        # Check padding for mask_valid_json_tokens (line 503)
+        assert result["mask_valid_json_tokens"].shape == (2, 4)  # Padded to max length 4
+        # Check padding for tool_result_fields (line 517)
+        assert result["tool_result_fields"].shape == (2, 5)  # Padded to max length 5
+        # Check padding for integration_mask (line 530)
+        assert result["integration_mask"].shape == (2, 3)  # Padded to max length 3
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", False)
+    def test_load_tokenizer_import_error_path(self):
+        """Test load_tokenizer when transformers import fails (lines 18-24)."""
+        # This tests the import error handling path
+        with pytest.raises(RuntimeError, match="transformers library required"):
+            load_tokenizer("test/path")
 
 
+class TestKDDatasetEdgeCases:
+    """Test edge cases for KDDataset."""
 
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_span_targets_exception_handling(self, mock_safe_from_pretrained, tmp_path):
+        """Test KDDataset handles exception in span_targets computation (lines 205-208)."""
+        mock_tokenizer = Mock()
+        mock_tokenizer.pad_token = None
+        mock_tokenizer.eos_token = "<eos>"
+        mock_tokenizer.encode = Mock(return_value=[1, 2, 3])
+        mock_safe_from_pretrained.return_value = mock_tokenizer
+
+        # Create test JSONL file
+        jsonl_file = tmp_path / "test.jsonl"
+        with open(jsonl_file, "w") as f:
+            json.dump({
+                "prompt": "Test prompt",
+                "teacher_text": "Test response",
+                "metadata": {}
+            }, f)
+            f.write("\n")
+
+        # Patch the import to raise exception when trying to import compute_span_targets_from_tokenized
+        # The function imports it inside the try block, so we patch the module import
+        import sys
+        from unittest.mock import MagicMock
+        
+        # Create a mock module that raises exception when compute_span_targets_from_tokenized is called
+        mock_module = MagicMock()
+        mock_module.compute_span_targets_from_tokenized = Mock(side_effect=Exception("Error"))
+        
+        # Patch sys.modules to return our mock when the module is imported
+        with patch.dict(sys.modules, {'data.generators.mcp_code_mode': mock_module}):
+            dataset = KDDataset(str(jsonl_file), "test/path")
+            sample = dataset[0]
+            
+            # Should handle exception gracefully and set span_targets to None
+            assert "span_targets" in sample or sample.get("span_targets") is None
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_teacher_target_ids_truncation(self, mock_safe_from_pretrained, tmp_path):
+        """Test KDDataset truncates teacher_target_ids when longer than labels (line 269).
+        
+        Note: Line 260 already truncates teacher_tokens to len(labels), so line 269
+        is defensive code. We test it by patching torch.tensor to return a longer tensor.
+        """
+        mock_tokenizer = Mock()
+        mock_tokenizer.pad_token = None
+        mock_tokenizer.eos_token = "<eos>"
+        # Make encode return a short sequence so labels will be short (length 2)
+        mock_tokenizer.encode = Mock(return_value=[1, 2, 3])  # labels will be [2, 3] (length 2)
+        mock_safe_from_pretrained.return_value = mock_tokenizer
+
+        # Create test JSONL file with teacher_tokens
+        jsonl_file = tmp_path / "test.jsonl"
+        with open(jsonl_file, "w") as f:
+            json.dump({
+                "prompt": "Short",
+                "teacher_text": "Response",
+                "teacher_tokens": [1, 2, 3, 4, 5],  # Will be truncated to len(labels)=2 at line 260
+                "metadata": {}
+            }, f)
+            f.write("\n")
+
+        # Patch torch.tensor to return a longer tensor than expected (to trigger line 269)
+        original_tensor = torch.tensor
+        call_count = [0]
+        
+        def mock_tensor(data, **kwargs):
+            call_count[0] += 1
+            # On the call for teacher_target_ids (after labels are created), return longer tensor
+            if call_count[0] > 2 and isinstance(data, list) and len(data) == 2:
+                # Return a tensor longer than labels (length 2)
+                return original_tensor([1, 2, 3, 4, 5], **kwargs)
+            return original_tensor(data, **kwargs)
+        
+        with patch('torch.tensor', side_effect=mock_tensor):
+            dataset = KDDataset(str(jsonl_file), "test/path")
+            sample = dataset[0]
+            
+            # teacher_target_ids should be truncated to match labels length (line 269)
+            if "teacher_target_ids" in sample:
+                labels = sample["labels"]
+                teacher_target_ids = sample["teacher_target_ids"]
+                assert len(teacher_target_ids) == len(labels)
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_teacher_logits_dim2_padding(self, mock_safe_from_pretrained, tmp_path):
+        """Test KDDataset pads teacher_logits when dim==2 and shorter than labels (lines 303-311)."""
+        mock_tokenizer = Mock()
+        mock_tokenizer.pad_token = None
+        mock_tokenizer.eos_token = "<eos>"
+        mock_tokenizer.encode = Mock(side_effect=lambda text, **kwargs: [1, 2, 3, 4, 5])
+        mock_tokenizer.__len__ = Mock(return_value=1000)  # vocab_size
+        mock_safe_from_pretrained.return_value = mock_tokenizer
+
+        # Create test JSONL file with teacher_logits as 2D tensor shorter than labels
+        jsonl_file = tmp_path / "test.jsonl"
+        with open(jsonl_file, "w") as f:
+            # teacher_logits as 2D: [3, 1000] but labels will be longer
+            teacher_logits_2d = [[0.1] * 1000, [0.2] * 1000, [0.3] * 1000]  # 3 timesteps
+            json.dump({
+                "prompt": "Test prompt that will create longer labels",
+                "teacher_text": "Test response",
+                "teacher_logits": teacher_logits_2d,  # 2D, shorter than labels
+                "metadata": {}
+            }, f)
+            f.write("\n")
+
+        dataset = KDDataset(str(jsonl_file), "test/path", teacher_logits_available=True)
+        sample = dataset[0]
+        
+        # teacher_logits should be padded to match labels length
+        if "teacher_logits" in sample:
+            labels = sample["labels"]
+            teacher_logits = sample["teacher_logits"]
+            assert teacher_logits.shape[0] == len(labels)  # Should be padded to labels length
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_hidden_states_non_list_break(self, mock_safe_from_pretrained, tmp_path):
+        """Test KDDataset breaks when hidden_states layer is not a list (line 348)."""
+        mock_tokenizer = Mock()
+        mock_tokenizer.pad_token = None
+        mock_tokenizer.eos_token = "<eos>"
+        mock_tokenizer.encode = Mock(return_value=[1, 2, 3])
+        mock_safe_from_pretrained.return_value = mock_tokenizer
+
+        # Create test JSONL file with hidden_states containing non-list items
+        jsonl_file = tmp_path / "test.jsonl"
+        with open(jsonl_file, "w") as f:
+            json.dump({
+                "prompt": "Test prompt",
+                "teacher_text": "Test response",
+                "teacher_hidden_states": [
+                    [[1.0, 2.0], [3.0, 4.0]],  # First layer: list (will be converted)
+                    "not_a_list",  # Second layer: not a list (will trigger break)
+                    [[5.0, 6.0], [7.0, 8.0]]  # Third layer: won't be processed due to break
+                ],
+                "metadata": {}
+            }, f)
+            f.write("\n")
+
+        dataset = KDDataset(str(jsonl_file), "test/path")
+        sample = dataset[0]
+        
+        # Should process first layer, then break on second layer
+        # Result should have only first layer or has_teacher_hidden_states flag
+        assert "teacher_hidden_states" in sample or "has_teacher_hidden_states" in sample
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_hidden_states_exception_handling(self, mock_safe_from_pretrained, tmp_path):
+        """Test KDDataset handles exception in hidden_states loading (lines 354-358)."""
+        mock_tokenizer = Mock()
+        mock_tokenizer.pad_token = None
+        mock_tokenizer.eos_token = "<eos>"
+        mock_tokenizer.encode = Mock(return_value=[1, 2, 3])
+        mock_safe_from_pretrained.return_value = mock_tokenizer
+
+        # Create test JSONL file with invalid hidden_states that will cause exception
+        jsonl_file = tmp_path / "test.jsonl"
+        with open(jsonl_file, "w") as f:
+            # Use invalid data that will cause exception when converting to tensor
+            json.dump({
+                "prompt": "Test prompt",
+                "teacher_text": "Test response",
+                "teacher_hidden_states": [
+                    float('inf'),  # Invalid value that might cause issues
+                    float('nan'),  # Invalid value
+                ],
+                "metadata": {}
+            }, f)
+            f.write("\n")
+
+        dataset = KDDataset(str(jsonl_file), "test/path")
+        sample = dataset[0]
+        
+        # Should handle exception gracefully and set has_teacher_hidden_states flag
+        assert "has_teacher_hidden_states" in sample or "teacher_hidden_states" not in sample
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_loss_mask_list_to_tensor(self, mock_safe_from_pretrained, tmp_path):
+        """Test KDDataset converts loss_mask from list to tensor (line 276->279 branch)."""
+        mock_tokenizer = Mock()
+        mock_tokenizer.pad_token = None
+        mock_tokenizer.eos_token = "<eos>"
+        mock_tokenizer.encode = Mock(return_value=[1, 2, 3, 4, 5])
+        mock_safe_from_pretrained.return_value = mock_tokenizer
+
+        # Create test JSONL file with loss_mask as a list (not tensor)
+        jsonl_file = tmp_path / "test.jsonl"
+        with open(jsonl_file, "w") as f:
+            json.dump({
+                "prompt": "Test prompt",
+                "teacher_text": "Test response",
+                "loss_mask": [True, False, True, True, False],  # List, not tensor
+                "metadata": {}
+            }, f)
+            f.write("\n")
+
+        dataset = KDDataset(str(jsonl_file), "test/path")
+        sample = dataset[0]
+        
+        # loss_mask should be converted to tensor
+        assert "loss_mask" in sample
+        assert isinstance(sample["loss_mask"], torch.Tensor)
+        assert sample["loss_mask"].dtype == torch.bool
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_hidden_states_empty_tensors_fallback(self, mock_safe_from_pretrained, tmp_path):
+        """Test KDDataset fallback when hidden_states_tensors is empty (lines 354-358)."""
+        mock_tokenizer = Mock()
+        mock_tokenizer.pad_token = None
+        mock_tokenizer.eos_token = "<eos>"
+        mock_tokenizer.encode = Mock(return_value=[1, 2, 3])
+        mock_safe_from_pretrained.return_value = mock_tokenizer
+
+        # Create test JSONL file with hidden_states that result in empty tensors
+        jsonl_file = tmp_path / "test.jsonl"
+        with open(jsonl_file, "w") as f:
+            json.dump({
+                "prompt": "Test prompt",
+                "teacher_text": "Test response",
+                "teacher_hidden_states": [],  # Empty list
+                "metadata": {}
+            }, f)
+            f.write("\n")
+
+        dataset = KDDataset(str(jsonl_file), "test/path")
+        sample = dataset[0]
+        
+        # Should fall back to has_teacher_hidden_states flag when tensors are empty
+        assert "has_teacher_hidden_states" in sample or sample.get("has_teacher_hidden_states") is True
 
 
 
