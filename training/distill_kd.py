@@ -127,8 +127,10 @@ def compute_required_fields_present(
             if mask_valid_json is not None:
                 student_attn_mask = batch.get("attention_mask")
                 if student_attn_mask is not None:
-                    json_length = min(gold_json_ids.size(1), student_attn_mask.size(1))
-                    student_covers_json = student_attn_mask[:, :json_length].sum(dim=1) > 0
+                    json_length = min(gold_json_ids.size(
+                        1), student_attn_mask.size(1))
+                    student_covers_json = student_attn_mask[:, :json_length].sum(
+                        dim=1) > 0
                     required_present = student_covers_json
         return required_present
 
@@ -139,9 +141,14 @@ def compute_required_fields_present(
         from tools.schema_registry import ToolSchemaRegistry
 
         schema_registry = ToolSchemaRegistry()
-    except Exception:
+    except ImportError:
         # Schema registry not available - fall back to generic validation
+        # This is expected in some environments, so we silently continue
         pass
+    except Exception as e:
+        # Other errors should be logged but not block execution
+        print(
+            f"[distill_kd] WARN: Could not initialize schema registry: {e}, using generic validation")
 
     # Generate text from student logits for each batch item
     from training.extractors import extract_tool_call
@@ -163,7 +170,8 @@ def compute_required_fields_present(
                 not in [
                     -100,
                     0,
-                    tokenizer.pad_token_id if hasattr(tokenizer, "pad_token_id") else None,
+                    tokenizer.pad_token_id if hasattr(
+                        tokenizer, "pad_token_id") else None,
                 ]
             ]
             generated_text = tokenizer.decode(tokens, skip_special_tokens=True)
@@ -191,7 +199,8 @@ def compute_required_fields_present(
                 if isinstance(validated_args, list) and i < len(validated_args):
                     teacher_validated = validated_args[i]
                 elif isinstance(validated_args, dict):
-                    teacher_validated = validated_args.get(str(i)) or validated_args.get(i)
+                    teacher_validated = validated_args.get(
+                        str(i)) or validated_args.get(i)
 
             # Validate against schema required fields
             if schema_registry:
@@ -249,7 +258,8 @@ def compute_required_fields_present(
                 if schema_registry:
                     schema = schema_registry.get_schema(tool_name)
                     if schema:
-                        args_schema = schema.get("properties", {}).get("arguments", {})
+                        args_schema = schema.get(
+                            "properties", {}).get("arguments", {})
                         required_fields = set(args_schema.get("required", []))
                         # Check if student has all required fields
                         if not required_fields.issubset(student_fields):
@@ -272,10 +282,12 @@ def compute_required_fields_present(
             # Optionally log error for debugging (but don't spam during training)
             if hasattr(compute_required_fields_present, "_error_count"):
                 compute_required_fields_present._error_count = (
-                    getattr(compute_required_fields_present, "_error_count", 0) + 1
+                    getattr(compute_required_fields_present,
+                            "_error_count", 0) + 1
                 )
                 if compute_required_fields_present._error_count <= 5:  # Log first 5 errors
-                    print(f"[distill_kd] WARN: Completeness check error for batch item {i}: {e}")
+                    print(
+                        f"[distill_kd] WARN: Completeness check error for batch item {i}: {e}")
 
     return required_present
 
@@ -348,12 +360,12 @@ def merge_configs(configs: list, env_overrides: Optional[Dict[str, Any]] = None)
 def create_model(cfg: Dict[str, Any], device: torch.device) -> nn.Module:
     """Create student model from config."""
     arch_cfg = cfg.get("arch", {})
-    
+
     # Validate that arch config exists and has minimum required fields
     # This prevents hanging on invalid configs during model initialization
     if not arch_cfg:
         raise KeyError("Missing required 'arch' configuration section")
-    
+
     # Check for critical fields that would cause issues if missing
     # Note: We allow defaults for most fields, but validate structure
     if not isinstance(arch_cfg, dict):
@@ -372,7 +384,8 @@ def create_model(cfg: Dict[str, Any], device: torch.device) -> nn.Module:
     )
 
     # Enable self-evaluation head if configured
-    use_self_evaluation = cfg.get("distillation", {}).get("use_self_evaluation", False)
+    use_self_evaluation = cfg.get("distillation", {}).get(
+        "use_self_evaluation", False)
     model = StudentLM(model_cfg, use_self_evaluation=use_self_evaluation)
 
     # Load checkpoint if specified
@@ -382,20 +395,24 @@ def create_model(cfg: Dict[str, Any], device: torch.device) -> nn.Module:
         try:
             print(f"[distill_kd] Loading checkpoint: {base_checkpoint}")
             from training.safe_checkpoint_loading import safe_load_checkpoint
-            checkpoint = safe_load_checkpoint(base_checkpoint, map_location="cpu")
+            checkpoint = safe_load_checkpoint(
+                base_checkpoint, map_location="cpu")
             if "model_state_dict" in checkpoint:
-                model.load_state_dict(checkpoint["model_state_dict"], strict=False)
+                model.load_state_dict(
+                    checkpoint["model_state_dict"], strict=False)
             else:
                 model.load_state_dict(checkpoint, strict=False)
             print("[distill_kd] Checkpoint loaded")
         except Exception as e:
-            print(f"[distill_kd] ERROR: Failed to load checkpoint {base_checkpoint}: {e}")
+            print(
+                f"[distill_kd] ERROR: Failed to load checkpoint {base_checkpoint}: {e}")
             import traceback
 
             traceback.print_exc()
             print("[distill_kd] Continuing with randomly initialized model")
     elif base_checkpoint:
-        print(f"[distill_kd] WARN: Base checkpoint not found: {base_checkpoint}")
+        print(
+            f"[distill_kd] WARN: Base checkpoint not found: {base_checkpoint}")
 
     model = model.to(device)
 
@@ -405,7 +422,8 @@ def create_model(cfg: Dict[str, Any], device: torch.device) -> nn.Module:
         layer_mapping = kd_cfg.get("layer_mapping", {})
         if layer_mapping:
             # Get teacher model dimensions from config
-            teacher_d_model = cfg.get("teacher", {}).get("d_model", model_cfg.d_model)
+            teacher_d_model = cfg.get("teacher", {}).get(
+                "d_model", model_cfg.d_model)
 
             if teacher_d_model != model_cfg.d_model:
                 projection_layers = create_projection_layers(
@@ -436,11 +454,13 @@ def create_optimizer(model: nn.Module, cfg: Dict[str, Any]) -> torch.optim.Optim
 
     # Add projection layers to optimizer if they exist
     if hasattr(model, "projection_layers") and model.projection_layers:
-        projection_params = [layer.parameters() for layer in model.projection_layers.values()]
+        projection_params = [layer.parameters()
+                             for layer in model.projection_layers.values()]
         # Flatten nested parameter lists
         for layer_params in projection_params:
             params.extend(list(layer_params))
-        print(f"[distill_kd] Added {len(model.projection_layers)} projection layers to optimizer")
+        print(
+            f"[distill_kd] Added {len(model.projection_layers)} projection layers to optimizer")
 
     if opt_name == "adamw":
         optimizer = torch.optim.AdamW(
@@ -588,7 +608,8 @@ def apply_qat_to_model(
     fake_quant_in_attention = qat_cfg.get("fake_quant_in_attention", True)
     clamp_pre_softmax = qat_cfg.get("clamp_pre_softmax", True)
 
-    print(f"[distill_kd] Applying QAT: weight_bits={weight_bits}, act_bits={act_bits}")
+    print(
+        f"[distill_kd] Applying QAT: weight_bits={weight_bits}, act_bits={act_bits}")
     quantized_model = quantize_model(
         model,
         weight_bits=weight_bits,
@@ -644,7 +665,8 @@ def check_qat_stability(
                 try:
                     # Extract hidden states from current model
                     if isinstance(
-                        model, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)
+                        model, (torch.nn.DataParallel,
+                                torch.nn.parallel.DistributedDataParallel)
                     ):
                         # Unwrap DDP/DP model
                         actual_model = model.module
@@ -686,7 +708,8 @@ def check_qat_stability(
                         baseline_model.eval()
                         if isinstance(
                             baseline_model,
-                            (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel),
+                            (torch.nn.DataParallel,
+                             torch.nn.parallel.DistributedDataParallel),
                         ):
                             baseline_actual = baseline_model.module
                         else:
@@ -708,7 +731,8 @@ def check_qat_stability(
                     # Compute cosine similarity per layer
                     if current_hidden_states is not None and baseline_states is not None:
                         # Ensure same number of layers
-                        num_layers = min(len(current_hidden_states), len(baseline_states))
+                        num_layers = min(
+                            len(current_hidden_states), len(baseline_states))
                         if num_layers > 0:
                             similarities = []
                             for i in range(num_layers):
@@ -718,8 +742,10 @@ def check_qat_stability(
 
                                 # Flatten to [B*T, D] for cosine similarity
                                 B, T, D = current_hs.shape
-                                current_flat = current_hs.view(B * T, D)  # [B*T, D]
-                                baseline_flat = baseline_hs.view(B * T, D)  # [B*T, D]
+                                current_flat = current_hs.view(
+                                    B * T, D)  # [B*T, D]
+                                baseline_flat = baseline_hs.view(
+                                    B * T, D)  # [B*T, D]
 
                                 # Compute cosine similarity: dot product / (norm1 * norm2)
                                 # Average over sequence positions
@@ -736,8 +762,10 @@ def check_qat_stability(
                                 baseline_norm = baseline_norm.clamp(min=eps)
 
                                 # Normalize
-                                current_normalized = current_flat / current_norm  # [B*T, D]
-                                baseline_normalized = baseline_flat / baseline_norm  # [B*T, D]
+                                current_normalized = current_flat / \
+                                    current_norm  # [B*T, D]
+                                baseline_normalized = baseline_flat / \
+                                    baseline_norm  # [B*T, D]
 
                                 # Cosine similarity: dot product of normalized vectors
                                 cosine_per_token = (current_normalized * baseline_normalized).sum(
@@ -751,7 +779,8 @@ def check_qat_stability(
 
                             # Aggregate: mean of per-layer similarities
                             if similarities:
-                                cosine_sim = sum(similarities) / len(similarities)
+                                cosine_sim = sum(similarities) / \
+                                    len(similarities)
                             else:
                                 cosine_sim = 1.0
                         else:
@@ -759,8 +788,11 @@ def check_qat_stability(
                     elif current_hidden_states is not None:
                         # No baseline available - can't compute similarity
                         cosine_sim = 1.0  # Default: assume stable
-                except Exception:
+                except Exception as e:
                     # If hidden state extraction fails, fall back to default
+                    # Log the error (this function is called infrequently, so logging is acceptable)
+                    print(
+                        f"[distill_kd] WARN: Hidden state extraction failed, assuming stability: {e}")
                     cosine_sim = 1.0
 
             return {
@@ -853,7 +885,8 @@ def save_checkpoint(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Get model state dict (unwrap DDP if needed)
-    model_state = model.module.state_dict() if isinstance(model, DDP) else model.state_dict()
+    model_state = model.module.state_dict() if isinstance(
+        model, DDP) else model.state_dict()
 
     # Compute SHA256 hash of model state for reproducibility tracking
     state_sha256 = sha256_state_dict(model_state)
@@ -946,7 +979,8 @@ def save_checkpoint(
 
         print(f"[distill_kd] Saved checkpoint: {checkpoint_path}")
     except Exception as e:
-        print(f"[distill_kd] ERROR: Failed to save checkpoint at step {step}: {e}")
+        print(
+            f"[distill_kd] ERROR: Failed to save checkpoint at step {step}: {e}")
         import traceback
 
         traceback.print_exc()
@@ -982,7 +1016,8 @@ def train_step(
     # Vocab clamping: ensure token IDs fit within model vocab_size
     # This catches tokenizer/model vocab mismatches early
     model_vocab_size = cfg.get("arch", {}).get("vocab_size", 32000)
-    pre_violate = (input_ids.ge(model_vocab_size) | input_ids.lt(0)).any().item()
+    pre_violate = (input_ids.ge(model_vocab_size)
+                   | input_ids.lt(0)).any().item()
     if pre_violate:
         input_ids = torch.clamp(input_ids, 0, model_vocab_size - 1)
         labels = torch.clamp(labels, 0, model_vocab_size - 1)
@@ -1054,7 +1089,8 @@ def train_step(
                 )  # [B, T, V], [B, 1]
             else:
                 # Get eval score separately (model doesn't support both flags simultaneously)
-                _, eval_score = model(input_ids, attention_mask, return_eval_score=True)  # [B, 1]
+                _, eval_score = model(
+                    input_ids, attention_mask, return_eval_score=True)  # [B, 1]
         else:
             eval_score = None
 
@@ -1152,9 +1188,12 @@ def train_step(
 
             # Calculate adaptive loss weights if enabled
             # Optimized distillation weights based on toy model experiments
-            kl_weight = kd_cfg.get("kl_weight", 0.6)  # Increased for teacher alignment
-            ce_teacher_weight = kd_cfg.get("ce_teacher_weight", 0.2)  # Reduced to balance
-            ce_ground_truth_weight = kd_cfg.get("ce_ground_truth_weight", 0.2)  # Keep ground truth
+            # Increased for teacher alignment
+            kl_weight = kd_cfg.get("kl_weight", 0.6)
+            ce_teacher_weight = kd_cfg.get(
+                "ce_teacher_weight", 0.2)  # Reduced to balance
+            ce_ground_truth_weight = kd_cfg.get(
+                "ce_ground_truth_weight", 0.2)  # Keep ground truth
 
             if kd_cfg.get("use_weight_schedule", False):
                 from training.losses import loss_weight_schedule
@@ -1164,7 +1203,8 @@ def train_step(
                 weights = loss_weight_schedule(
                     step=current_step,
                     total_steps=total_steps,
-                    early_teacher_weight=kd_cfg.get("early_teacher_weight", 0.7),
+                    early_teacher_weight=kd_cfg.get(
+                        "early_teacher_weight", 0.7),
                     late_teacher_weight=kd_cfg.get("late_teacher_weight", 0.3),
                     early_gt_weight=kd_cfg.get("early_gt_weight", 0.3),
                     late_gt_weight=kd_cfg.get("late_gt_weight", 0.7),
@@ -1220,7 +1260,8 @@ def train_step(
             if current_step < warmup_steps and warmup_steps > 0:
                 # Linear warmup: lerp(w_start, w_target, step / warmup_steps)
                 progress = current_step / warmup_steps
-                code_mode_weight = start_weight + (code_mode_weight_base - start_weight) * progress
+                code_mode_weight = start_weight + \
+                    (code_mode_weight_base - start_weight) * progress
             else:
                 code_mode_weight = code_mode_weight_base
 
@@ -1248,7 +1289,8 @@ def train_step(
                         "penalize_tool_result_roundtrip": True,
                     },
                 )
-                loss_weights = code_mode_pref_cfg.get("weights", {"pos": 1.0, "neg": 1.0})
+                loss_weights = code_mode_pref_cfg.get(
+                    "weights", {"pos": 1.0, "neg": 1.0})
 
                 # Get vocabulary IDs for markers (requires tokenizer)
                 vocab_ids = {}
@@ -1264,15 +1306,21 @@ def train_step(
                     for marker in marker_tokens:
                         try:
                             if hasattr(tokenizer, "convert_tokens_to_ids"):
-                                tok_id = tokenizer.convert_tokens_to_ids(marker)
+                                tok_id = tokenizer.convert_tokens_to_ids(
+                                    marker)
                             else:
-                                encoded = tokenizer.encode(marker, add_special_tokens=False)
+                                encoded = tokenizer.encode(
+                                    marker, add_special_tokens=False)
                                 tok_id = encoded[0] if encoded else None
 
                             if tok_id is not None and tok_id < student_logits.size(-1):
                                 vocab_ids[marker] = tok_id
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            # Marker token lookup failed - continue without this marker
+                            # This is non-critical as code-mode loss can work without all markers
+                            if current_step % 100 == 0:  # Log occasionally to avoid spam
+                                print(
+                                    f"[distill_kd] WARN: Could not find token ID for marker '{marker}': {e}")
 
                 # Code-mode loss module should be initialized in main() and passed as parameter
                 # Fallback initialization only if not provided (for backward compatibility)
@@ -1292,13 +1340,15 @@ def train_step(
 
                 # Extract span targets from metadata if available (pre-computed during dataset generation)
                 if isinstance(batch_meta, list):
-                    span_targets = [m.get("span_targets", {}) for m in batch_meta]
+                    span_targets = [m.get("span_targets", {})
+                                    for m in batch_meta]
                 elif isinstance(batch_meta, dict):
                     if "span_targets" in batch_meta:
                         span_targets = [batch_meta["span_targets"]]
                     else:
                         # Try to get from nested structure
-                        span_targets = batch_meta.get("span_targets_list", None)
+                        span_targets = batch_meta.get(
+                            "span_targets_list", None)
 
                 # Compute code-mode loss (differentiable, token-level, NO TEXT DECODING)
                 code_mode_loss_tensor = code_mode_loss_module(
@@ -1328,7 +1378,8 @@ def train_step(
                 # Create halt targets instance
                 halt_targets_cfg = latent_cfg.get("halt_targets", {})
                 halt_targets_deriver = HaltHeadTargets(
-                    judge_score_threshold=halt_targets_cfg.get("judge_score_threshold", 0.8),
+                    judge_score_threshold=halt_targets_cfg.get(
+                        "judge_score_threshold", 0.8),
                     delta_shrinking_threshold=halt_targets_cfg.get(
                         "delta_shrinking_threshold", 0.05
                     ),
@@ -1353,7 +1404,8 @@ def train_step(
                         halt_weight = halt_weight_base
             except ImportError:
                 if current_step % 100 == 0:
-                    print("[distill_kd] WARN: Halt targets not available, skipping halt loss")
+                    print(
+                        "[distill_kd] WARN: Halt targets not available, skipping halt loss")
 
         loss_dict = combined_kd_loss(
             student_logits=student_logits,
@@ -1414,11 +1466,17 @@ def train_step(
                     else:
                         # No tokenizer available - assume all fields present (conservative)
                         B = student_attn_mask.size(0)
-                        required_fields = torch.ones(B, dtype=torch.bool, device=device)
-                except Exception:
+                        required_fields = torch.ones(
+                            B, dtype=torch.bool, device=device)
+                except Exception as e:
                     # Fallback: assume all fields present (conservative - no penalty)
+                    # Log occasionally to avoid spam during training
+                    if current_step % 1000 == 0:
+                        print(
+                            f"[distill_kd] WARN: Required fields computation failed, assuming all present: {e}")
                     B = student_attn_mask.size(0)
-                    required_fields = torch.ones(B, dtype=torch.bool, device=device)
+                    required_fields = torch.ones(
+                        B, dtype=torch.bool, device=device)
 
                 # Compute length-aware KD loss
                 length_kd_loss, length_diags = length_aware_kd_loss(
@@ -1432,7 +1490,8 @@ def train_step(
 
                 # Add to loss dict
                 loss_dict["length_kd"] = length_kd_loss
-                loss_dict["total"] = loss_dict["total"] + length_kd_weight * length_kd_loss
+                loss_dict["total"] = loss_dict["total"] + \
+                    length_kd_weight * length_kd_loss
 
                 # Add diagnostics to loss dict for logging
                 loss_dict.update(length_diags)
@@ -1456,9 +1515,11 @@ def train_step(
                 # Compute ramp_t (linear 0→1 over warmup epochs)
                 warmup_epochs = kd_cfg.get("early_tool_warmup_epochs", 5)
                 total_epochs = cfg.get("train", {}).get("total_epochs", 100)
-                current_epoch = current_step // (cfg.get("train", {}).get("steps_per_epoch", 1000))
+                current_epoch = current_step // (
+                    cfg.get("train", {}).get("steps_per_epoch", 1000))
                 ramp_t = (
-                    min(1.0, max(0.0, current_epoch / warmup_epochs)) if warmup_epochs > 0 else 1.0
+                    min(1.0, max(0.0, current_epoch / warmup_epochs)
+                        ) if warmup_epochs > 0 else 1.0
                 )
 
                 # Compute early tool call loss
@@ -1469,14 +1530,16 @@ def train_step(
                     tokenizer=tokenizer,
                     teacher_prefix_ids=teacher_prefix_ids,
                     N=kd_cfg.get("early_tool_N", 25),
-                    json_prior_weight=kd_cfg.get("early_tool_json_prior_weight", 0.02),
+                    json_prior_weight=kd_cfg.get(
+                        "early_tool_json_prior_weight", 0.02),
                     ce_weight=kd_cfg.get("early_tool_ce_weight", 0.2),
                     ramp_t=ramp_t,
                 )
 
                 # Add to loss dict
                 loss_dict["early_tool"] = early_tool_loss
-                loss_dict["total"] = loss_dict["total"] + early_tool_weight * early_tool_loss
+                loss_dict["total"] = loss_dict["total"] + \
+                    early_tool_weight * early_tool_loss
 
                 # Add diagnostics to loss dict for logging
                 loss_dict.update(early_tool_diags)
@@ -1506,7 +1569,8 @@ def train_step(
                 if not layer_mapping:
                     # Default: Map evenly spaced student layers to teacher layers
                     # Assuming teacher has ~2x more layers than student
-                    n_student_layers = len(student_hidden_states) - 1  # Exclude embedding
+                    n_student_layers = len(
+                        student_hidden_states) - 1  # Exclude embedding
                     n_teacher_layers = (
                         len(teacher_hidden_states) - 1
                         if isinstance(teacher_hidden_states, list)
@@ -1557,9 +1621,11 @@ def train_step(
                 )
 
                 # Add to loss dict with configurable weight
-                intermediate_weight = kd_cfg.get("intermediate_layer_weight", 0.1)
+                intermediate_weight = kd_cfg.get(
+                    "intermediate_layer_weight", 0.1)
                 loss_dict["intermediate_layer"] = intermediate_loss
-                loss_dict["total"] = loss_dict["total"] + intermediate_weight * intermediate_loss
+                loss_dict["total"] = loss_dict["total"] + \
+                    intermediate_weight * intermediate_loss
 
         # ====================================================================
         # PRIORITY 3: JSON Repair Loop + Metric
@@ -1594,16 +1660,23 @@ def train_step(
 
                         # Generate text from logits (greedy decoding)
                         # Only generate for the response portion (after prompt)
-                        pred_token_ids = student_logits.argmax(dim=-1)  # [B, T]
+                        pred_token_ids = student_logits.argmax(
+                            dim=-1)  # [B, T]
                         generated_texts = []
 
                         for i in range(pred_token_ids.size(0)):
                             # Decode tokens to text
                             tokens = pred_token_ids[i].cpu().tolist()
                             try:
-                                text = tokenizer.decode(tokens, skip_special_tokens=True)
+                                text = tokenizer.decode(
+                                    tokens, skip_special_tokens=True)
                                 generated_texts.append(text)
-                            except Exception:
+                            except Exception as e:
+                                # Decoding failure - log but continue with empty string
+                                # Only log first failure to avoid spam
+                                if len(generated_texts) == 0:
+                                    print(
+                                        f"[distill_kd] WARN: Tokenizer decode failed for generated text: {e}")
                                 generated_texts.append("")
 
                         # Check repair needs for batch
@@ -1616,16 +1689,19 @@ def train_step(
 
                         repair_losses = []
                         for text in generated_texts:
-                            _, needs_repair = check_json_repair_needed(text, use_jsonrepair=True)
+                            _, needs_repair = check_json_repair_needed(
+                                text, use_jsonrepair=True)
                             repair_loss = json_repair_loss(needs_repair)
                             repair_losses.append(repair_loss)
 
                         if repair_losses:
                             # Average repair loss over batch
-                            batch_repair_loss = torch.stack(repair_losses).mean()
+                            batch_repair_loss = torch.stack(
+                                repair_losses).mean()
                             loss_dict["json_repair"] = batch_repair_loss
                             loss_dict["total"] = (
-                                loss_dict["total"] + json_repair_weight * batch_repair_loss
+                                loss_dict["total"] +
+                                json_repair_weight * batch_repair_loss
                             )
 
                             # Log repair metrics periodically
@@ -1637,7 +1713,8 @@ def train_step(
                     except Exception as e:
                         # Don't fail training if repair check fails
                         if current_step % 100 == 0:
-                            print(f"[distill_kd] WARN: JSON repair check failed: {e}")
+                            print(
+                                f"[distill_kd] WARN: JSON repair check failed: {e}")
 
         # ====================================================================
         # PRIORITY 3 INTEGRATION: Self-Evaluation Loss
@@ -1667,7 +1744,8 @@ def train_step(
                     # Add to loss dict with configurable weight
                     eval_weight = kd_cfg.get("self_evaluation_weight", 0.05)
                     loss_dict["self_evaluation"] = eval_loss
-                    loss_dict["total"] = loss_dict["total"] + eval_weight * eval_loss
+                    loss_dict["total"] = loss_dict["total"] + \
+                        eval_weight * eval_loss
 
         # ====================================================================
         # PRIORITY 5: CAWS Structure Scoring
@@ -1698,15 +1776,21 @@ def train_step(
                         from training.losses import caws_structure_loss
 
                         # Generate text from student logits (greedy decoding)
-                        pred_token_ids = student_logits.argmax(dim=-1)  # [B, T]
+                        pred_token_ids = student_logits.argmax(
+                            dim=-1)  # [B, T]
                         student_texts = []
 
                         for i in range(pred_token_ids.size(0)):
                             tokens = pred_token_ids[i].cpu().tolist()
                             try:
-                                text = tokenizer.decode(tokens, skip_special_tokens=True)
+                                text = tokenizer.decode(
+                                    tokens, skip_special_tokens=True)
                                 student_texts.append(text)
-                            except Exception:
+                            except Exception as e:
+                                # Decoding failure - log but continue with empty string
+                                if len(student_texts) == 0:  # Only log first failure to avoid spam
+                                    print(
+                                        f"[distill_kd] WARN: Tokenizer decode failed for student text: {e}")
                                 student_texts.append("")
 
                         # Compute structure scores
@@ -1716,12 +1800,14 @@ def train_step(
                         elif not isinstance(teacher_text, str):
                             teacher_text_normalized = str(teacher_text)
 
-                        teacher_structure_score = caws_structure_score(teacher_text_normalized)
+                        teacher_structure_score = caws_structure_score(
+                            teacher_text_normalized)
 
                         # Compute structure loss for each student output
                         structure_losses = []
                         for student_text in student_texts:
-                            student_structure_score = caws_structure_score(student_text)
+                            student_structure_score = caws_structure_score(
+                                student_text)
                             struct_loss = caws_structure_loss(
                                 teacher_score=teacher_structure_score,
                                 student_score=student_structure_score,
@@ -1730,16 +1816,19 @@ def train_step(
 
                         if structure_losses:
                             # Average structure loss over batch
-                            batch_structure_loss = torch.stack(structure_losses).mean()
+                            batch_structure_loss = torch.stack(
+                                structure_losses).mean()
                             loss_dict["caws_structure"] = batch_structure_loss
                             loss_dict["total"] = (
-                                loss_dict["total"] + caws_structure_weight * batch_structure_loss
+                                loss_dict["total"] +
+                                caws_structure_weight * batch_structure_loss
                             )
 
                             # Log structure scores periodically
                             if current_step % 100 == 0:
                                 avg_student_score = (
-                                    sum(caws_structure_score(st) for st in student_texts)
+                                    sum(caws_structure_score(st)
+                                        for st in student_texts)
                                     / len(student_texts)
                                     if student_texts
                                     else 0.0
@@ -1751,7 +1840,8 @@ def train_step(
                     except Exception as e:
                         # Don't fail training if structure check fails
                         if current_step % 100 == 0:
-                            print(f"[distill_kd] WARN: CAWS structure check failed: {e}")
+                            print(
+                                f"[distill_kd] WARN: CAWS structure check failed: {e}")
 
         # CAWS compliance loss (optional, config-driven)
         if kd_cfg.get("use_caws_compliance", False):
@@ -1782,7 +1872,8 @@ def train_step(
                         claim_extractor_cfg = cfg.get("claim_extractor", {})
                         if claim_extractor_cfg:
                             # Initialize claim extractor from config
-                            extractor_type = claim_extractor_cfg.get("type", "simple")
+                            extractor_type = claim_extractor_cfg.get(
+                                "type", "simple")
                             if extractor_type == "simple":
                                 from training.claim_extraction import SimpleClaimExtractor
 
@@ -1823,13 +1914,17 @@ def train_step(
                         )
 
                         # Add to loss with configurable weight
-                        compliance_weight = kd_cfg.get("caws_compliance_weight", 0.05)
-                        compliance_loss_scaled = compliance_loss.to(device) * compliance_weight
+                        compliance_weight = kd_cfg.get(
+                            "caws_compliance_weight", 0.05)
+                        compliance_loss_scaled = compliance_loss.to(
+                            device) * compliance_weight
                         loss_dict["caws_compliance"] = compliance_loss_scaled
-                        loss_dict["total"] = loss_dict["total"] + compliance_loss_scaled
+                        loss_dict["total"] = loss_dict["total"] + \
+                            compliance_loss_scaled
                     except Exception as e:
                         # If decoding fails, skip compliance loss
-                        print(f"[distill_kd] WARN: Failed to compute CAWS compliance loss: {e}")
+                        print(
+                            f"[distill_kd] WARN: Failed to compute CAWS compliance loss: {e}")
 
         # ====================================================================
         # PRIORITY 4 INTEGRATION: Claim Extraction Loss
@@ -1861,7 +1956,8 @@ def train_step(
                     claim_extractor_cfg = cfg.get("claim_extractor", {})
                     if claim_extractor_cfg:
                         # Initialize claim extractor from config
-                        extractor_type = claim_extractor_cfg.get("type", "simple")
+                        extractor_type = claim_extractor_cfg.get(
+                            "type", "simple")
                         if extractor_type == "simple":
                             from training.claim_extraction import SimpleClaimExtractor
 
@@ -1905,7 +2001,8 @@ def train_step(
                         teacher_output=teacher_text_normalized,
                         claim_extractor=claim_extractor,
                         min_claim_ratio=kd_cfg.get("min_claim_ratio", 0.5),
-                        min_success_rate_ratio=kd_cfg.get("min_success_rate_ratio", 0.7),
+                        min_success_rate_ratio=kd_cfg.get(
+                            "min_success_rate_ratio", 0.7),
                     )
 
                     # Add to loss with configurable weight
@@ -1930,7 +2027,8 @@ def train_step(
                         loss_dict["claim_count_teacher"] = float(
                             claim_metrics.get("teacher_claim_count", 0)
                         )
-                        loss_dict["claim_ratio"] = float(claim_metrics.get("claim_ratio", 0.0))
+                        loss_dict["claim_ratio"] = float(
+                            claim_metrics.get("claim_ratio", 0.0))
                         loss_dict["success_rate_student"] = float(
                             claim_metrics.get("student_success_rate", 0.0)
                         )
@@ -1942,7 +2040,8 @@ def train_step(
                         )
                 except Exception as e:
                     # If decoding or claim extraction fails, skip claim extraction loss
-                    print(f"[distill_kd] WARN: Failed to compute claim extraction loss: {e}")
+                    print(
+                        f"[distill_kd] WARN: Failed to compute claim extraction loss: {e}")
 
         loss = loss_dict["total"]
         loss = loss / grad_accum_steps  # Scale for gradient accumulation
@@ -1962,7 +2061,8 @@ def train_step(
         # Update weights (if gradient accumulation complete)
         if (grad_accum_counter + 1) % grad_accum_steps == 0:
             # Apply adaptive gradient clipping for training stability
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_norm)
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters(), max_norm=grad_clip_norm)
 
             # Get model for gradient norm computation (unwrap DDP if needed)
             model_for_grads = model.module if isinstance(model, DDP) else model
@@ -1985,7 +2085,8 @@ def train_step(
                 # which is expensive. Total norm tracking is a good start.
 
                 # Add gradient norm to loss dict for logging
-                loss_dict["grad_norm"] = torch.tensor(total_grad_norm.item(), device=device)
+                loss_dict["grad_norm"] = torch.tensor(
+                    total_grad_norm.item(), device=device)
             else:
                 # Still compute gradient norm for clipping, but don't log it
                 total_grad_norm = torch.nn.utils.clip_grad_norm_(
@@ -2003,11 +2104,13 @@ def train_step(
             grad_clip = cfg.get("optimizer", {}).get("grad_clip", 1.0)
             if scaler is not None:
                 scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model_for_grads.parameters(), grad_clip)
+                torch.nn.utils.clip_grad_norm_(
+                    model_for_grads.parameters(), grad_clip)
                 scaler.step(optimizer)
                 scaler.update()
             else:
-                torch.nn.utils.clip_grad_norm_(model_for_grads.parameters(), grad_clip)
+                torch.nn.utils.clip_grad_norm_(
+                    model_for_grads.parameters(), grad_clip)
                 optimizer.step()
 
         else:
@@ -2089,13 +2192,15 @@ def validate_config(cfg: Dict[str, Any]) -> None:
 
     # Raise errors if any found
     if errors:
-        error_msg = "Configuration validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
+        error_msg = "Configuration validation failed:\n" + \
+            "\n".join(f"  - {e}" for e in errors)
         raise ValueError(error_msg)
 
 
 def main():
     ap = argparse.ArgumentParser(description="Knowledge distillation training")
-    ap.add_argument("--config", nargs="+", required=True, help="Config file(s) to load")
+    ap.add_argument("--config", nargs="+", required=True,
+                    help="Config file(s) to load")
     ap.add_argument("--resume", help="Resume from checkpoint path")
     ap.add_argument(
         "--output-dir",
@@ -2151,7 +2256,8 @@ def main():
     model = create_model(cfg, device)
 
     # Migrate tokenizer and model for special tokens (if needed)
-    tokenizer_path = cfg.get("io", {}).get("tokenizer_path", "models/student/tokenizer")
+    tokenizer_path = cfg.get("io", {}).get(
+        "tokenizer_path", "models/student/tokenizer")
     if TOKENIZER_MIGRATION_AVAILABLE:
         try:
             tokenizer = load_tokenizer(tokenizer_path)
@@ -2178,7 +2284,8 @@ def main():
         except Exception as e:
             if is_main_process:
                 print(f"[distill_kd] WARN: Tokenizer migration failed: {e}")
-                print("  Continuing without migration (may cause issues if vocab mismatch)")
+                print(
+                    "  Continuing without migration (may cause issues if vocab mismatch)")
 
     # Setup distributed model if needed
     if args.local_rank >= 0:
@@ -2195,9 +2302,11 @@ def main():
     total_steps = train_cfg.get("steps", 10000)
 
     # Adaptive warmup: longer for larger models, shorter for smaller/fast training
-    model_size_factor = math.log(max(1, sum(p.numel() for p in model.parameters()))) / 10
+    model_size_factor = math.log(
+        max(1, sum(p.numel() for p in model.parameters()))) / 10
     base_warmup_pct = 0.1  # 10% of training
-    adaptive_warmup_pct = min(0.2, max(0.05, base_warmup_pct * model_size_factor))
+    adaptive_warmup_pct = min(
+        0.2, max(0.05, base_warmup_pct * model_size_factor))
     warmup_steps = int(total_steps * adaptive_warmup_pct)
 
     # Adaptive gradient clipping based on model size
@@ -2210,7 +2319,8 @@ def main():
         grad_clip_norm = 2.0
 
     if is_main_process:
-        print(f"[distill_kd] LR Schedule: {warmup_steps} warmup steps, {total_steps} total steps")
+        print(
+            f"[distill_kd] LR Schedule: {warmup_steps} warmup steps, {total_steps} total steps")
         print(
             f"[distill_kd] Gradient Clipping: {grad_clip_norm} (adaptive for {model_params:,} params)"
         )
@@ -2221,8 +2331,10 @@ def main():
             return step / max(1, warmup_steps)
         else:
             # Cosine annealing with final LR floor
-            progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
-            cosine_decay = 0.5 * (1 + torch.cos(torch.tensor(progress * 3.14159)))
+            progress = (step - warmup_steps) / \
+                max(1, total_steps - warmup_steps)
+            cosine_decay = 0.5 * \
+                (1 + torch.cos(torch.tensor(progress * 3.14159)))
             min_lr_factor = 0.01  # Don't decay below 1% of peak LR
             return max(min_lr_factor, cosine_decay)
 
@@ -2236,7 +2348,8 @@ def main():
 
     # Enable memory optimizations automatically for large models
     if is_large_model or train_cfg.get("grad_checkpointing", False):
-        print(f"[distill_kd] Enabling memory optimizations for {model_params:,} parameters")
+        print(
+            f"[distill_kd] Enabling memory optimizations for {model_params:,} parameters")
 
         # Gradient checkpointing
         if hasattr(model, "gradient_checkpointing_enable"):
@@ -2264,7 +2377,8 @@ def main():
     if args.resume:
         print(f"[distill_kd] Resuming from checkpoint: {args.resume}")
         from training.safe_checkpoint_loading import safe_load_checkpoint
-        checkpoint = safe_load_checkpoint(args.resume, map_location=str(device))
+        checkpoint = safe_load_checkpoint(
+            args.resume, map_location=str(device))
 
         # Validate config compatibility on resume
         if "config" in checkpoint:
@@ -2291,7 +2405,8 @@ def main():
                 print("[distill_kd] WARNING: Config mismatches detected on resume:")
                 for mismatch in mismatches:
                     print(f"  - {mismatch}")
-                print("[distill_kd] Continuing with current config (may cause training issues)")
+                print(
+                    "[distill_kd] Continuing with current config (may cause training issues)")
         else:
             print(
                 "[distill_kd] WARNING: Checkpoint missing 'config' field - cannot validate compatibility"
@@ -2327,17 +2442,20 @@ def main():
                     torch.cuda.set_rng_state(rng_states["torch_cuda"])
                 print("[distill_kd] Restored RNG states from checkpoint")
             except Exception as e:
-                print(f"[distill_kd] WARNING: Failed to restore RNG states: {e}")
+                print(
+                    f"[distill_kd] WARNING: Failed to restore RNG states: {e}")
 
     # Create dataset
     io_cfg = cfg.get("io", {})
     tokenizer_path = io_cfg.get("tokenizer_path")
     if not tokenizer_path:
         # Fallback: try configs/worker_9b.yaml tokenizer path
-        tokenizer_path = cfg.get("tokenizer", {}).get("path", "models/student/tokenizer")
+        tokenizer_path = cfg.get("tokenizer", {}).get(
+            "path", "models/student/tokenizer")
 
     if not tokenizer_path:
-        raise ValueError("tokenizer_path must be specified in config (io.tokenizer_path)")
+        raise ValueError(
+            "tokenizer_path must be specified in config (io.tokenizer_path)")
 
     train_shards = io_cfg.get("train_shards", ["data/kd_mix.jsonl"])
 
@@ -2356,22 +2474,28 @@ def main():
 
     # Adaptive batch size based on sequence length and model size
     base_batch_size = train_cfg.get("batch_size", 8)
-    seq_len_factor = min(1.0, 2048 / max_seq_len)  # Shorter sequences allow larger batches
-    model_size_factor = min(1.0, 100_000_000 / model_params)  # Smaller models allow larger batches
+    # Shorter sequences allow larger batches
+    seq_len_factor = min(1.0, 2048 / max_seq_len)
+    # Smaller models allow larger batches
+    model_size_factor = min(1.0, 100_000_000 / model_params)
 
-    effective_batch_size = int(base_batch_size * seq_len_factor * model_size_factor)
+    effective_batch_size = int(
+        base_batch_size * seq_len_factor * model_size_factor)
     effective_batch_size = max(
         1, min(effective_batch_size, base_batch_size * 2)
     )  # Reasonable bounds
 
     if is_main_process:
-        print(f"[distill_kd] Data Loading: {num_workers} workers, prefetch={prefetch_factor}")
-        print(f"[distill_kd] Batch Size: {effective_batch_size} (adapted from {base_batch_size})")
+        print(
+            f"[distill_kd] Data Loading: {num_workers} workers, prefetch={prefetch_factor}")
+        print(
+            f"[distill_kd] Batch Size: {effective_batch_size} (adapted from {base_batch_size})")
 
     # Setup latent curriculum if enabled
     latent_curriculum = None
     latent_cfg = cfg.get("latent", {})
-    latent_enabled = latent_cfg.get("enabled", False) or (os.getenv("TRAIN_LATENT", "0") == "1")
+    latent_enabled = latent_cfg.get("enabled", False) or (
+        os.getenv("TRAIN_LATENT", "0") == "1")
 
     if latent_enabled and LATENT_CURRICULUM_AVAILABLE:
         m = latent_cfg.get("m", 2)
@@ -2379,7 +2503,8 @@ def main():
         p = latent_cfg.get("p", 0.5)
         latent_curriculum = LatentCurriculum(m=m, c=c, p=p)
         if is_main_process:
-            print(f"[distill_kd] Latent curriculum enabled: m={m}, c={c}, p={p}")
+            print(
+                f"[distill_kd] Latent curriculum enabled: m={m}, c={c}, p={p}")
     elif latent_enabled and not LATENT_CURRICULUM_AVAILABLE:
         if is_main_process:
             print("[distill_kd] WARN: Latent curriculum requested but not available")
@@ -2388,22 +2513,26 @@ def main():
         jsonl_path=train_shards[0],
         tokenizer_path=tokenizer_path,
         max_seq_length=max_seq_len,
-        teacher_logits_available=cfg.get("kd", {}).get("teacher_logits_available", False),
+        teacher_logits_available=cfg.get("kd", {}).get(
+            "teacher_logits_available", False),
         latent_curriculum=latent_curriculum,
     )
 
     # Validate dataset fingerprint if available
     if dataset.dataset_fingerprint:
-        print(f"[distill_kd] Dataset fingerprint: {dataset.dataset_fingerprint}")
+        print(
+            f"[distill_kd] Dataset fingerprint: {dataset.dataset_fingerprint}")
         # Store fingerprint in checkpoint metadata for traceability
         if is_main_process:
-            print("[distill_kd] Dataset fingerprint will be logged in checkpoint metadata")
+            print(
+                "[distill_kd] Dataset fingerprint will be logged in checkpoint metadata")
     elif dataset.dataset_header:
         print(
             "[distill_kd] WARNING: Dataset header found but no fingerprint - dataset may not be fingerprinted"
         )
     else:
-        print("[distill_kd] INFO: Dataset does not have header/fingerprint (may be legacy format)")
+        print(
+            "[distill_kd] INFO: Dataset does not have header/fingerprint (may be legacy format)")
 
     # Create dataloader
     micro_batch_size = train_cfg.get("micro_batch_size", 2)
@@ -2431,24 +2560,31 @@ def main():
     if train_code_mode:
         from training.dataset import load_tokenizer
 
-        tokenizer_for_vocab = load_tokenizer(tokenizer_path) if tokenizer_path else None
+        tokenizer_for_vocab = load_tokenizer(
+            tokenizer_path) if tokenizer_path else None
 
         # Get vocabulary IDs for markers
         vocab_ids = {}
         if tokenizer_for_vocab is not None:
-            marker_tokens = ["import", "from", "callMCPTool", "await", "tool_call", "tool_result"]
+            marker_tokens = ["import", "from", "callMCPTool",
+                             "await", "tool_call", "tool_result"]
             for marker in marker_tokens:
                 try:
                     if hasattr(tokenizer_for_vocab, "convert_tokens_to_ids"):
-                        tok_id = tokenizer_for_vocab.convert_tokens_to_ids(marker)
+                        tok_id = tokenizer_for_vocab.convert_tokens_to_ids(
+                            marker)
                     else:
-                        encoded = tokenizer_for_vocab.encode(marker, add_special_tokens=False)
+                        encoded = tokenizer_for_vocab.encode(
+                            marker, add_special_tokens=False)
                         tok_id = encoded[0] if encoded else None
 
                     if tok_id is not None:
                         vocab_ids[marker] = tok_id
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Marker token lookup failed - log but continue
+                    # Code-mode loss can work with partial marker vocabulary
+                    print(
+                        f"[distill_kd] WARN: Could not find token ID for marker '{marker}': {e}")
 
         code_mode_pref_cfg = code_mode_cfg.get("code_mode_pref", {})
         eligibility_rules = code_mode_pref_cfg.get(
@@ -2466,7 +2602,8 @@ def main():
                 "penalize_tool_result_roundtrip": True,
             },
         )
-        loss_weights = code_mode_pref_cfg.get("weights", {"pos": 1.0, "neg": 1.0})
+        loss_weights = code_mode_pref_cfg.get(
+            "weights", {"pos": 1.0, "neg": 1.0})
 
         code_mode_loss_module = CodeModePreferenceLoss(
             eligibility_rules=eligibility_rules,
@@ -2489,7 +2626,8 @@ def main():
 
     # Initialize training tracer
     run_name = f"worker_9b_kd_{start_step}"
-    tracer = create_tracer_from_config(cfg, run_name=run_name) if is_main_process else None
+    tracer = create_tracer_from_config(
+        cfg, run_name=run_name) if is_main_process else None
 
     # Log hyperparameters
     if tracer:
@@ -2507,8 +2645,10 @@ def main():
                 "device": str(device),
                 # Optimized distillation weights based on toy model experiments
                 # Higher KL weight for better teacher alignment, balanced CE weights
-                "kl_weight": dist_cfg.get("kl_weight", 0.6),  # Increased for teacher alignment
-                "ce_teacher_weight": dist_cfg.get("ce_teacher_weight", 0.2),  # Reduced to balance
+                # Increased for teacher alignment
+                "kl_weight": dist_cfg.get("kl_weight", 0.6),
+                # Reduced to balance
+                "ce_teacher_weight": dist_cfg.get("ce_teacher_weight", 0.2),
                 "ce_ground_truth_weight": dist_cfg.get(
                     "ce_ground_truth_weight", 0.2
                 ),  # Keep ground truth
@@ -2519,11 +2659,13 @@ def main():
     print(f"  Device: {device}")
     print(f"  Total steps: {total_steps}")
     print(f"  Effective batch size: {effective_batch_size}")
-    print(f"  Micro batch size: {micro_batch_size}, Gradient accumulation: {grad_accum}")
+    print(
+        f"  Micro batch size: {micro_batch_size}, Gradient accumulation: {grad_accum}")
     print(f"  FP16: {use_fp16}")
     print(f"  Sequence lengths: {seq_lengths}")
     if tracer:
-        print(f"  Tracing enabled: TensorBoard={tracer.use_tensorboard}, WandB={tracer.use_wandb}")
+        print(
+            f"  Tracing enabled: TensorBoard={tracer.use_tensorboard}, WandB={tracer.use_wandb}")
 
     step = start_step
     grad_accum_counter = 0
@@ -2535,7 +2677,8 @@ def main():
 
     # QAT configuration
     qat_cfg = cfg.get("quant", {})
-    qat_lr_multiplier = qat_cfg.get("lr_multiplier", 0.1)  # Default: 10× lower LR
+    qat_lr_multiplier = qat_cfg.get(
+        "lr_multiplier", 0.1)  # Default: 10× lower LR
     base_lr = cfg.get("optimizer", {}).get("lr", 2e-4)
 
     # Iterate over dataset multiple times if needed
@@ -2546,20 +2689,23 @@ def main():
 
             try:
                 # Check if QAT should be enabled
-                qat_should_enable = should_enable_qat(step, total_steps, qat_cfg)
+                qat_should_enable = should_enable_qat(
+                    step, total_steps, qat_cfg)
                 if qat_should_enable and not qat_applied:
                     # Apply QAT to model
                     print(
                         f"[distill_kd] Step {step}: Enabling QAT (last {int((1 - qat_cfg.get('start_fraction', 0.8)) * 100)}% of training)"
                     )
                     if isinstance(model, DDP):
-                        model.module = apply_qat_to_model(model.module, qat_cfg, device)
+                        model.module = apply_qat_to_model(
+                            model.module, qat_cfg, device)
                     else:
                         model = apply_qat_to_model(model, qat_cfg, device)
 
                 # Recreate optimizer with lower LR for QAT
                 qat_lr = base_lr * qat_lr_multiplier
-                print(f"[distill_kd] Adjusting LR for QAT: {base_lr} → {qat_lr}")
+                print(
+                    f"[distill_kd] Adjusting LR for QAT: {base_lr} → {qat_lr}")
                 optimizer = create_optimizer(
                     model.module if isinstance(model, DDP) else model,
                     {
@@ -2579,7 +2725,8 @@ def main():
                         device,
                     )
                     if stability_metrics.get("qat_stability.has_nan", 0.0) > 0:
-                        print(f"[distill_kd] WARN: NaN detected in QAT model at step {step}")
+                        print(
+                            f"[distill_kd] WARN: NaN detected in QAT model at step {step}")
                     if stability_metrics.get("qat_stability.cosine_sim", 1.0) < 0.999:
                         print(
                             f"[distill_kd] WARN: Low cosine similarity in QAT model at step {step}"
@@ -2591,14 +2738,16 @@ def main():
                         seq_lengths=seq_lengths,
                         shape_probs=shape_probs,
                         step=step,
-                        periodic_upweight_rare=train_cfg.get("periodic_upweight_rare", True),
+                        periodic_upweight_rare=train_cfg.get(
+                            "periodic_upweight_rare", True),
                     )
                     # Truncate batch to sampled shape
                     batch = truncate_batch_to_shape(batch, current_seq_len)
                 else:
                     # Fallback to curriculum learning
                     current_seq_len = get_sequence_length(
-                        step, seq_lengths, cfg.get("curriculum", {}).get("schedule")
+                        step, seq_lengths, cfg.get(
+                            "curriculum", {}).get("schedule")
                     )
 
                 # Training step
@@ -2629,14 +2778,16 @@ def main():
 
                     # Memory usage tracking
                     if device.type == "cuda":
-                        memory_allocated = torch.cuda.memory_allocated(device) / 1024**3  # GB
+                        memory_allocated = torch.cuda.memory_allocated(
+                            device) / 1024**3  # GB
                         memory_info = f", gpu_mem={memory_allocated:.2f}GB"
                     else:
                         memory_info = ""
 
                     # Enhanced progress reporting for large models
                     progress_pct = step / total_steps * 100
-                    eta_hours = (total_steps - step) / 100 * 0.1  # Rough ETA based on steps/second
+                    eta_hours = (total_steps - step) / 100 * \
+                        0.1  # Rough ETA based on steps/second
 
                     if is_large_model:
                         print(
@@ -2665,10 +2816,12 @@ def main():
                             import gc
 
                             gc.collect()
-                            print("[distill_kd] Performed full garbage collection for large model")
+                            print(
+                                "[distill_kd] Performed full garbage collection for large model")
 
                     except Exception as cache_e:
-                        print(f"[distill_kd] WARN: Failed to clear GPU cache: {cache_e}")
+                        print(
+                            f"[distill_kd] WARN: Failed to clear GPU cache: {cache_e}")
 
                 # Track consecutive failures to prevent infinite loops
                 if not hasattr(train_step, "_consecutive_failures"):
@@ -2696,7 +2849,8 @@ def main():
                             data_shard_index=current_shard_index,
                             dataset_fingerprint=None,
                         )
-                        print("[distill_kd] Emergency checkpoint saved successfully")
+                        print(
+                            "[distill_kd] Emergency checkpoint saved successfully")
                     except Exception as ckpt_e:
                         print(
                             f"[distill_kd] CRITICAL: Failed to save emergency checkpoint: {ckpt_e}"
@@ -2729,10 +2883,12 @@ def main():
 
                         # Truncate to reasonable length for speed measurement
                         if use_enumerated_shapes:
-                            val_batch = truncate_batch_to_shape(val_batch, min(seq_lengths))
+                            val_batch = truncate_batch_to_shape(
+                                val_batch, min(seq_lengths))
 
                         metrics = measure_proxy(
-                            model=model.module if isinstance(model, DDP) else model,
+                            model=model.module if isinstance(
+                                model, DDP) else model,
                             batch=val_batch,
                             tokenizer=val_tokenizer,
                             device=device,
@@ -2742,7 +2898,8 @@ def main():
 
                     # Aggregate metrics
                     if speed_metrics_list:
-                        aggregated = aggregate_speed_metrics(speed_metrics_list)
+                        aggregated = aggregate_speed_metrics(
+                            speed_metrics_list)
 
                         # Log with export=False tag (these are proxies)
                         if tracer:
@@ -2766,13 +2923,15 @@ def main():
                                 f"TPS p50={aggregated['tps']['p50']:.1f} tok/s"
                             )
                 except Exception as e:
-                    print(f"[distill_kd] WARN: Failed to measure speed metrics: {e}")
+                    print(
+                        f"[distill_kd] WARN: Failed to measure speed metrics: {e}")
 
             # Logging
             if step % log_every == 0 and is_main_process:
                 if tracer:
                     # Log to tracer (includes console, TensorBoard, WandB, JSON)
-                    tracer.log_metrics(step=step, metrics=loss_dict, prefix="train/")
+                    tracer.log_metrics(
+                        step=step, metrics=loss_dict, prefix="train/")
 
                     # Also log learning rate if available
                     if hasattr(optimizer, "param_groups") and optimizer.param_groups:
@@ -2782,8 +2941,10 @@ def main():
                         )
                 else:
                     # Fallback to console logging
-                    loss_str = ", ".join([f"{k}={v:.4f}" for k, v in loss_dict.items()])
-                    print(f"[distill_kd] Step {step}/{total_steps}: {loss_str}")
+                    loss_str = ", ".join(
+                        [f"{k}={v:.4f}" for k, v in loss_dict.items()])
+                    print(
+                        f"[distill_kd] Step {step}/{total_steps}: {loss_str}")
 
             # Intelligent checkpointing for large models
             # Save more frequently for large models to prevent loss of progress
@@ -2797,7 +2958,8 @@ def main():
 
             # Always save checkpoint at milestones (10%, 25%, 50%, 75%, 90%, 100%)
             total_steps = train_cfg.get("steps", 10000)
-            milestone_steps = [int(total_steps * pct) for pct in [0.1, 0.25, 0.5, 0.75, 0.9, 1.0]]
+            milestone_steps = [int(total_steps * pct)
+                               for pct in [0.1, 0.25, 0.5, 0.75, 0.9, 1.0]]
             if step in milestone_steps:
                 should_save_checkpoint = True
                 print(

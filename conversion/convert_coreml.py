@@ -83,6 +83,39 @@ def convert_pytorch_to_coreml(
     import torch
     import coremltools as ct
 
+    # Input validation
+    if pytorch_model is None:
+        raise ValueError("pytorch_model cannot be None")
+
+    # Validate model type
+    if not isinstance(pytorch_model, (torch.jit.ScriptModule, torch.export.ExportedProgram)):
+        raise TypeError(
+            f"pytorch_model must be torch.jit.ScriptModule or torch.export.ExportedProgram, "
+            f"got {type(pytorch_model)}"
+        )
+
+    # Validate output path
+    output_path_obj = Path(output_path)
+    if output_path_obj.exists() and not output_path_obj.is_dir():
+        raise ValueError(
+            f"Output path exists and is not a directory: {output_path}")
+
+    # Validate compute units
+    valid_compute_units = {"all", "cpuandgpu", "cpuonly"}
+    if compute_units not in valid_compute_units:
+        raise ValueError(
+            f"compute_units must be one of {valid_compute_units}, got '{compute_units}'"
+        )
+
+    # Validate contract path if provided
+    if contract_path is not None:
+        contract_path_obj = Path(contract_path)
+        if not contract_path_obj.exists():
+            raise FileNotFoundError(
+                f"Contract file not found: {contract_path}")
+        if not contract_path_obj.is_file():
+            raise ValueError(f"Contract path is not a file: {contract_path}")
+
     cu_map = {
         "all": ct.ComputeUnit.ALL,
         "cpuandgpu": ct.ComputeUnit.CPU_AND_GPU,
@@ -97,10 +130,16 @@ def convert_pytorch_to_coreml(
             version_num = int(target.replace("macOS", ""))
             if version_num >= 14:
                 target_version = ct.target.macOS14
-        except Exception:
-            pass
+            elif version_num < 13:
+                print(
+                    f"[convert_coreml] WARN: macOS{version_num} is below minimum supported (macOS13), using macOS13")
+        except (ValueError, AttributeError) as e:
+            print(
+                f"[convert_coreml] WARN: Could not parse target version '{target}': {e}, defaulting to macOS13")
     else:
         target_version = ct.target.macOS13
+        print(
+            f"[convert_coreml] WARN: Unrecognized target format '{target}', defaulting to macOS13")
 
     print(
         f"[convert_coreml] Converting PyTorch→CoreML (target={target}, compute_units={compute_units})"
@@ -134,7 +173,8 @@ def convert_pytorch_to_coreml(
 
                     # Validate contract structure
                     if not isinstance(contract, dict):
-                        raise ValueError(f"Contract must be a dictionary, got {type(contract)}")
+                        raise ValueError(
+                            f"Contract must be a dictionary, got {type(contract)}")
 
                     contract_inputs = contract.get("inputs", [])
                     if not contract_inputs:
@@ -162,7 +202,8 @@ def convert_pytorch_to_coreml(
 
                     seq_len = enumerated_T[0] if enumerated_T else 128
                     if not isinstance(seq_len, int) or seq_len <= 0:
-                        raise ValueError(f"Invalid sequence length in enumerated_T: {seq_len}")
+                        raise ValueError(
+                            f"Invalid sequence length in enumerated_T: {seq_len}")
 
                     shape = (1, seq_len)
 
@@ -181,7 +222,8 @@ def convert_pytorch_to_coreml(
                     else:
                         dtype = dtype_map[input_dtype]
 
-                    inputs = [ct.TensorType(name=input_name, shape=shape, dtype=dtype)]
+                    inputs = [ct.TensorType(
+                        name=input_name, shape=shape, dtype=dtype)]
                     print(
                         f"[convert_coreml] Using contract.json: {input_name} shape={shape} dtype={input_dtype}"
                     )
@@ -204,7 +246,8 @@ def convert_pytorch_to_coreml(
                     dummy_input = torch.zeros((1, 128), dtype=torch.int32)
                     _ = pytorch_model(dummy_input)
                     # If that worked, use int32 input
-                    inputs = [ct.TensorType(name="input_ids", shape=(1, 128), dtype=np.int32)]
+                    inputs = [ct.TensorType(
+                        name="input_ids", shape=(1, 128), dtype=np.int32)]
                     print(
                         "[convert_coreml] Inferred input shape from model: input_ids shape=(1, 128) dtype=int32"
                     )
@@ -213,9 +256,11 @@ def convert_pytorch_to_coreml(
 
                     # Try float32 input (for transformer blocks or embeddings)
                     try:
-                        dummy_input = torch.randn((1, 128, 64), dtype=torch.float32)
+                        dummy_input = torch.randn(
+                            (1, 128, 64), dtype=torch.float32)
                         _ = pytorch_model(dummy_input)
-                        inputs = [ct.TensorType(name="input", shape=(1, 128, 64), dtype=np.float32)]
+                        inputs = [ct.TensorType(name="input", shape=(
+                            1, 128, 64), dtype=np.float32)]
                         print(
                             "[convert_coreml] Inferred input shape from model: input shape=(1, 128, 64) dtype=float32"
                         )
@@ -232,7 +277,8 @@ def convert_pytorch_to_coreml(
                                 dummy_input = torch.zeros(shape, dtype=dtype)
                                 _ = pytorch_model(dummy_input)
                                 inputs = [
-                                    ct.TensorType(name="input_ids", shape=shape, dtype=np.int32)
+                                    ct.TensorType(
+                                        name="input_ids", shape=shape, dtype=np.int32)
                                 ]
                                 print(
                                     f"[convert_coreml] Inferred input shape from model: input_ids shape={shape} dtype=int32"
@@ -255,7 +301,8 @@ def convert_pytorch_to_coreml(
                             else:
                                 print(f"[convert_coreml] ERROR: {error_msg}")
                             inputs = [
-                                ct.TensorType(name="input_ids", shape=(1, 128), dtype=np.int32)
+                                ct.TensorType(name="input_ids", shape=(
+                                    1, 128), dtype=np.int32)
                             ]
             # Ensure stable output name - CoreML may use generic names like var_###
             # Try to specify output name if possible
@@ -279,8 +326,11 @@ def convert_pytorch_to_coreml(
                 try:
                     contract = load_contract(contract_path)
                     use_halt_head = contract.get("use_halt_head", False)
-                except Exception:
-                    pass  # Fall back to defaults
+                except Exception as e:
+                    print(
+                        f"[convert_coreml] WARN: Could not load contract from {contract_path}: {e}")
+                    print(
+                        "[convert_coreml] Proceeding without halt head detection from contract")
 
             # Rename outputs based on count and contract
             if num_outputs == 1:
@@ -300,7 +350,8 @@ def convert_pytorch_to_coreml(
                 if len(outputs) >= 2:
                     if outputs[1].name.startswith("var_") or outputs[1].name == "":
                         outputs[1].name = "halt_logits"
-                        print("[convert_coreml] Renamed second output to 'halt_logits'")
+                        print(
+                            "[convert_coreml] Renamed second output to 'halt_logits'")
             else:
                 # Multiple outputs but not expected - warn
                 if num_outputs > 1:
@@ -312,7 +363,8 @@ def convert_pytorch_to_coreml(
                         output = spec.description.output[0]
                         if output.name.startswith("var_") or output.name == "":
                             output.name = "logits"
-                            print("[convert_coreml] Renamed first output to 'logits'")
+                            print(
+                                "[convert_coreml] Renamed first output to 'logits'")
         else:
             # For ExportedProgram, inputs are already embedded
             mlmodel = ct.convert(
@@ -333,8 +385,11 @@ def convert_pytorch_to_coreml(
                 try:
                     contract = load_contract(contract_path)
                     use_halt_head = contract.get("use_halt_head", False)
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(
+                        f"[convert_coreml] WARN: Could not load contract from {contract_path}: {e}")
+                    print(
+                        "[convert_coreml] Proceeding without halt head detection from contract")
 
             # Rename outputs based on count and contract
             if num_outputs == 1:
@@ -351,7 +406,8 @@ def convert_pytorch_to_coreml(
                 if len(outputs) >= 2:
                     if outputs[1].name.startswith("var_") or outputs[1].name == "":
                         outputs[1].name = "halt_logits"
-                        print("[convert_coreml] Renamed second output to 'halt_logits'")
+                        print(
+                            "[convert_coreml] Renamed second output to 'halt_logits'")
 
         print("[convert_coreml] Conversion successful")
 
@@ -382,7 +438,8 @@ def convert_pytorch_to_coreml(
             full_error_msg += f" (Context: {', '.join(error_context)})"
 
         if allow_placeholder:
-            print(f"[convert_coreml] WARN: Conversion failed: {full_error_msg}")
+            print(
+                f"[convert_coreml] WARN: Conversion failed: {full_error_msg}")
             print("[convert_coreml] Creating placeholder (SKIP parity)")
             return create_placeholder(output_path, "PyTorch model", full_error_msg)
         else:
@@ -394,7 +451,8 @@ def convert_pytorch_to_coreml(
             print("  3. Provide --contract with contract.json for accurate input specs")
             print("  4. Ensure coremltools version supports your model operations")
             print("  5. Check model operations are supported by CoreML")
-            raise RuntimeError(f"PyTorch→CoreML conversion failed: {full_error_msg}") from e
+            raise RuntimeError(
+                f"PyTorch→CoreML conversion failed: {full_error_msg}") from e
 
 
 def convert_onnx_to_coreml(
@@ -434,10 +492,35 @@ def convert_onnx_to_coreml(
             version_num = int(target.replace("macOS", ""))
             if version_num >= 14:
                 target_version = ct.target.macOS14
-        except Exception:
-            pass
+            elif version_num < 13:
+                print(
+                    f"[convert_coreml] WARN: macOS{version_num} is below minimum supported (macOS13), using macOS13")
+        except (ValueError, AttributeError) as e:
+            print(
+                f"[convert_coreml] WARN: Could not parse target version '{target}': {e}, defaulting to macOS13")
     else:
         target_version = ct.target.macOS13
+        print(
+            f"[convert_coreml] WARN: Unrecognized target format '{target}', defaulting to macOS13")
+
+    # Input validation
+    onnx_path_obj = Path(onnx_path)
+    if not onnx_path_obj.exists():
+        raise FileNotFoundError(f"ONNX model file not found: {onnx_path}")
+    if not onnx_path_obj.is_file():
+        raise ValueError(f"ONNX path is not a file: {onnx_path}")
+
+    output_path_obj = Path(output_path)
+    if output_path_obj.exists() and not output_path_obj.is_dir():
+        raise ValueError(
+            f"Output path exists and is not a directory: {output_path}")
+
+    # Validate compute units
+    valid_compute_units = {"all", "cpuandgpu", "cpuonly"}
+    if compute_units not in valid_compute_units:
+        raise ValueError(
+            f"compute_units must be one of {valid_compute_units}, got '{compute_units}'"
+        )
 
     print(f"[convert_coreml] Loading ONNX model: {onnx_path}")
     try:
@@ -467,7 +550,8 @@ def convert_onnx_to_coreml(
             old_name = output.name
             if output.name.startswith("var_") or output.name == "" or not output.name:
                 output.name = "logits"
-                print(f"[convert_coreml] Renamed output '{old_name}' to 'logits'")
+                print(
+                    f"[convert_coreml] Renamed output '{old_name}' to 'logits'")
 
     except Exception:
         # ONNX→CoreML conversion is not supported by CoreMLTools 9.0
@@ -527,7 +611,8 @@ def create_placeholder(output_path: str, onnx_path: str, error_msg: str):
 
     # Create minimal manifest
     manifest = out / "manifest.json"
-    manifest.write_text('{"version": "1.0", "author": "smoke_test_placeholder"}')
+    manifest.write_text(
+        '{"version": "1.0", "author": "smoke_test_placeholder"}')
 
     print(f"[convert_coreml] Placeholder created: {output_path}")
     return str(output_path)
@@ -571,7 +656,8 @@ Examples:
         choices=["all", "cpuandgpu", "cpuonly"],
         help="Compute units (default: all)",
     )
-    ap.add_argument("--target", default="macOS13", help="Deployment target (default: macOS13)")
+    ap.add_argument("--target", default="macOS13",
+                    help="Deployment target (default: macOS13)")
     ap.add_argument(
         "--allow-placeholder",
         action="store_true",
@@ -601,7 +687,8 @@ Examples:
             print(f"[convert_coreml] ERROR: Version check failed: {e}")
             print("\nTo fix this issue:")
             print("1. Install Python 3.11: brew install python@3.11")
-            print("2. Use Python 3.11 for conversion: python3.11 -m conversion.convert_coreml ...")
+            print(
+                "2. Use Python 3.11 for conversion: python3.11 -m conversion.convert_coreml ...")
             print("3. Verify coremltools is installed: pip install coremltools>=9.0")
             print(
                 "4. For toy models only, use --toy flag to bypass: python -m conversion.convert_coreml --toy ..."
@@ -622,7 +709,8 @@ Examples:
             # nosec B614: torch.jit.load() is safe for TorchScript files (not arbitrary pickle)
             # Security: TorchScript uses a safe deserialization format, not pickle
             pytorch_model = torch.jit.load(args.input_path)  # nosec B614
-            print(f"[convert_coreml] Loaded TorchScript model: {args.input_path}")
+            print(
+                f"[convert_coreml] Loaded TorchScript model: {args.input_path}")
         except Exception:
             try:
                 # Try loading as ExportedProgram
@@ -637,7 +725,8 @@ Examples:
                 with open(args.input_path, "rb") as f:
                     # nosec B301 - pickle.load() required for ExportedProgram format (see security note above)
                     pytorch_model = pickle.load(f)
-                print(f"[convert_coreml] Loaded ExportedProgram model: {args.input_path}")
+                print(
+                    f"[convert_coreml] Loaded ExportedProgram model: {args.input_path}")
             except Exception as e:
                 raise RuntimeError(
                     f"Failed to load PyTorch model from {args.input_path}. "
