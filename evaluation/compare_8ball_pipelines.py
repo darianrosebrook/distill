@@ -12,7 +12,7 @@ Author: @darianrosebrook
 import json
 import tempfile
 from pathlib import Path
-from evaluation.eight_ball_eval import (
+from evaluation.eightball_eval import (
     evaluate_pytorch_model,
     evaluate_coreml_model,
     evaluate_ollama_model,

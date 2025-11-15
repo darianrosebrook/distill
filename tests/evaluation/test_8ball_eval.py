@@ -1258,8 +1258,94 @@ class TestEightBallIntegration:
         assert result == ["Q1", "Q2", "Q3"]
 
     def test_load_eval_questions_invalid_type(self):
-        """Test load_eval_questions with invalid type."""
-        # The function tries to convert to Path, which fails, but then tries to open as file
-        # This results in FileNotFoundError, not TypeError
-        with pytest.raises((TypeError, FileNotFoundError)):
-            load_eval_questions(123)  # Invalid type
+        """Test load_eval_questions with invalid type (line 166-167)."""
+        # Test with a type that can't be converted to string or Path
+        # The function tries to convert to Path(str(obj)), which may succeed
+        # but then fails when checking if file exists, so we test the TypeError path
+        class UnconvertibleType:
+            def __str__(self):
+                raise TypeError("Cannot convert to string")
+        
+        with pytest.raises(TypeError, match="eval_file must be a string, Path, or list"):
+            load_eval_questions(UnconvertibleType())  # Invalid type
+
+    def test_load_eval_questions_value_error_fallback(self, tmp_path):
+        """Test load_eval_questions with ValueError falling back to text parsing (lines 196-206)."""
+        # Create a file that will cause ValueError when trying to parse as JSON
+        test_file = tmp_path / "test.txt"
+        with open(test_file, "w") as f:
+            f.write("Question 1\nQuestion 2\n")
+        
+        # This should work - ValueError triggers text file parsing
+        result = load_eval_questions(str(test_file))
+        assert result == ["Question 1", "Question 2"]
+
+
+class TestEvaluatePyTorchModelEdgeCases:
+    """Test edge cases for evaluate_pytorch_model."""
+
+    def test_evaluate_pytorch_model_missing_questions_argument(self):
+        """Test evaluate_pytorch_model with missing questions argument (line 229-230)."""
+        with pytest.raises(TypeError, match="missing required argument: questions"):
+            evaluate_pytorch_model("model.pt", "tokenizer.pt")  # Missing questions
+
+
+class TestEvaluateCoreMLModelEdgeCases:
+    """Test edge cases for evaluate_coreml_model."""
+
+    def test_evaluate_coreml_model_missing_questions_argument(self):
+        """Test evaluate_coreml_model with missing questions argument (line 450-451)."""
+        with pytest.raises(TypeError, match="missing required argument: questions"):
+            evaluate_coreml_model("model.mlpackage", "tokenizer.pt")  # Missing questions
+
+
+class TestComparePredictionsEdgeCases:
+    """Test edge cases for compare_predictions."""
+
+    def test_compare_predictions_empty_lists_detailed(self):
+        """Test compare_predictions with empty lists returns proper structure (lines 649-662)."""
+        metrics = compare_predictions([], [])
+        
+        assert metrics.total_questions == 0
+        assert metrics.exact_match_rate == 0.0
+        assert metrics.total_predictions == 0
+        assert metrics.correct_predictions == 0
+        assert metrics.accuracy == 0.0
+        assert len(metrics.token_distribution) == 20
+        assert all(count == 0 for count in metrics.token_distribution)
+
+    def test_compare_predictions_token_index_bounds(self):
+        """Test compare_predictions handles token index bounds correctly (lines 684-687)."""
+        # Test with token exactly at boundaries
+        predictions1 = [
+            PredictionResult("Q1", 200, "It is certain", 0.9, True),  # Token 200 (index 0)
+            PredictionResult("Q2", 219, "Very doubtful", 0.8, True),  # Token 219 (index 19)
+        ]
+        predictions2 = [
+            PredictionResult("Q1", 200, "It is certain", 0.9, True),
+            PredictionResult("Q2", 219, "Very doubtful", 0.8, True),
+        ]
+        
+        metrics = compare_predictions(predictions1, predictions2)
+        
+        # Both tokens should be counted
+        assert metrics.token_distribution[0] == 1  # Token 200
+        assert metrics.token_distribution[19] == 1  # Token 219
+        assert sum(metrics.token_distribution) == 2
+
+    def test_compare_predictions_with_none_answer(self):
+        """Test compare_predictions handles None predicted_answer (lines 690-694)."""
+        predictions1 = [
+            PredictionResult("Q1", 200, None, 0.9, True),  # No answer
+            PredictionResult("Q2", 201, "It is decidedly so", 0.8, True),
+        ]
+        predictions2 = [
+            PredictionResult("Q1", 200, None, 0.9, True),
+            PredictionResult("Q2", 201, "It is decidedly so", 0.8, True),
+        ]
+        
+        metrics = compare_predictions(predictions1, predictions2)
+        
+        # Only Q2 should be in answer_distribution
+        assert "It is decidedly so" in metrics.answer_distribution
+        assert metrics.answer_distribution["It is decidedly so"] == 1

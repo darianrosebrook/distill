@@ -111,6 +111,17 @@ class SimpleClaimExtractor:
 
     def _has_verifiable_content(self, sentence: str) -> bool:
         """Check if sentence contains verifiable content."""
+        # First exclude very generic statements like "This is just text" BEFORE checking anything else
+        generic_patterns = [r"^this is just", r"^it is just", r"^that is just", r"^this is only", r"^it is only"]
+        sentence_lower = sentence.lower().strip()
+        if any(re.search(pattern, sentence_lower) for pattern in generic_patterns):
+            return False
+        
+        # Exclude statements starting with uncertain words
+        uncertain_patterns = [r"^maybe", r"^perhaps", r"^probably", r"^might", r"^could"]
+        if any(re.search(pattern, sentence_lower) for pattern in uncertain_patterns):
+            return False
+        
         # Check for verifiable patterns
         for pattern in self.VERIFIABLE_PATTERNS:
             if re.search(pattern, sentence, re.IGNORECASE):
@@ -147,13 +158,31 @@ class SimpleClaimExtractor:
             "implements",
             "defines",
             "creates",
+            "created",
+            "returns",
             "returns",
             "uses",
         ]
 
         words = sentence.lower().split()
         has_verb = any(verb in words for verb in factual_verbs)
-        has_noun = len([w for w in words if len(w) > 3]) >= 2
+        
+        # Count words > 3 chars (excluding very common words)
+        common_words = {"the", "and", "or", "but", "it", "is", "was", "are", "were", "has", "have", "had"}
+        meaningful_words = [w for w in words if len(w) > 3 and w not in common_words]
+        # Also include past participles even if they're in the verb list
+        past_participles = ["created", "defined", "implemented", "returned"]
+        for word in words:
+            if word in past_participles and word not in meaningful_words:
+                meaningful_words.append(word)
+        
+        # Need at least 1 meaningful word (>3 chars, not common) if verb is a past participle
+        # or 2 meaningful words for simpler verbs
+        verb_word = next((v for v in factual_verbs if v in words), None)
+        is_past_participle = any(pp in words for pp in ["created", "defined", "implemented", "returned"])
+        required_words = 1 if is_past_participle else 2
+        
+        has_noun = len(meaningful_words) >= required_words
 
         return has_verb and has_noun
 
@@ -163,13 +192,15 @@ class SimpleClaimExtractor:
 
         Splits on conjunctions, commas, etc.
         """
-        # Split on common conjunctions
-        parts = re.split(r"\s+(and|or|but|,)\s+", sentence)
+        # Split on common conjunctions and commas (with optional whitespace)
+        # Pattern: whitespace + (and|or|but) + whitespace OR comma with optional whitespace
+        parts = re.split(r"\s+(and|or|but)\s+|\s*,\s+", sentence)
 
-        # Filter out conjunctions themselves
-        atomic = [
-            p.strip() for p in parts if p.strip() and p.lower() not in ["and", "or", "but", ","]
-        ]
+        # Filter out conjunctions themselves and empty/None strings
+        atomic = []
+        for p in parts:
+            if p and p.strip() and p.strip().lower() not in ["and", "or", "but", ","]:
+                atomic.append(p.strip())
 
         # If no splits, return original
         if len(atomic) <= 1:

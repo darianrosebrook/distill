@@ -6,6 +6,8 @@ Tests performance targets, metrics evaluation, and benchmark functionality.
 # @author: @darianrosebrook
 
 
+import pytest
+
 from evaluation.performance_benchmarks import (
     ModelRole,
     PerformanceTargets,
@@ -708,4 +710,662 @@ class TestEvaluateAllEdgeCases:
         # p95 and p99 should use last value (45.0) when list is small
         assert result["latency"]["p95_value"] == 45.0
         assert result["latency"]["p99_value"] == 45.0
+
+
+class TestLatencyEvaluationEdgeCases:
+    """Test edge cases in latency evaluation."""
+
+    def test_evaluate_latency_empty_list(self):
+        """Test evaluate_latency with empty list."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        result = benchmark.evaluate_latency([])
+
+        assert result["p50"] is False
+        assert result["p95"] is False
+        assert result["p99"] is False
+
+    def test_evaluate_latency_single_value(self):
+        """Test evaluate_latency with single value."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        result = benchmark.evaluate_latency([40.0])
+
+        # Single value should be used for all percentiles
+        assert result["p50_value"] == 40.0
+        assert result["p95_value"] == 40.0
+        assert result["p99_value"] == 40.0
+
+    def test_evaluate_latency_two_values(self):
+        """Test evaluate_latency with two values."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        result = benchmark.evaluate_latency([30.0, 50.0])
+
+        # Should use sorted values
+        # n = 2, int(n * 0.50) = int(1.0) = 1
+        # sorted_latencies = [30.0, 50.0]
+        # sorted_latencies[1] = 50.0
+        # So p50 should be 50.0
+        assert result["p50_value"] == 50.0
+        # p95 and p99 should use last value (50.0) when list is small (n <= 20)
+        assert result["p95_value"] == 50.0
+        assert result["p99_value"] == 50.0
+
+    def test_evaluate_latency_exactly_at_threshold(self):
+        """Test evaluate_latency when latency is exactly at threshold."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        # p95 threshold is 50.0ms
+        result = benchmark.evaluate_latency([50.0] * 100)
+
+        # Should pass (<= threshold)
+        assert result["p95"] is True
+        assert result["p95_value"] == 50.0
+
+    def test_evaluate_latency_just_below_threshold(self):
+        """Test evaluate_latency when latency is just below threshold."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        # p95 threshold is 50.0ms
+        result = benchmark.evaluate_latency([49.99] * 100)
+
+        # Should pass (< threshold)
+        assert result["p95"] is True
+
+    def test_evaluate_latency_just_above_threshold(self):
+        """Test evaluate_latency when latency is just above threshold."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        # p95 threshold is 50.0ms
+        result = benchmark.evaluate_latency([50.01] * 100)
+
+        # Should fail (> threshold)
+        assert result["p95"] is False
+
+    def test_evaluate_latency_boundary_percentile_calculation(self):
+        """Test percentile calculation at boundaries."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        # Create exactly 100 values
+        latencies = [float(i) for i in range(100)]
+
+        result = benchmark.evaluate_latency(latencies)
+
+        # p50 should be at index 50
+        assert result["p50_value"] == 50.0
+        # p95 should be at index 95
+        assert result["p95_value"] == 95.0
+        # p99 should be at index 99
+        assert result["p99_value"] == 99.0
+
+    def test_evaluate_latency_large_list(self):
+        """Test evaluate_latency with large list (1000+ values)."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        # Create 1000 latencies
+        latencies = [float(i) for i in range(1000)]
+
+        result = benchmark.evaluate_latency(latencies)
+
+        # Should calculate percentiles correctly
+        assert result["p50_value"] == 500.0
+        assert result["p95_value"] == 950.0
+        assert result["p99_value"] == 990.0
+
+    def test_evaluate_latency_unsorted_list(self):
+        """Test evaluate_latency with unsorted list (should sort internally)."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        # Unsorted latencies
+        latencies = [50.0, 20.0, 80.0, 10.0, 90.0]
+
+        result = benchmark.evaluate_latency(latencies)
+
+        # Should sort internally and calculate correctly
+        assert result["p50_value"] == 50.0
+        assert result["p95_value"] == 90.0
+        assert result["p99_value"] == 90.0
+
+    def test_evaluate_latency_duplicate_values(self):
+        """Test evaluate_latency with duplicate values."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        # All values are the same
+        latencies = [40.0] * 100
+
+        result = benchmark.evaluate_latency(latencies)
+
+        # All percentiles should be the same
+        assert result["p50_value"] == 40.0
+        assert result["p95_value"] == 40.0
+        assert result["p99_value"] == 40.0
+
+    def test_evaluate_latency_all_three_roles(self):
+        """Test evaluate_latency for all three model roles."""
+        for role in ModelRole:
+            benchmark = PerformanceBenchmark(role)
+            latencies = [float(i) for i in range(100)]
+
+            result = benchmark.evaluate_latency(latencies)
+
+            # Should return results for all roles
+            assert "p50" in result
+            assert "p95" in result
+            assert "p99" in result
+
+
+class TestThroughputEvaluationEdgeCases:
+    """Test edge cases in throughput evaluation."""
+
+    def test_evaluate_throughput_zero_tokens_per_second(self):
+        """Test evaluate_throughput with zero tokens per second."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        result = benchmark.evaluate_throughput(0.0)
+
+        # Should fail (0 < target of 200)
+        assert result["pass"] is False
+        assert result["measured"] == 0.0
+
+    def test_evaluate_throughput_exactly_at_threshold(self):
+        """Test evaluate_throughput when exactly at threshold."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        # Target is 200.0 tokens/sec
+        result = benchmark.evaluate_throughput(200.0)
+
+        # Should pass (>= threshold)
+        assert result["pass"] is True
+        assert result["measured"] == 200.0
+
+    def test_evaluate_throughput_just_below_threshold(self):
+        """Test evaluate_throughput when just below threshold."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        # Target is 200.0 tokens/sec
+        result = benchmark.evaluate_throughput(199.99)
+
+        # Should fail (< threshold)
+        assert result["pass"] is False
+
+    def test_evaluate_throughput_just_above_threshold(self):
+        """Test evaluate_throughput when just above threshold."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        # Target is 200.0 tokens/sec
+        result = benchmark.evaluate_throughput(200.01)
+
+        # Should pass (> threshold)
+        assert result["pass"] is True
+
+    def test_evaluate_throughput_very_high_value(self):
+        """Test evaluate_throughput with very high value."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        result = benchmark.evaluate_throughput(1000.0)
+
+        # Should pass (well above threshold)
+        assert result["pass"] is True
+        assert result["measured"] == 1000.0
+
+    def test_evaluate_throughput_all_three_roles(self):
+        """Test evaluate_throughput for all three model roles."""
+        for role in ModelRole:
+            benchmark = PerformanceBenchmark(role)
+            # Use target value for each role
+            target = PERFORMANCE_TARGETS[role].tokens_per_second
+
+            result = benchmark.evaluate_throughput(target)
+
+            # Should pass at threshold
+            assert result["pass"] is True
+            assert result["measured"] == target
+            assert result["target"] == target
+
+
+class TestQualityEvaluationEdgeCases:
+    """Test edge cases in quality evaluation."""
+
+    def test_evaluate_quality_no_metrics(self):
+        """Test evaluate_quality with no metrics."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        result = benchmark.evaluate_quality()
+
+        # Should return empty dict
+        assert result == {}
+
+    def test_evaluate_quality_only_accuracy(self):
+        """Test evaluate_quality with only accuracy."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        result = benchmark.evaluate_quality(accuracy=0.92)
+
+        # Should have accuracy metrics only
+        assert "accuracy_pass" in result
+        assert "accuracy_value" in result
+        assert "accuracy_target" in result
+        assert "confidence_pass" not in result
+
+    def test_evaluate_quality_only_confidence(self):
+        """Test evaluate_quality with only confidence."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        result = benchmark.evaluate_quality(confidence=0.78)
+
+        # Should have confidence metrics only
+        assert "confidence_pass" in result
+        assert "confidence_value" in result
+        assert "confidence_target" in result
+        assert "accuracy_pass" not in result
+
+    def test_evaluate_quality_exactly_at_threshold(self):
+        """Test evaluate_quality when exactly at threshold."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        # min_accuracy is 0.90, min_confidence is 0.75
+        result = benchmark.evaluate_quality(accuracy=0.90, confidence=0.75)
+
+        # Should pass (>= threshold)
+        assert result["accuracy_pass"] is True
+        assert result["confidence_pass"] is True
+
+    def test_evaluate_quality_just_below_threshold(self):
+        """Test evaluate_quality when just below threshold."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        # min_accuracy is 0.90, min_confidence is 0.75
+        result = benchmark.evaluate_quality(accuracy=0.8999, confidence=0.7499)
+
+        # Should fail (< threshold)
+        assert result["accuracy_pass"] is False
+        assert result["confidence_pass"] is False
+
+    def test_evaluate_quality_just_above_threshold(self):
+        """Test evaluate_quality when just above threshold."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        # min_accuracy is 0.90, min_confidence is 0.75
+        result = benchmark.evaluate_quality(accuracy=0.9001, confidence=0.7501)
+
+        # Should pass (> threshold)
+        assert result["accuracy_pass"] is True
+        assert result["confidence_pass"] is True
+
+    def test_evaluate_quality_zero_accuracy(self):
+        """Test evaluate_quality with zero accuracy."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        result = benchmark.evaluate_quality(accuracy=0.0)
+
+        # Should fail (0 < min_accuracy of 0.90)
+        assert result["accuracy_pass"] is False
+
+    def test_evaluate_quality_one_accuracy(self):
+        """Test evaluate_quality with accuracy of 1.0."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        result = benchmark.evaluate_quality(accuracy=1.0)
+
+        # Should pass (1.0 >= min_accuracy of 0.90)
+        assert result["accuracy_pass"] is True
+
+    def test_evaluate_quality_all_three_roles(self):
+        """Test evaluate_quality for all three model roles."""
+        for role in ModelRole:
+            benchmark = PerformanceBenchmark(role)
+            targets = PERFORMANCE_TARGETS[role]
+
+            # Test at threshold
+            result = benchmark.evaluate_quality(
+                accuracy=targets.min_accuracy, confidence=targets.min_confidence
+            )
+
+            # Should pass at threshold
+            assert result["accuracy_pass"] is True
+            assert result["confidence_pass"] is True
+
+
+class TestResourceEvaluationEdgeCases:
+    """Test edge cases in resource evaluation."""
+
+    def test_evaluate_resources_zero_memory(self):
+        """Test evaluate_resources with zero memory."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        result = benchmark.evaluate_resources(memory_mb=0.0, cpu_percent=55.0)
+
+        # Should pass (0 <= max_memory_mb of 8000)
+        assert result["memory_pass"] is True
+        assert result["memory_value"] == 0.0
+
+    def test_evaluate_resources_zero_cpu(self):
+        """Test evaluate_resources with zero CPU."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        result = benchmark.evaluate_resources(memory_mb=7000.0, cpu_percent=0.0)
+
+        # Should pass (0 <= max_cpu_percent of 60)
+        assert result["cpu_pass"] is True
+        assert result["cpu_value"] == 0.0
+
+    def test_evaluate_resources_exactly_at_threshold(self):
+        """Test evaluate_resources when exactly at threshold."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        # max_memory_mb is 8000.0, max_cpu_percent is 60.0
+        result = benchmark.evaluate_resources(memory_mb=8000.0, cpu_percent=60.0)
+
+        # Should pass (<= threshold)
+        assert result["memory_pass"] is True
+        assert result["cpu_pass"] is True
+
+    def test_evaluate_resources_just_below_threshold(self):
+        """Test evaluate_resources when just below threshold."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        # max_memory_mb is 8000.0, max_cpu_percent is 60.0
+        result = benchmark.evaluate_resources(memory_mb=7999.99, cpu_percent=59.99)
+
+        # Should pass (< threshold)
+        assert result["memory_pass"] is True
+        assert result["cpu_pass"] is True
+
+    def test_evaluate_resources_just_above_threshold(self):
+        """Test evaluate_resources when just above threshold."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        # max_memory_mb is 8000.0, max_cpu_percent is 60.0
+        result = benchmark.evaluate_resources(memory_mb=8000.01, cpu_percent=60.01)
+
+        # Should fail (> threshold)
+        assert result["memory_pass"] is False
+        assert result["cpu_pass"] is False
+
+    def test_evaluate_resources_very_high_values(self):
+        """Test evaluate_resources with very high values."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        result = benchmark.evaluate_resources(memory_mb=100000.0, cpu_percent=100.0)
+
+        # Should fail (well above thresholds)
+        assert result["memory_pass"] is False
+        assert result["cpu_pass"] is False
+
+    def test_evaluate_resources_all_three_roles(self):
+        """Test evaluate_resources for all three model roles."""
+        for role in ModelRole:
+            benchmark = PerformanceBenchmark(role)
+            targets = PERFORMANCE_TARGETS[role]
+
+            # Test at threshold
+            result = benchmark.evaluate_resources(
+                memory_mb=targets.max_memory_mb, cpu_percent=targets.max_cpu_percent
+            )
+
+            # Should pass at threshold
+            assert result["memory_pass"] is True
+            assert result["cpu_pass"] is True
+
+
+class TestEvaluateAllEdgeCasesExtended:
+    """Test additional edge cases in evaluate_all method."""
+
+    def test_evaluate_all_with_none_latency_ms(self):
+        """Test evaluate_all with None latency_ms (falsy value)."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        metrics = PerformanceMetrics(
+            latency_ms=0.0,  # Falsy value
+            tokens_per_second=220.0,
+            memory_mb=7000.0,
+            cpu_percent=55.0,
+        )
+
+        result = benchmark.evaluate_all(metrics)
+
+        # Should not evaluate latency when latency_ms is falsy
+        assert "latency" not in result
+
+    def test_evaluate_all_with_single_latency_measurement(self):
+        """Test evaluate_all with single latency measurement (no latencies list)."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        metrics = PerformanceMetrics(
+            latency_ms=45.0,  # Single measurement
+            tokens_per_second=220.0,
+            memory_mb=7000.0,
+            cpu_percent=55.0,
+        )
+
+        result = benchmark.evaluate_all(metrics)
+
+        # Should use single_measurement format
+        assert "latency" in result
+        assert "single_measurement" in result["latency"]
+        assert result["latency"]["single_measurement"] == 45.0
+        assert result["latency"]["pass"] is True  # 45.0 <= 50.0
+
+    def test_evaluate_all_overall_pass_with_none_quality(self):
+        """Test evaluate_all overall_pass when quality metrics are None."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        metrics = PerformanceMetrics(
+            latency_ms=40.0,
+            tokens_per_second=220.0,
+            memory_mb=7000.0,
+            cpu_percent=55.0,
+            # No accuracy or confidence
+        )
+
+        result = benchmark.evaluate_all(metrics)
+
+        # Quality should be empty, but overall_pass should still work
+        assert result["quality"] == {}
+        # overall_pass should be True (None quality metrics are treated as passing)
+        assert result["overall_pass"] is True
+
+    def test_evaluate_all_overall_pass_fails_on_memory(self):
+        """Test evaluate_all overall_pass fails when memory fails."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        metrics = PerformanceMetrics(
+            latency_ms=40.0,
+            tokens_per_second=220.0,
+            memory_mb=9000.0,  # Fails (9000 > 8000)
+            cpu_percent=55.0,
+        )
+
+        result = benchmark.evaluate_all(metrics)
+
+        assert result["resources"]["memory_pass"] is False
+        assert result["overall_pass"] is False
+
+    def test_evaluate_all_overall_pass_fails_on_cpu(self):
+        """Test evaluate_all overall_pass fails when CPU fails."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        metrics = PerformanceMetrics(
+            latency_ms=40.0,
+            tokens_per_second=220.0,
+            memory_mb=7000.0,
+            cpu_percent=65.0,  # Fails (65 > 60)
+        )
+
+        result = benchmark.evaluate_all(metrics)
+
+        assert result["resources"]["cpu_pass"] is False
+        assert result["overall_pass"] is False
+
+    def test_evaluate_all_overall_pass_fails_on_accuracy(self):
+        """Test evaluate_all overall_pass fails when accuracy fails."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        metrics = PerformanceMetrics(
+            latency_ms=40.0,
+            tokens_per_second=220.0,
+            memory_mb=7000.0,
+            cpu_percent=55.0,
+            accuracy=0.85,  # Fails (0.85 < 0.90)
+            confidence=0.78,
+        )
+
+        result = benchmark.evaluate_all(metrics)
+
+        assert result["quality"]["accuracy_pass"] is False
+        assert result["overall_pass"] is False
+
+    def test_evaluate_all_overall_pass_fails_on_confidence(self):
+        """Test evaluate_all overall_pass fails when confidence fails."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+        metrics = PerformanceMetrics(
+            latency_ms=40.0,
+            tokens_per_second=220.0,
+            memory_mb=7000.0,
+            cpu_percent=55.0,
+            accuracy=0.92,
+            confidence=0.70,  # Fails (0.70 < 0.75)
+        )
+
+        result = benchmark.evaluate_all(metrics)
+
+        assert result["quality"]["confidence_pass"] is False
+        assert result["overall_pass"] is False
+
+    def test_evaluate_all_all_three_roles(self):
+        """Test evaluate_all for all three model roles."""
+        for role in ModelRole:
+            benchmark = PerformanceBenchmark(role)
+            targets = PERFORMANCE_TARGETS[role]
+
+            metrics = PerformanceMetrics(
+                latency_ms=targets.p95_latency_ms,
+                tokens_per_second=targets.tokens_per_second,
+                memory_mb=targets.max_memory_mb,
+                cpu_percent=targets.max_cpu_percent,
+                accuracy=targets.min_accuracy,
+                confidence=targets.min_confidence,
+            )
+
+            result = benchmark.evaluate_all(metrics)
+
+            # Should pass at thresholds
+            assert result["overall_pass"] is True
+            assert result["model_role"] == role.value
+
+
+class TestMeasureInferenceTimeEdgeCases:
+    """Test edge cases in measure_inference_time function."""
+
+    def test_measure_inference_time_immediate_return(self):
+        """Test measure_inference_time with function that returns immediately."""
+        def immediate_fn():
+            return "result"
+
+        latency_ms, output = measure_inference_time(immediate_fn)
+
+        # Should measure very small latency
+        assert latency_ms >= 0.0
+        assert latency_ms < 1000.0  # Should be less than 1 second
+        assert output == "result"
+
+    def test_measure_inference_time_with_args(self):
+        """Test measure_inference_time with function that takes args."""
+        def add_fn(a, b):
+            return a + b
+
+        latency_ms, output = measure_inference_time(add_fn, 1, 2)
+
+        assert output == 3
+        assert latency_ms >= 0.0
+
+    def test_measure_inference_time_with_kwargs(self):
+        """Test measure_inference_time with function that takes kwargs."""
+        def multiply_fn(a, b):
+            return a * b
+
+        latency_ms, output = measure_inference_time(multiply_fn, a=3, b=4)
+
+        assert output == 12
+        assert latency_ms >= 0.0
+
+    def test_measure_inference_time_with_args_and_kwargs(self):
+        """Test measure_inference_time with function that takes args and kwargs."""
+        def combine_fn(a, b, c):
+            return a + b + c
+
+        latency_ms, output = measure_inference_time(combine_fn, 1, 2, c=3)
+
+        assert output == 6
+        assert latency_ms >= 0.0
+
+    def test_measure_inference_time_returns_none(self):
+        """Test measure_inference_time with function that returns None."""
+        def none_fn():
+            return None
+
+        latency_ms, output = measure_inference_time(none_fn)
+
+        assert output is None
+        assert latency_ms >= 0.0
+
+    def test_measure_inference_time_raises_exception(self):
+        """Test measure_inference_time with function that raises exception."""
+        def error_fn():
+            raise ValueError("Test error")
+
+        # Should propagate exception
+        with pytest.raises(ValueError, match="Test error"):
+            measure_inference_time(error_fn)
+
+
+class TestCalculateTokensPerSecondEdgeCases:
+    """Test edge cases in calculate_tokens_per_second function."""
+
+    def test_calculate_tokens_per_second_zero_latency(self):
+        """Test calculate_tokens_per_second with zero latency."""
+        result = calculate_tokens_per_second(tokens_generated=100, latency_ms=0.0)
+
+        # Should return 0.0 (division by zero protection)
+        assert result == 0.0
+
+    def test_calculate_tokens_per_second_negative_latency(self):
+        """Test calculate_tokens_per_second with negative latency."""
+        result = calculate_tokens_per_second(tokens_generated=100, latency_ms=-1.0)
+
+        # Should return 0.0 (negative latency protection)
+        assert result == 0.0
+
+    def test_calculate_tokens_per_second_zero_tokens(self):
+        """Test calculate_tokens_per_second with zero tokens."""
+        result = calculate_tokens_per_second(tokens_generated=0, latency_ms=1000.0)
+
+        # Should return 0.0 (0 tokens / 1000ms = 0 tokens/sec)
+        assert result == 0.0
+
+    def test_calculate_tokens_per_second_normal_case(self):
+        """Test calculate_tokens_per_second with normal values."""
+        result = calculate_tokens_per_second(tokens_generated=100, latency_ms=1000.0)
+
+        # 100 tokens / 1000ms = 0.1 tokens/ms = 100 tokens/sec
+        assert result == 100.0
+
+    def test_calculate_tokens_per_second_high_throughput(self):
+        """Test calculate_tokens_per_second with high throughput."""
+        result = calculate_tokens_per_second(tokens_generated=200, latency_ms=1000.0)
+
+        # 200 tokens / 1000ms = 200 tokens/sec
+        assert result == 200.0
+
+    def test_calculate_tokens_per_second_low_latency(self):
+        """Test calculate_tokens_per_second with low latency."""
+        result = calculate_tokens_per_second(tokens_generated=100, latency_ms=100.0)
+
+        # 100 tokens / 100ms = 1 token/ms = 1000 tokens/sec
+        assert result == 1000.0
+
+    def test_calculate_tokens_per_second_fractional_latency(self):
+        """Test calculate_tokens_per_second with fractional latency."""
+        result = calculate_tokens_per_second(tokens_generated=100, latency_ms=500.5)
+
+        # 100 tokens / 500.5ms ≈ 0.1998 tokens/ms ≈ 199.8 tokens/sec
+        assert result == pytest.approx(199.8, abs=0.1)
+
+    def test_calculate_tokens_per_second_large_tokens(self):
+        """Test calculate_tokens_per_second with large token count."""
+        result = calculate_tokens_per_second(tokens_generated=10000, latency_ms=1000.0)
+
+        # 10000 tokens / 1000ms = 10000 tokens/sec
+        assert result == 10000.0
+
+
+class TestPerformanceBenchmarkInitialization:
+    """Test PerformanceBenchmark initialization edge cases."""
+
+    def test_performance_benchmark_all_roles(self):
+        """Test PerformanceBenchmark initialization for all roles."""
+        for role in ModelRole:
+            benchmark = PerformanceBenchmark(role)
+
+            assert benchmark.model_role == role
+            assert benchmark.targets == PERFORMANCE_TARGETS[role]
+
+    def test_performance_benchmark_targets_access(self):
+        """Test that PerformanceBenchmark can access all target fields."""
+        benchmark = PerformanceBenchmark(ModelRole.JUDGE)
+
+        assert benchmark.targets.p50_latency_ms == 30.0
+        assert benchmark.targets.p95_latency_ms == 50.0
+        assert benchmark.targets.p99_latency_ms == 100.0
+        assert benchmark.targets.tokens_per_second == 200.0
+        assert benchmark.targets.min_accuracy == 0.90
+        assert benchmark.targets.min_confidence == 0.75
+        assert benchmark.targets.max_memory_mb == 8000.0
+        assert benchmark.targets.max_cpu_percent == 60.0
 

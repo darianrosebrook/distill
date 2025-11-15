@@ -546,6 +546,201 @@ class TestHelperFunctions:
         assert result["line_percent"] == 85.5
         assert result["branch_percent"] == 92.1
 
+    @patch("evaluation.caws_eval.subprocess.run")
+    def test_run_tests_timeout(self, mock_run):
+        """Test _run_tests when subprocess times out (line 490)."""
+        import subprocess
+        mock_run.side_effect = subprocess.TimeoutExpired("pytest", 5.0)
+
+        result = _run_tests()
+
+        assert result["all_passed"] is False
+        assert result["error"] == "Test execution timed out"
+        assert result["passed"] == 0
+        assert result["failed"] == 0
+
+    @patch("evaluation.caws_eval.subprocess.run")
+    def test_run_tests_file_not_found(self, mock_run):
+        """Test _run_tests when pytest is not found (line 492)."""
+        mock_run.side_effect = FileNotFoundError("pytest not found")
+
+        result = _run_tests()
+
+        assert result["all_passed"] is False
+        assert result["error"] == "pytest not found"
+        assert result["passed"] == 0
+
+    @patch("evaluation.caws_eval.subprocess.run")
+    def test_run_tests_text_parsing(self, mock_run):
+        """Test _run_tests parsing text output (lines 467-478)."""
+        mock_process = Mock()
+        mock_process.returncode = 0
+        mock_process.stdout = "10 passed, 2 failed, 1 skipped"
+        mock_process.stderr = ""
+        mock_run.return_value = mock_process
+
+        result = _run_tests()
+
+        assert result["passed"] == 10
+        assert result["failed"] == 2
+        assert result["skipped"] == 1
+
+    @patch("evaluation.caws_eval.subprocess.run")
+    def test_run_linter_timeout(self, mock_run):
+        """Test _run_linter when subprocess times out (line 549)."""
+        import subprocess
+        mock_run.side_effect = subprocess.TimeoutExpired("ruff", 2.0)
+
+        result = _run_linter()
+
+        assert result["no_errors"] is False
+        assert "timed out" in result["error"]
+
+    @patch("evaluation.caws_eval.subprocess.run")
+    def test_run_linter_no_linter_found(self, mock_run):
+        """Test _run_linter when no linter is found (line 552-553)."""
+        mock_run.side_effect = FileNotFoundError("linter not found")
+
+        result = _run_linter()
+
+        assert result["no_errors"] is True
+        assert "No linter found" in result["warning"]
+
+    @patch("evaluation.caws_eval.subprocess.run")
+    def test_run_linter_text_parsing(self, mock_run):
+        """Test _run_linter parsing text output (lines 529-536)."""
+        mock_process = Mock()
+        mock_process.returncode = 1
+        mock_process.stdout = "Error: line 10, column 5"
+        mock_process.stderr = "Warning: unused import"
+        mock_run.return_value = mock_process
+
+        result = _run_linter()
+
+        assert result["no_errors"] is False
+        assert result["errors"] > 0
+        assert result["warnings"] > 0
+
+    @patch("evaluation.caws_eval.subprocess.run")
+    def test_run_coverage_timeout(self, mock_run):
+        """Test _run_coverage when subprocess times out (line 608)."""
+        import subprocess
+        mock_run.side_effect = subprocess.TimeoutExpired("pytest", 5.0)
+
+        result = _run_coverage()
+
+        assert result["meets_threshold"] is True
+        assert "warning" in result
+
+    @patch("evaluation.caws_eval.subprocess.run")
+    def test_run_coverage_file_not_found(self, mock_run):
+        """Test _run_coverage when pytest is not found (line 608)."""
+        mock_run.side_effect = FileNotFoundError("pytest not found")
+
+        result = _run_coverage()
+
+        assert result["meets_threshold"] is True
+        assert "warning" in result
+
+    @patch("evaluation.caws_eval.subprocess.run")
+    @patch("evaluation.caws_eval.Path")
+    def test_run_coverage_json_file_parsing(self, mock_path, mock_run):
+        """Test _run_coverage parsing coverage.json file (lines 588-595)."""
+        mock_process = Mock()
+        mock_process.returncode = 0
+        mock_process.stdout = "invalid json"
+        mock_run.return_value = mock_process
+
+        # Mock coverage.json file
+        mock_coverage_file = Mock()
+        mock_coverage_file.exists.return_value = True
+        mock_path.return_value = mock_coverage_file
+
+        with patch("builtins.open", create=True) as mock_open:
+            mock_open.return_value.__enter__.return_value.read.return_value = json.dumps({
+                "totals": {
+                    "percent_covered": 87.5,
+                    "percent_covered_branches": 90.2
+                }
+            })
+
+            result = _run_coverage()
+
+            assert result["line_percent"] == 87.5
+            assert result["branch_percent"] == 90.2
+
+    def test_load_file_content_empty_path(self):
+        """Test _load_file_content with empty path (line 367-368)."""
+        result = _load_file_content("")
+        assert result is None
+
+    def test_load_file_content_invalid_path(self):
+        """Test _load_file_content with invalid path (lines 379-392)."""
+        # Path that doesn't look like a file path
+        result = _load_file_content("not_a_path")
+        assert result is None
+
+    def test_load_json_file_empty_path(self):
+        """Test _load_json_file with empty path (line 404-405)."""
+        result = _load_json_file("")
+        assert result is None
+
+    def test_load_json_file_invalid_path(self):
+        """Test _load_json_file with invalid path (lines 416-425)."""
+        # Path that doesn't look like a file path
+        result = _load_json_file("not_a_path")
+        assert result is None
+
+    def test_evaluate_caws_compliance_with_evidence_string(self, tmp_path):
+        """Test evaluate_caws_compliance with evidence as string path (lines 270-281)."""
+        evidence_file = tmp_path / "evidence.json"
+        evidence_data = {"evidence_items": [{"type": "test", "result": "pass"}]}
+        with open(evidence_file, "w") as f:
+            json.dump(evidence_data, f)
+
+        result = evaluate_caws_compliance(
+            change_id="TEST-001",
+            change_diff="dummy diff",  # Need non-empty diff for approval
+            rationale="Test rationale",
+            evidence=str(evidence_file),  # Pass as string path
+            test_results={"all_passed": True},
+            lint_results={"no_errors": True},
+            coverage_results={"meets_threshold": True},
+        )
+
+        assert result["verdict"] == "APPROVED"
+
+    def test_evaluate_caws_compliance_with_evidence_json_string(self):
+        """Test evaluate_caws_compliance with evidence as JSON string (lines 276-279)."""
+        evidence_json = json.dumps({"evidence_items": [{"type": "test", "result": "pass"}]})
+
+        result = evaluate_caws_compliance(
+            change_id="TEST-001",
+            change_diff="dummy diff",  # Need non-empty diff for approval
+            rationale="Test rationale",
+            evidence=evidence_json,  # Pass as JSON string
+            test_results={"all_passed": True},
+            lint_results={"no_errors": True},
+            coverage_results={"meets_threshold": True},
+        )
+
+        assert result["verdict"] == "APPROVED"
+
+    def test_evaluate_caws_compliance_with_diff_present(self):
+        """Test evaluate_caws_compliance with diff_present parameter (lines 292-300)."""
+        result = evaluate_caws_compliance(
+            change_id="TEST-001",
+            change_diff=None,
+            rationale="Test rationale",
+            evidence_manifest={"evidence_items": []},
+            diff_present=True,  # Pass as bool
+            test_results={"all_passed": True},
+            lint_results={"no_errors": True},
+            coverage_results={"meets_threshold": True},
+        )
+
+        assert result["verdict"] == "APPROVED"
+
 
 class TestMainFunction:
     """Test main function."""

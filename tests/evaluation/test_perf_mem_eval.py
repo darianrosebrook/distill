@@ -220,6 +220,11 @@ class TestGreedyArgmax:
 
         assert result == 3  # Index of least negative (highest) value (-0.1 at index 3)
 
+    def test_greedy_argmax_empty_array(self):
+        """Test greedy_argmax with empty array (line 158-159)."""
+        with pytest.raises(ValueError, match="Cannot get argmax of empty array"):
+            greedy_argmax(np.array([]))
+
 
 class TestIsValidToolJSON:
     """Test is_valid_tool_json function."""
@@ -260,6 +265,23 @@ class TestIsValidToolJSON:
         """Test validating JSON without colon."""
         result = is_valid_tool_json('{"name" "calculator"}')
         assert result is False
+
+    def test_is_valid_tool_json_empty_string(self):
+        """Test is_valid_tool_json with empty string (line 165-166)."""
+        assert not is_valid_tool_json("")
+        assert not is_valid_tool_json("   ")
+
+    def test_is_valid_tool_json_not_dict(self):
+        """Test is_valid_tool_json with non-dict JSON (line 175-176)."""
+        assert not is_valid_tool_json('["name", "test_tool"]')  # Array, not dict
+
+    def test_is_valid_tool_json_name_not_string(self):
+        """Test is_valid_tool_json with name not a string (line 185-186)."""
+        assert not is_valid_tool_json('{"name": 123, "arguments": {}}')
+
+    def test_is_valid_tool_json_arguments_not_dict(self):
+        """Test is_valid_tool_json with arguments not a dict (line 189-190)."""
+        assert not is_valid_tool_json('{"name": "test_tool", "arguments": "not_a_dict"}')
 
 
 class TestRunCoreMLSpeed:

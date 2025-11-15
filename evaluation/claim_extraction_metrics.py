@@ -79,7 +79,7 @@ class ClaimExtractionEvaluator:
             metrics = compute_claim_extraction_metrics(
                 student_output=student_out,
                 teacher_output=teacher_out,
-                claim_extractor=self.extractor,
+                extractor=self.extractor,
             )
 
             total_student_claims += metrics["student_claim_count"]

@@ -210,4 +210,4 @@ internal/
 
 # Smoke test artifacts
 **/report.smoke.json
-**/results.smoke.jsonl
+**/results.smoke.jsonlmutants/
