@@ -3526,15 +3526,15 @@ class TestTrainingStepExpanded:
         }
         training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
 
-        # Add batch_meta as dict (not list) - line 1296
-        # The loss module expects batch_meta to be a list, so we need to provide proper structure
-        # When batch_meta is dict, span_targets is extracted, but batch_meta itself is passed
-        # The loss module will iterate over batch_meta, so we need to ensure it's iterable correctly
+        # Add batch_meta as list of dicts - line 1296
+        # The loss module expects batch_meta to be a list where each element corresponds to one batch item
         batch_size = sample_batch["input_ids"].shape[0]
-        sample_batch["meta"] = {
-            "span_targets": {"ts_mode_spans": [(5, 10)], "direct_tool_spans": []},
-            "tool_count": 2,  # Add required fields for eligibility
-        }
+        sample_batch["meta"] = [
+            {
+                "span_targets": {"ts_mode_spans": [(5, 10)], "direct_tool_spans": []},
+                "tool_count": 2,  # Add required fields for eligibility
+            }
+        ] * batch_size  # Repeat for each item in batch
 
         # Move batch to device
         for k, v in sample_batch.items():
@@ -3580,11 +3580,13 @@ class TestTrainingStepExpanded:
         }
         training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
 
-        # Add batch_meta as dict with span_targets_list (line 1301)
-        sample_batch["meta"] = {
-            "span_targets_list": [{"ts_mode_spans": [(5, 10)], "direct_tool_spans": []}],
-            "tool_count": 2,
-        }
+        # Add batch_meta as list of dicts (one per batch item) with span_targets_list (line 1301)
+        sample_batch["meta"] = [
+            {
+                "span_targets_list": [{"ts_mode_spans": [(5, 10)], "direct_tool_spans": []}],
+                "tool_count": 2,
+            }
+        ]
 
         # Move batch to device
         for k, v in sample_batch.items():
