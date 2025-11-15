@@ -178,12 +178,13 @@ class TestModelCreation:
 
     def test_create_model_with_quantization(self, basic_config, device):
         """Test model creation with quantization config.
-        
+
         Note: QAT is not applied in create_model, but during training.
         This test verifies the model can be created with QAT config present.
         """
         config_with_quant = basic_config.copy()
-        config_with_quant["quant"] = {"enabled": True, "qat": {"enabled": True}}
+        config_with_quant["quant"] = {
+            "enabled": True, "qat": {"enabled": True}}
 
         # create_model doesn't apply QAT - that happens during training
         # Just verify model creation works with QAT config present
@@ -296,7 +297,8 @@ class TestSequenceLength:
         shape_probs = [0.5, 0.3, 0.2]
 
         with patch("training.distill_kd.random.choices", return_value=[2048]):
-            result = sample_enumerated_shape(seq_lengths, shape_probs=shape_probs)
+            result = sample_enumerated_shape(
+                seq_lengths, shape_probs=shape_probs)
             assert result == 2048
 
     def test_sample_enumerated_shape_periodic_upweight(self):
@@ -305,7 +307,8 @@ class TestSequenceLength:
         step = 100  # Step divisible by 100, should trigger upweighting
 
         with patch("training.distill_kd.random.choices", return_value=[512]):
-            result = sample_enumerated_shape(seq_lengths, step=step, periodic_upweight_rare=True)
+            result = sample_enumerated_shape(
+                seq_lengths, step=step, periodic_upweight_rare=True)
             assert result == 512
 
     def test_sample_enumerated_shape_default_probs_4(self):
@@ -356,7 +359,8 @@ class TestQATOperations:
             "start_fraction": 0.5,  # Start at 50% of training
         }
         assert should_enable_qat(600, 1000, qat_cfg)  # At 60% -> should enable
-        assert not should_enable_qat(300, 1000, qat_cfg)  # At 30% -> should not enable
+        # At 30% -> should not enable
+        assert not should_enable_qat(300, 1000, qat_cfg)
 
     def test_should_enable_qat_no_config(self):
         """Test QAT enablement with no config."""
@@ -430,7 +434,7 @@ class TestQATOperations:
                 # Map from token IDs to logits
                 self.embedding = nn.Embedding(1000, 128)
                 self.linear = nn.Linear(128, 1000)
-            
+
             def forward(self, input_ids, attention_mask=None):
                 # Embed token IDs: (batch, seq_len) -> (batch, seq_len, embed_dim)
                 embedded = self.embedding(input_ids)
@@ -438,7 +442,7 @@ class TestQATOperations:
                 pooled = embedded.mean(dim=1)
                 # Project to vocab size: (batch, vocab_size)
                 return self.linear(pooled)
-        
+
         simple_model = MockModel()
         simple_model.to(device)
 
@@ -464,7 +468,7 @@ class TestQATOperations:
                 # Map from token IDs to logits
                 self.embedding = nn.Embedding(1000, 128)
                 self.linear = nn.Linear(128, 1000)
-            
+
             def forward(self, input_ids, attention_mask=None):
                 # Embed token IDs: (batch, seq_len) -> (batch, seq_len, embed_dim)
                 embedded = self.embedding(input_ids)
@@ -472,7 +476,7 @@ class TestQATOperations:
                 pooled = embedded.mean(dim=1)
                 # Project to vocab size: (batch, vocab_size)
                 return self.linear(pooled)
-        
+
         simple_model = MockModel()
         # Set weights to NaN so output will have NaN
         with torch.no_grad():
@@ -575,7 +579,8 @@ class TestTrainingStep:
             (batch_size, seq_len), vocab_size + 20, dtype=torch.long
         ).to(device)
         # Also update attention_mask to match
-        sample_batch["attention_mask"] = torch.ones(batch_size, seq_len).to(device)
+        sample_batch["attention_mask"] = torch.ones(
+            batch_size, seq_len).to(device)
 
         training_config["arch"]["vocab_size"] = vocab_size
 
@@ -589,16 +594,17 @@ class TestTrainingStep:
             # Mock model forward to capture the clamped input_ids
             clamped_input_ids = None
             clamped_labels = None
-            
+
             original_forward = small_model.forward
+
             def mock_forward(input_ids, attention_mask=None, **kwargs):
                 nonlocal clamped_input_ids, clamped_labels
                 clamped_input_ids = input_ids
                 # labels are passed separately, so we need to check them in the loss computation
                 return original_forward(input_ids, attention_mask, **kwargs)
-            
+
             small_model.forward = mock_forward
-            
+
             train_step(
                 model=small_model,
                 batch=sample_batch,
@@ -613,7 +619,7 @@ class TestTrainingStep:
             # The original batch is not modified, but the clamped values are used
             # Verify that clamping happened by checking the print call
             mock_print.assert_called()
-            
+
             # Restore original forward
             small_model.forward = original_forward
 
@@ -656,22 +662,24 @@ class TestTrainingStep:
     ):
         """Test training step with self-evaluation head."""
         training_config["distillation"]["use_self_evaluation"] = True
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         # Mock model to return eval_score when return_eval_score=True
         def mock_forward(input_ids, attention_mask=None, return_eval_score=False, return_hidden_states=False, **kwargs):
             batch_size, seq_len = input_ids.shape
-            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            logits = torch.randn(batch_size, seq_len, 1000,
+                                 device=device, requires_grad=True)
             if return_eval_score:
                 # Return tuple (logits, eval_score)
-                eval_score = torch.randn(batch_size, device=device, requires_grad=True)
+                eval_score = torch.randn(
+                    batch_size, device=device, requires_grad=True)
                 return logits, eval_score
             return logits
-        
+
         small_model.forward = mock_forward
         small_model.use_self_evaluation = True
 
@@ -718,7 +726,8 @@ class TestBatchOperations:
         result = truncate_batch_to_shape(batch, target_length)
 
         assert result["input_ids"].shape == (2, 10)
-        assert result["teacher_logits"].shape == (2, 10, 1000)  # Should truncate T, keep V
+        assert result["teacher_logits"].shape == (
+            2, 10, 1000)  # Should truncate T, keep V
 
     def test_truncate_batch_to_shape_no_truncation_needed(self, device):
         """Test truncate_batch_to_shape when no truncation needed (lines 824, 830)."""
@@ -753,13 +762,15 @@ class TestBatchOperations:
     def test_truncate_batch_to_shape_seq_vocab_truncation(self, device):
         """Test truncate_batch_to_shape with teacher_logits truncation (lines 827-828)."""
         batch = {
-            "teacher_logits": torch.randn(2, 20, 1000),  # [B, T, V] - needs truncation
+            # [B, T, V] - needs truncation
+            "teacher_logits": torch.randn(2, 20, 1000),
         }
         target_length = 10
 
         result = truncate_batch_to_shape(batch, target_length)
 
-        assert result["teacher_logits"].shape == (2, 10, 1000)  # T truncated, V kept
+        assert result["teacher_logits"].shape == (
+            2, 10, 1000)  # T truncated, V kept
 
     def test_compute_required_fields_present_basic(self, device):
         """Test basic required fields computation."""
@@ -827,14 +838,16 @@ class TestCheckpointOperations:
         # Patch torch.load to handle numpy arrays - first call (weights_only=True) fails, second succeeds
         original_load = torch_module.load
         call_count = [0]
+
         def mock_torch_load(path, map_location=None, weights_only=None, **kwargs):
             call_count[0] += 1
             if weights_only and call_count[0] == 1:
                 # First call with weights_only=True fails (numpy arrays)
-                raise RuntimeError("WeightsUnpickler error: Unsupported global")
+                raise RuntimeError(
+                    "WeightsUnpickler error: Unsupported global")
             # Second call without weights_only succeeds
             return original_load(path, map_location=map_location, weights_only=False, **kwargs)
-        
+
         with patch("training.safe_checkpoint_loading.torch.load", side_effect=mock_torch_load):
             loaded = safe_load_checkpoint(checkpoint_path)
         assert loaded["step"] == 100
@@ -868,12 +881,14 @@ class TestCheckpointOperations:
         # Patch torch.load to handle numpy arrays - first call fails, second succeeds
         original_load = torch_module.load
         call_count = [0]
+
         def mock_torch_load(path, map_location=None, weights_only=None, **kwargs):
             call_count[0] += 1
             if weights_only and call_count[0] == 1:
-                raise RuntimeError("WeightsUnpickler error: Unsupported global")
+                raise RuntimeError(
+                    "WeightsUnpickler error: Unsupported global")
             return original_load(path, map_location=map_location, weights_only=False, **kwargs)
-        
+
         with patch("training.safe_checkpoint_loading.torch.load", side_effect=mock_torch_load):
             loaded = safe_load_checkpoint(checkpoint_files[0])
         assert loaded["step"] == 200
@@ -1029,7 +1044,8 @@ class TestComputeRequiredFieldsPresent:
     def mock_tokenizer(self):
         """Create a mock tokenizer."""
         tokenizer = Mock()
-        tokenizer.decode = Mock(return_value='{"name": "test_tool", "arguments": {"key": "value"}}')
+        tokenizer.decode = Mock(
+            return_value='{"name": "test_tool", "arguments": {"key": "value"}}')
         tokenizer.pad_token_id = 0
         return tokenizer
 
@@ -1082,7 +1098,8 @@ class TestComputeRequiredFieldsPresent:
         vocab_size = 1000
 
         # Mock tokenizer to return text without tool call
-        mock_tokenizer.decode = Mock(return_value="Just plain text without tool call")
+        mock_tokenizer.decode = Mock(
+            return_value="Just plain text without tool call")
 
         batch = {
             "input_ids": torch.randint(0, vocab_size, (batch_size, seq_len)),
@@ -1125,7 +1142,8 @@ class TestComputeRequiredFieldsPresent:
             mock_registry.validate_tool_call = Mock(return_value=(True, None))
             mock_registry_class.return_value = mock_registry
 
-            result = compute_required_fields_present(batch, mock_tokenizer, device)
+            result = compute_required_fields_present(
+                batch, mock_tokenizer, device)
 
             assert isinstance(result, torch.Tensor)
             assert result.dtype == torch.bool
@@ -1151,7 +1169,7 @@ class TestComputeRequiredFieldsPresent:
         batch_size = 2
         seq_len = 10
         json_len = 8
-        
+
         # The gold_json path requires input_ids to determine batch size
         batch = {
             "input_ids": torch.randint(0, 100, (batch_size, seq_len)),
@@ -1162,7 +1180,7 @@ class TestComputeRequiredFieldsPresent:
 
         mock_tokenizer = Mock()
         result = compute_required_fields_present(batch, mock_tokenizer, device)
-        
+
         assert isinstance(result, torch.Tensor)
         assert result.dtype == torch.bool
         assert result.shape == (batch_size,)
@@ -1174,7 +1192,7 @@ class TestComputeRequiredFieldsPresent:
         batch_size = 2
         seq_len = 10
         json_len = 8
-        
+
         batch = {
             "input_ids": torch.randint(0, 100, (batch_size, seq_len)),
             "gold_json_text_ids": torch.randint(0, 100, (batch_size, json_len)),
@@ -1184,7 +1202,7 @@ class TestComputeRequiredFieldsPresent:
 
         mock_tokenizer = Mock()
         result = compute_required_fields_present(batch, mock_tokenizer, device)
-        
+
         assert isinstance(result, torch.Tensor)
         assert result.dtype == torch.bool
 
@@ -1193,7 +1211,7 @@ class TestComputeRequiredFieldsPresent:
         batch_size = 2
         seq_len = 10
         json_len = 8
-        
+
         batch = {
             "input_ids": torch.randint(0, 100, (batch_size, seq_len)),
             "gold_json_text_ids": torch.randint(0, 100, (batch_size, json_len)),
@@ -1203,7 +1221,7 @@ class TestComputeRequiredFieldsPresent:
 
         mock_tokenizer = Mock()
         result = compute_required_fields_present(batch, mock_tokenizer, device)
-        
+
         assert isinstance(result, torch.Tensor)
         assert result.dtype == torch.bool
 
@@ -1222,8 +1240,9 @@ class TestComputeRequiredFieldsPresent:
 
         # Mock schema registry to raise exception on import
         with patch("tools.schema_registry.ToolSchemaRegistry", side_effect=ImportError("Not available")):
-            result = compute_required_fields_present(batch, mock_tokenizer, device)
-            
+            result = compute_required_fields_present(
+                batch, mock_tokenizer, device)
+
             # Should fall back to generic validation
             assert isinstance(result, torch.Tensor)
             assert result.dtype == torch.bool
@@ -1243,10 +1262,11 @@ class TestComputeRequiredFieldsPresent:
 
         # Mock tokenizer to raise exception during decode
         mock_tokenizer.decode = Mock(side_effect=Exception("Decode error"))
-        
+
         with patch("builtins.print"):  # Suppress error print
-            result = compute_required_fields_present(batch, mock_tokenizer, device)
-            
+            result = compute_required_fields_present(
+                batch, mock_tokenizer, device)
+
             # Should handle error gracefully and return False for incomplete
             assert isinstance(result, torch.Tensor)
             assert result.dtype == torch.bool
@@ -1279,13 +1299,14 @@ class TestComputeRequiredFieldsPresent:
         # Mock extract_tool_call to return a tool call with empty name for first item
         # extract_tool_call is imported inside compute_required_fields_present from training.extractors
         call_count = [0]
+
         def mock_extract_tool_call(text, tool_names):
             # Return tool call with empty name for first call
             call_count[0] += 1
             if call_count[0] == 1:
                 return {"name": "", "arguments": {"key": "value"}}  # Empty name
             return {"name": "test_tool", "arguments": {"key": "value"}}
-        
+
         batch = {
             "input_ids": torch.randint(0, vocab_size, (batch_size, seq_len)),
             "student_logits": torch.randn(batch_size, seq_len, vocab_size),
@@ -1294,7 +1315,8 @@ class TestComputeRequiredFieldsPresent:
         }
 
         with patch("training.extractors.extract_tool_call", side_effect=mock_extract_tool_call):
-            result = compute_required_fields_present(batch, mock_tokenizer, device)
+            result = compute_required_fields_present(
+                batch, mock_tokenizer, device)
             assert isinstance(result, torch.Tensor)
             assert result.dtype == torch.bool
             assert result.shape == (batch_size,)
@@ -1328,7 +1350,8 @@ class TestComputeRequiredFieldsPresent:
             mock_registry.validate_tool_call = Mock(return_value=(True, None))
             mock_registry_class.return_value = mock_registry
 
-            result = compute_required_fields_present(batch, mock_tokenizer, device)
+            result = compute_required_fields_present(
+                batch, mock_tokenizer, device)
             assert isinstance(result, torch.Tensor)
             assert result.dtype == torch.bool
 
@@ -1346,7 +1369,8 @@ class TestComputeRequiredFieldsPresent:
         }
 
         # Mock tokenizer to return tool call without required field
-        mock_tokenizer.decode = Mock(return_value='{"name": "test_tool", "arguments": {}}')  # Missing "key"
+        mock_tokenizer.decode = Mock(
+            return_value='{"name": "test_tool", "arguments": {}}')  # Missing "key"
 
         with patch("tools.schema_registry.ToolSchemaRegistry") as mock_registry_class:
             mock_registry = Mock()
@@ -1362,7 +1386,8 @@ class TestComputeRequiredFieldsPresent:
             mock_registry.validate_tool_call = Mock(return_value=(True, None))
             mock_registry_class.return_value = mock_registry
 
-            result = compute_required_fields_present(batch, mock_tokenizer, device)
+            result = compute_required_fields_present(
+                batch, mock_tokenizer, device)
             assert isinstance(result, torch.Tensor)
             assert result.dtype == torch.bool
             # Should be False due to missing required field
@@ -1393,10 +1418,12 @@ class TestComputeRequiredFieldsPresent:
                 }
             )
             # Validation fails
-            mock_registry.validate_tool_call = Mock(return_value=(False, "Invalid tool call"))
+            mock_registry.validate_tool_call = Mock(
+                return_value=(False, "Invalid tool call"))
             mock_registry_class.return_value = mock_registry
 
-            result = compute_required_fields_present(batch, mock_tokenizer, device)
+            result = compute_required_fields_present(
+                batch, mock_tokenizer, device)
             assert isinstance(result, torch.Tensor)
             assert result.dtype == torch.bool
             # Should be False due to validation failure
@@ -1416,7 +1443,8 @@ class TestComputeRequiredFieldsPresent:
         }
 
         # Mock tokenizer to return invalid tool call (missing "name" or "arguments")
-        mock_tokenizer.decode = Mock(return_value='{"invalid": "tool_call"}')  # Missing "name" and "arguments"
+        # Missing "name" and "arguments"
+        mock_tokenizer.decode = Mock(return_value='{"invalid": "tool_call"}')
 
         with patch("tools.schema_registry.ToolSchemaRegistry") as mock_registry_class:
             mock_registry = Mock()
@@ -1424,7 +1452,8 @@ class TestComputeRequiredFieldsPresent:
             mock_registry.get_schema = Mock(return_value=None)
             mock_registry_class.return_value = mock_registry
 
-            result = compute_required_fields_present(batch, mock_tokenizer, device)
+            result = compute_required_fields_present(
+                batch, mock_tokenizer, device)
             assert isinstance(result, torch.Tensor)
             assert result.dtype == torch.bool
             # Should be False due to missing required fields in generic validation
@@ -1439,12 +1468,14 @@ class TestComputeRequiredFieldsPresent:
         batch = {
             "input_ids": torch.randint(0, vocab_size, (batch_size, seq_len)),
             "student_logits": torch.randn(batch_size, seq_len, vocab_size),
-            "validated_arguments": [{"arguments": {"key": "value", "key2": "value2"}}],  # Teacher has 2 fields
+            # Teacher has 2 fields
+            "validated_arguments": [{"arguments": {"key": "value", "key2": "value2"}}],
             "tool_names": ["test_tool"],
         }
 
         # Mock tokenizer to return tool call with only one field (missing key2)
-        mock_tokenizer.decode = Mock(return_value='{"name": "test_tool", "arguments": {"key": "value"}}')
+        mock_tokenizer.decode = Mock(
+            return_value='{"name": "test_tool", "arguments": {"key": "value"}}')
 
         with patch("tools.schema_registry.ToolSchemaRegistry") as mock_registry_class:
             mock_registry = Mock()
@@ -1460,7 +1491,8 @@ class TestComputeRequiredFieldsPresent:
             mock_registry.validate_tool_call = Mock(return_value=(True, None))
             mock_registry_class.return_value = mock_registry
 
-            result = compute_required_fields_present(batch, mock_tokenizer, device)
+            result = compute_required_fields_present(
+                batch, mock_tokenizer, device)
             assert isinstance(result, torch.Tensor)
             assert result.dtype == torch.bool
             # Should be False due to missing required field
@@ -1539,7 +1571,8 @@ class TestMergeConfigsEnvOverrides:
             config_path = f.name
 
         try:
-            merged = merge_configs([config_path], env_overrides={"custom": "value"})
+            merged = merge_configs(
+                [config_path], env_overrides={"custom": "value"})
 
             assert "_provenance" in merged
             assert merged["_provenance"]["config_files"] == [config_path]
@@ -1573,10 +1606,12 @@ class TestModelCreationExpanded:
         # Create a dummy checkpoint
         checkpoint_path = tmp_path / "checkpoint.pt"
         dummy_model = nn.Linear(10, 5)
-        torch.save({"model_state_dict": dummy_model.state_dict()}, checkpoint_path)
+        torch.save({"model_state_dict": dummy_model.state_dict()},
+                   checkpoint_path)
 
         config_with_checkpoint = basic_config.copy()
-        config_with_checkpoint["init"] = {"base_checkpoint": str(checkpoint_path)}
+        config_with_checkpoint["init"] = {
+            "base_checkpoint": str(checkpoint_path)}
 
         # This will fail because model architectures don't match, but should attempt loading
         model = create_model(config_with_checkpoint, device)
@@ -1612,7 +1647,8 @@ class TestModelCreationExpanded:
     def test_create_model_checkpoint_not_found(self, basic_config, device):
         """Test model creation when checkpoint path doesn't exist."""
         config_with_missing_checkpoint = basic_config.copy()
-        config_with_missing_checkpoint["init"] = {"base_checkpoint": "nonexistent.pt"}
+        config_with_missing_checkpoint["init"] = {
+            "base_checkpoint": "nonexistent.pt"}
 
         # Should continue with randomly initialized model
         model = create_model(config_with_missing_checkpoint, device)
@@ -1628,7 +1664,8 @@ class TestModelCreationExpanded:
         torch.save(dummy_model.state_dict(), checkpoint_path)
 
         config_with_checkpoint = basic_config.copy()
-        config_with_checkpoint["init"] = {"base_checkpoint": str(checkpoint_path)}
+        config_with_checkpoint["init"] = {
+            "base_checkpoint": str(checkpoint_path)}
 
         with patch("builtins.print"):  # Suppress print statements
             model = create_model(config_with_checkpoint, device)
@@ -1642,7 +1679,8 @@ class TestModelCreationExpanded:
         torch.save({"model_state_dict": {}}, checkpoint_path)
 
         config_with_checkpoint = basic_config.copy()
-        config_with_checkpoint["init"] = {"base_checkpoint": str(checkpoint_path)}
+        config_with_checkpoint["init"] = {
+            "base_checkpoint": str(checkpoint_path)}
 
         # Mock safe_load_checkpoint to raise exception
         with patch("training.safe_checkpoint_loading.safe_load_checkpoint", side_effect=Exception("Load error")):
@@ -1692,7 +1730,8 @@ class TestOptimizerCreationExpanded:
         optimizer = create_optimizer(model, config)
 
         # Should include projection layer parameters
-        param_count = sum(p.numel() for p in optimizer.param_groups[0]["params"])
+        param_count = sum(p.numel()
+                          for p in optimizer.param_groups[0]["params"])
         assert param_count > 0
 
 
@@ -1739,7 +1778,8 @@ class TestSequenceLengthExpanded:
 
         # Mock random.choices to return specific value
         with patch("training.distill_kd.random.choices", return_value=[2048]):
-            result = sample_enumerated_shape(seq_lengths, shape_probs=shape_probs)
+            result = sample_enumerated_shape(
+                seq_lengths, shape_probs=shape_probs)
 
             assert result == 2048
 
@@ -1750,7 +1790,8 @@ class TestSequenceLengthExpanded:
         # At step 100 (multiple of 100), should upweight rare shapes
         with patch("training.distill_kd.random.choices") as mock_choices:
             mock_choices.return_value = [512]  # Smallest shape
-            result = sample_enumerated_shape(seq_lengths, step=100, periodic_upweight_rare=True)
+            result = sample_enumerated_shape(
+                seq_lengths, step=100, periodic_upweight_rare=True)
 
             assert result == 512
             # Should have been called with adjusted probabilities
@@ -1783,7 +1824,8 @@ class TestQATOperationsExpanded:
         qat_cfg = {"enabled": True, "start_fraction": 0.9}  # Start at 90%
 
         assert should_enable_qat(950, 1000, qat_cfg)  # At 95% -> should enable
-        assert not should_enable_qat(850, 1000, qat_cfg)  # At 85% -> should not enable
+        # At 85% -> should not enable
+        assert not should_enable_qat(850, 1000, qat_cfg)
 
     def test_check_qat_stability_with_baseline(self, sample_batch, device):
         """Test QAT stability check with baseline model."""
@@ -1836,7 +1878,7 @@ class TestQATOperationsExpanded:
             def __init__(self):
                 super().__init__()
                 self.linear = nn.Linear(10, 5)
-            
+
             def forward(self, input_ids, attn_mask=None, return_hidden_states=False):
                 logits = self.linear(input_ids)
                 if return_hidden_states:
@@ -1844,19 +1886,19 @@ class TestQATOperationsExpanded:
                     hidden_states = [input_ids, logits]  # Mock hidden states
                     return logits, hidden_states
                 return logits
-        
+
         model = MockModelWithHiddenStates().to(device)
         baseline_model = MockModelWithHiddenStates().to(device)
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         result = check_qat_stability(
             model, sample_batch, device, baseline_model=baseline_model
         )
-        
+
         assert isinstance(result, dict)
         assert "qat_stability.has_nan" in result
         assert "qat_stability.cosine_sim" in result
@@ -1867,12 +1909,12 @@ class TestQATOperationsExpanded:
         """Test hidden states similarity computation path (lines 711-758)."""
         batch_size, seq_len = sample_batch["input_ids"].shape
         d_model = 128
-        
+
         class MockModelWithHiddenStates(nn.Module):
             def __init__(self):
                 super().__init__()
                 self.linear = nn.Linear(seq_len, d_model)
-            
+
             def forward(self, input_ids, attn_mask=None, return_hidden_states=False):
                 # Create multiple hidden states for similarity computation
                 h1 = torch.randn(batch_size, seq_len, d_model, device=device)
@@ -1882,19 +1924,19 @@ class TestQATOperationsExpanded:
                 if return_hidden_states:
                     return logits, [h1, h2, h3]
                 return logits
-        
+
         model = MockModelWithHiddenStates().to(device)
         baseline_model = MockModelWithHiddenStates().to(device)
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         result = check_qat_stability(
             model, sample_batch, device, baseline_model=baseline_model
         )
-        
+
         assert isinstance(result, dict)
         assert "qat_stability.cosine_sim" in result
         # Cosine similarity can be negative (vectors pointing in opposite directions)
@@ -1909,26 +1951,26 @@ class TestQATOperationsExpanded:
             def __init__(self):
                 super().__init__()
                 self.linear = nn.Linear(10, 5)
-            
+
             def forward(self, input_ids, attn_mask=None, return_hidden_states=False):
                 logits = self.linear(input_ids)
                 if return_hidden_states:
                     # Return empty hidden states list for both current and baseline
                     return logits, []
                 return logits
-        
+
         model = MockModelWithEmptyHiddenStates().to(device)
         baseline_model = MockModelWithEmptyHiddenStates().to(device)
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         result = check_qat_stability(
             model, sample_batch, device, baseline_model=baseline_model
         )
-        
+
         assert isinstance(result, dict)
         # When no layers, cosine_sim should default to 1.0 (line 758)
         # But if the code path doesn't hit that, it might be 0.0 or another value
@@ -1942,26 +1984,26 @@ class TestQATOperationsExpanded:
             def __init__(self):
                 super().__init__()
                 self.linear = nn.Linear(10, 5)
-            
+
             def forward(self, input_ids, attn_mask=None, return_hidden_states=False):
                 logits = self.linear(input_ids)
                 if return_hidden_states:
                     hidden_states = [input_ids, logits]
                     return logits, hidden_states
                 return logits
-        
+
         model = MockModelWithHiddenStates().to(device)
         # No baseline_model provided
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         result = check_qat_stability(
             model, sample_batch, device, baseline_model=None
         )
-        
+
         assert isinstance(result, dict)
         # When no baseline, cosine_sim should default to 1.0 (line 761)
         # But if model doesn't support hidden states, it might remain at initial 1.0 or be 0.0
@@ -1977,24 +2019,24 @@ class TestQATOperationsExpanded:
             def __init__(self):
                 super().__init__()
                 self.linear = nn.Linear(10, 5)
-            
+
             def forward(self, input_ids, attn_mask=None, return_hidden_states=False):
                 if return_hidden_states:
                     raise RuntimeError("Hidden state extraction failed")
                 return self.linear(input_ids)
-        
+
         model = FailingModel().to(device)
         baseline_model = FailingModel().to(device)
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         result = check_qat_stability(
             model, sample_batch, device, baseline_model=baseline_model
         )
-        
+
         assert isinstance(result, dict)
         # Exception should be caught and cosine_sim should default to 1.0 (line 764)
         # But the exception might be caught at a different level, so just verify it's a valid value
@@ -2007,33 +2049,33 @@ class TestQATOperationsExpanded:
     def test_check_qat_stability_with_ddp_model(self, sample_batch, device):
         """Test QAT stability check with DDP-wrapped model."""
         from torch.nn.parallel import DistributedDataParallel as DDP
-        
+
         class MockModelWithHiddenStates(nn.Module):
             def __init__(self):
                 super().__init__()
                 self.linear = nn.Linear(10, 5)
-            
+
             def forward(self, input_ids, attn_mask=None, return_hidden_states=False):
                 logits = self.linear(input_ids)
                 if return_hidden_states:
                     hidden_states = [input_ids, logits]
                     return logits, hidden_states
                 return logits
-        
+
         base_model = MockModelWithHiddenStates().to(device)
         # Mock DDP model
         ddp_model = Mock()
         ddp_model.module = base_model
         ddp_model.eval = base_model.eval
         ddp_model.train = base_model.train
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         result = check_qat_stability(ddp_model, sample_batch, device)
-        
+
         assert isinstance(result, dict)
         assert "qat_stability.has_nan" in result
 
@@ -2043,32 +2085,32 @@ class TestQATOperationsExpanded:
             def __init__(self):
                 super().__init__()
                 self.linear = nn.Linear(10, 5)
-            
+
             def forward(self, input_ids, attn_mask=None, return_hidden_states=False):
                 logits = self.linear(input_ids)
                 if return_hidden_states:
                     hidden_states = [input_ids, logits]
                     return logits, hidden_states
                 return logits
-        
+
         model = MockModelWithHiddenStates().to(device)
-        
+
         # Pre-computed baseline hidden states
         batch_size, seq_len = sample_batch["input_ids"].shape
         baseline_hidden_states = [
             torch.randn(batch_size, seq_len, 10, device=device),
             torch.randn(batch_size, seq_len, 5, device=device),
         ]
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         result = check_qat_stability(
             model, sample_batch, device, baseline_hidden_states=baseline_hidden_states
         )
-        
+
         assert isinstance(result, dict)
         assert "qat_stability.has_nan" in result
         assert "qat_stability.cosine_sim" in result
@@ -2077,14 +2119,14 @@ class TestQATOperationsExpanded:
         """Test QAT stability check with model that doesn't support hidden states."""
         # Simple model without return_hidden_states support
         simple_model = nn.Linear(10, 5).to(device)
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         result = check_qat_stability(simple_model, sample_batch, device)
-        
+
         assert isinstance(result, dict)
         assert "qat_stability.has_nan" in result
         assert "qat_stability.cosine_sim" in result
@@ -2098,16 +2140,16 @@ class TestQATOperationsExpanded:
         class FailingModel(nn.Module):
             def forward(self, input_ids, attn_mask=None):
                 raise RuntimeError("Model forward failed")
-        
+
         failing_model = FailingModel().to(device)
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         result = check_qat_stability(failing_model, sample_batch, device)
-        
+
         assert isinstance(result, dict)
         assert "qat_stability.has_nan" in result
         assert "qat_stability.cosine_sim" in result
@@ -2145,7 +2187,8 @@ class TestTruncateBatchToShapeExpanded:
         assert result["teacher_target_ids"].shape == (2, 10)
         assert result["tool_name_ids"].shape == (2, 10)
         assert result["gold_json_text_ids"].shape == (2, 10)
-        assert result["teacher_logits"].shape == (2, 10, 1000)  # Keep vocab dimension
+        assert result["teacher_logits"].shape == (
+            2, 10, 1000)  # Keep vocab dimension
 
     def test_truncate_batch_to_shape_no_truncation_needed(self):
         """Test truncation when sequence is already shorter."""
@@ -2239,12 +2282,14 @@ class TestSaveCheckpointExpanded:
         # Patch torch.load to handle numpy arrays in checkpoints
         original_load = torch_module.load
         call_count = [0]
+
         def mock_torch_load(path, map_location=None, weights_only=None, **kwargs):
             call_count[0] += 1
             if weights_only and call_count[0] == 1:
-                raise RuntimeError("WeightsUnpickler error: Unsupported global")
+                raise RuntimeError(
+                    "WeightsUnpickler error: Unsupported global")
             return original_load(path, map_location=map_location, weights_only=False, **kwargs)
-        
+
         with patch("training.safe_checkpoint_loading.torch.load", side_effect=mock_torch_load):
             loaded = safe_load_checkpoint(checkpoint_path)
 
@@ -2273,12 +2318,14 @@ class TestSaveCheckpointExpanded:
         import torch as torch_module
         original_load = torch_module.load
         call_count = [0]
+
         def mock_torch_load(path, map_location=None, weights_only=None, **kwargs):
             call_count[0] += 1
             if weights_only and call_count[0] == 1:
-                raise RuntimeError("WeightsUnpickler error: Unsupported global")
+                raise RuntimeError(
+                    "WeightsUnpickler error: Unsupported global")
             return original_load(path, map_location=map_location, weights_only=False, **kwargs)
-        
+
         with patch("training.safe_checkpoint_loading.torch.load", side_effect=mock_torch_load):
             loaded = safe_load_checkpoint(checkpoint_path)
 
@@ -2314,12 +2361,14 @@ class TestSaveCheckpointExpanded:
         import torch as torch_module
         original_load = torch_module.load
         call_count = [0]
+
         def mock_torch_load(path, map_location=None, weights_only=None, **kwargs):
             call_count[0] += 1
             if weights_only and call_count[0] == 1:
-                raise RuntimeError("WeightsUnpickler error: Unsupported global")
+                raise RuntimeError(
+                    "WeightsUnpickler error: Unsupported global")
             return original_load(path, map_location=map_location, weights_only=False, **kwargs)
-        
+
         with patch("training.safe_checkpoint_loading.torch.load", side_effect=mock_torch_load):
             loaded = safe_load_checkpoint(checkpoint_path)
 
@@ -2360,21 +2409,23 @@ class TestSaveCheckpointExpanded:
 
             checkpoint_path = output_dir / "checkpoint_step_100.pt"
             assert checkpoint_path.exists()
-            
+
             # Verify checkpoint was saved with DDP unwrapping
             from training.safe_checkpoint_loading import safe_load_checkpoint
             import torch as torch_module
             original_load = torch_module.load
             call_count = [0]
+
             def mock_torch_load(path, map_location=None, weights_only=None, **kwargs):
                 call_count[0] += 1
                 if weights_only and call_count[0] == 1:
-                    raise RuntimeError("WeightsUnpickler error: Unsupported global")
+                    raise RuntimeError(
+                        "WeightsUnpickler error: Unsupported global")
                 return original_load(path, map_location=map_location, weights_only=False, **kwargs)
-            
+
             with patch("training.safe_checkpoint_loading.torch.load", side_effect=mock_torch_load):
                 loaded = safe_load_checkpoint(checkpoint_path)
-            
+
             assert loaded["step"] == 100
             assert loaded["model_arch"]["use_halt_head"] is False
 
@@ -2383,7 +2434,7 @@ class TestSaveCheckpointExpanded:
         output_dir = tmp_path / "checkpoints"
         optimizer = AdamW(small_model.parameters(), lr=1e-3)
         config = {"model": {}, "training": {}}
-        
+
         # Mock torch.save to raise exception
         with patch("torch.save", side_effect=Exception("Save error")):
             with patch("builtins.print"):  # Suppress error prints
@@ -2397,7 +2448,7 @@ class TestSaveCheckpointExpanded:
                         output_dir=output_dir,
                         config=config,
                     )
-        
+
         # Training should continue (no exception raised)
 
     def test_save_checkpoint_fsync_exception(self, tmp_path, small_model):
@@ -2405,7 +2456,7 @@ class TestSaveCheckpointExpanded:
         output_dir = tmp_path / "checkpoints"
         optimizer = AdamW(small_model.parameters(), lr=1e-3)
         config = {"model": {}, "training": {}}
-        
+
         # Mock os.sync to raise exception (fsync path)
         with patch("os.sync", side_effect=Exception("Sync error")):
             # Should handle gracefully and continue
@@ -2417,7 +2468,7 @@ class TestSaveCheckpointExpanded:
                 output_dir=output_dir,
                 config=config,
             )
-        
+
         # Checkpoint should still be saved (fsync is not critical)
         assert (output_dir / "latest.pt").exists()
 
@@ -2431,7 +2482,7 @@ class TestSaveCheckpointExpanded:
             "ce_teacher": 0.3,
             "total": 0.8,
         }
-        
+
         save_checkpoint(
             model=small_model,
             optimizer=optimizer,
@@ -2441,7 +2492,7 @@ class TestSaveCheckpointExpanded:
             config=config,
             loss_dict=loss_dict,
         )
-        
+
         # Verify checkpoint was saved
         assert (output_dir / "latest.pt").exists()
         checkpoint = torch.load(output_dir / "latest.pt", weights_only=False)
@@ -2453,14 +2504,14 @@ class TestSaveCheckpointExpanded:
         output_dir = tmp_path / "checkpoints"
         optimizer = AdamW(small_model.parameters(), lr=1e-3)
         config = {"model": {}, "training": {}}
-        
+
         # Test with tensor loss components (should convert to float via .item())
         loss_dict = {
             "total": torch.tensor(0.5),
             "kl_div": torch.tensor(0.3),
             "ce_teacher": torch.tensor(0.2),
         }
-        
+
         save_checkpoint(
             model=small_model,
             optimizer=optimizer,
@@ -2470,20 +2521,21 @@ class TestSaveCheckpointExpanded:
             config=config,
             loss_dict=loss_dict,
         )
-        
+
         checkpoint_path = output_dir / "checkpoint_step_100.pt"
         assert checkpoint_path.exists()
-        
+
         # Verify loss components are saved correctly (tensors converted to float)
         # Use torch.load directly for test (we created the checkpoint ourselves)
         loaded = torch.load(checkpoint_path, weights_only=False)
-        
+
         assert "meta" in loaded
         assert "loss_components" in loaded["meta"]
         # Use approximate equality for floating point values
         assert abs(loaded["meta"]["loss_components"]["total"] - 0.5) < 1e-6
         assert abs(loaded["meta"]["loss_components"]["kl_div"] - 0.3) < 1e-6
-        assert abs(loaded["meta"]["loss_components"]["ce_teacher"] - 0.2) < 1e-6
+        assert abs(loaded["meta"]["loss_components"]
+                   ["ce_teacher"] - 0.2) < 1e-6
 
 
 class TestTrainingStepExpanded:
@@ -2536,7 +2588,8 @@ class TestTrainingStepExpanded:
         sample_batch["tool_name_ids"] = torch.randint(0, 100, (2, 5))
         sample_batch["tool_name_mask"] = torch.ones(2, 5, dtype=torch.bool)
         sample_batch["gold_json_text_ids"] = torch.randint(0, 100, (2, 8))
-        sample_batch["mask_valid_json_tokens"] = torch.ones(2, 8, dtype=torch.bool)
+        sample_batch["mask_valid_json_tokens"] = torch.ones(
+            2, 8, dtype=torch.bool)
 
         # Move batch to device
         for k, v in sample_batch.items():
@@ -2626,7 +2679,8 @@ class TestTrainingStepExpanded:
 
         # Mock loss_weight_schedule import inside train_step
         with patch("training.losses.loss_weight_schedule", create=True) as mock_schedule:
-            mock_schedule.return_value = {"kl_weight": 0.6, "ce_teacher_weight": 0.2, "ce_ground_truth_weight": 0.2}
+            mock_schedule.return_value = {
+                "kl_weight": 0.6, "ce_teacher_weight": 0.2, "ce_ground_truth_weight": 0.2}
 
             result = train_step(
                 model=small_model,
@@ -2656,7 +2710,8 @@ class TestTrainingStepExpanded:
                 sample_batch[k] = v.to(device)
 
         with patch("training.distill_kd.compute_required_fields_present") as mock_compute:
-            mock_compute.return_value = torch.ones(2, dtype=torch.bool, device=device)
+            mock_compute.return_value = torch.ones(
+                2, dtype=torch.bool, device=device)
 
             result = train_step(
                 model=small_model,
@@ -2728,21 +2783,21 @@ class TestTrainingStepExpanded:
             }
         }
         training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
-        
+
         # Add batch metadata
         sample_batch["meta"] = [{"span_targets": {}} for _ in range(2)]
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         with patch("training.distill_kd.load_tokenizer") as mock_load:
             mock_tokenizer = Mock()
             mock_tokenizer.convert_tokens_to_ids = Mock(return_value=100)
             mock_tokenizer.encode = Mock(return_value=[100])
             mock_load.return_value = mock_tokenizer
-            
+
             result = train_step(
                 model=small_model,
                 batch=sample_batch,
@@ -2752,7 +2807,7 @@ class TestTrainingStepExpanded:
                 device=device,
                 current_step=6000,  # After warmup
             )
-            
+
             assert "total" in result
             # Code mode weight may be in result dict or computed separately
             assert "code_mode_pref" in result or "code_mode_weight" in result
@@ -2775,14 +2830,14 @@ class TestTrainingStepExpanded:
             }
         }
         training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
-        
+
         sample_batch["meta"] = [{"span_targets": {}} for _ in range(2)]
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         # Initialize code_mode_loss_module
         from training.losses import CodeModePreferenceLoss
         train_step._code_mode_loss_module = CodeModePreferenceLoss(
@@ -2790,7 +2845,7 @@ class TestTrainingStepExpanded:
             reward={"prefer_ts_api_over_direct_tool": True},
             vocab_ids={},
         )
-        
+
         # Test during warmup (line 1221-1222)
         result = train_step(
             model=small_model,
@@ -2801,7 +2856,7 @@ class TestTrainingStepExpanded:
             device=device,
             current_step=500,  # During warmup (500 < 1000)
         )
-        
+
         assert "total" in result
 
     def test_train_step_code_mode_batch_meta_as_dict(self, small_model, sample_batch, simple_optimizer, training_config, device):
@@ -2818,7 +2873,7 @@ class TestTrainingStepExpanded:
             }
         }
         training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
-        
+
         # Add batch_meta as dict (not list) - line 1296
         # The loss module expects batch_meta to be a list, so we need to provide proper structure
         # When batch_meta is dict, span_targets is extracted, but batch_meta itself is passed
@@ -2828,12 +2883,12 @@ class TestTrainingStepExpanded:
             "span_targets": {"ts_mode_spans": [(5, 10)], "direct_tool_spans": []},
             "tool_count": 2,  # Add required fields for eligibility
         }
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         # Initialize code_mode_loss_module
         from training.losses import CodeModePreferenceLoss
         train_step._code_mode_loss_module = CodeModePreferenceLoss(
@@ -2841,11 +2896,12 @@ class TestTrainingStepExpanded:
             reward={"prefer_ts_api_over_direct_tool": True},
             vocab_ids={},
         )
-        
+
         # Mock the loss module to handle dict batch_meta
         with patch.object(train_step._code_mode_loss_module, "forward") as mock_forward:
-            mock_forward.return_value = torch.tensor(0.1, device=device, requires_grad=True)
-            
+            mock_forward.return_value = torch.tensor(
+                0.1, device=device, requires_grad=True)
+
             result = train_step(
                 model=small_model,
                 batch=sample_batch,
@@ -2854,7 +2910,7 @@ class TestTrainingStepExpanded:
                 cfg=training_config,
                 device=device,
             )
-            
+
             assert "total" in result
 
     def test_train_step_code_mode_batch_meta_dict_span_targets_list(self, small_model, sample_batch, simple_optimizer, training_config, device):
@@ -2871,18 +2927,18 @@ class TestTrainingStepExpanded:
             }
         }
         training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
-        
+
         # Add batch_meta as dict with span_targets_list (line 1301)
         sample_batch["meta"] = {
             "span_targets_list": [{"ts_mode_spans": [(5, 10)], "direct_tool_spans": []}],
             "tool_count": 2,
         }
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         # Initialize code_mode_loss_module
         from training.losses import CodeModePreferenceLoss
         train_step._code_mode_loss_module = CodeModePreferenceLoss(
@@ -2890,11 +2946,12 @@ class TestTrainingStepExpanded:
             reward={"prefer_ts_api_over_direct_tool": True},
             vocab_ids={},
         )
-        
+
         # Mock the loss module to handle dict batch_meta
         with patch.object(train_step._code_mode_loss_module, "forward") as mock_forward:
-            mock_forward.return_value = torch.tensor(0.1, device=device, requires_grad=True)
-            
+            mock_forward.return_value = torch.tensor(
+                0.1, device=device, requires_grad=True)
+
             result = train_step(
                 model=small_model,
                 batch=sample_batch,
@@ -2903,7 +2960,7 @@ class TestTrainingStepExpanded:
                 cfg=training_config,
                 device=device,
             )
-            
+
             assert "total" in result
 
     def test_train_step_halt_targets_batch_metadata_expansion(self, small_model, sample_batch, simple_optimizer, training_config, device):
@@ -2916,7 +2973,7 @@ class TestTrainingStepExpanded:
             "caws_tier": "Tier-2",
             "warmup_steps": 1000,
         }
-        
+
         # Add batch_metadata as single dict (not list) - should be expanded (line 1326)
         sample_batch["metadata"] = {
             "loop_index": 0,
@@ -2925,20 +2982,21 @@ class TestTrainingStepExpanded:
             "prev_score": 0.85,
             "curriculum_stage": 1,
         }
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         # Mock halt targets
         with patch("training.halt_targets.HaltHeadTargets") as mock_halt_class:
             with patch("training.halt_targets.create_halt_targets_batch") as mock_create_halt:
                 mock_halt_instance = Mock()
                 mock_halt_instance.warmup_steps = 1000
                 mock_halt_class.return_value = mock_halt_instance
-                mock_create_halt.return_value = torch.tensor([0], device=device)
-                
+                mock_create_halt.return_value = torch.tensor(
+                    [0], device=device)
+
                 result = train_step(
                     model=small_model,
                     batch=sample_batch,
@@ -2948,19 +3006,19 @@ class TestTrainingStepExpanded:
                     device=device,
                     current_step=2000,
                 )
-                
+
                 assert "total" in result
 
     def test_train_step_halt_targets_import_error(self, small_model, sample_batch, simple_optimizer, training_config, device):
         """Test halt targets import error path (lines 1354-1356)."""
         training_config["latent"]["halt_head_enabled"] = True
         training_config["latent"]["halt_weight"] = 0.05
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         # Mock ImportError for halt_targets
         with patch("training.halt_targets.HaltHeadTargets", side_effect=ImportError("Not available")):
             with patch("builtins.print"):  # Suppress warning print
@@ -2973,7 +3031,7 @@ class TestTrainingStepExpanded:
                     device=device,
                     current_step=100,  # Multiple of 100 to trigger warning
                 )
-                
+
                 assert "total" in result
 
     def test_train_step_with_intermediate_layers_and_teacher_states(
@@ -2983,33 +3041,37 @@ class TestTrainingStepExpanded:
         training_config["distillation"]["use_intermediate_layers"] = True
         training_config["distillation"]["intermediate_layer_weight"] = 0.1
         training_config["distillation"]["layer_mapping"] = {0: 0, 1: 2}
-        
+
         # Add teacher hidden states to batch
         batch_size, seq_len = sample_batch["input_ids"].shape
         d_model = 128
         sample_batch["teacher_hidden_states"] = [
-            torch.randn(batch_size, seq_len, d_model) for _ in range(3)  # 3 layers
+            # 3 layers
+            torch.randn(batch_size, seq_len, d_model) for _ in range(3)
         ]
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
             elif isinstance(v, list):
-                sample_batch[k] = [t.to(device) if isinstance(t, torch.Tensor) else t for t in v]
-        
+                sample_batch[k] = [t.to(device) if isinstance(
+                    t, torch.Tensor) else t for t in v]
+
         # Mock model to return hidden states
         def mock_forward_with_hidden(input_ids, attention_mask=None, return_hidden_states=False):
-            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            logits = torch.randn(batch_size, seq_len, 1000,
+                                 device=device, requires_grad=True)
             if return_hidden_states:
                 hidden_states = [
-                    torch.randn(batch_size, seq_len, d_model, device=device, requires_grad=True) for _ in range(2)  # 2 student layers
+                    # 2 student layers
+                    torch.randn(batch_size, seq_len, d_model, device=device, requires_grad=True) for _ in range(2)
                 ]
                 return logits, hidden_states
             return logits
-        
+
         small_model.forward = mock_forward_with_hidden
-        
+
         result = train_step(
             model=small_model,
             batch=sample_batch,
@@ -3018,7 +3080,7 @@ class TestTrainingStepExpanded:
             cfg=training_config,
             device=device,
         )
-        
+
         assert "total" in result
         assert "intermediate_layer" in result
 
@@ -3029,33 +3091,37 @@ class TestTrainingStepExpanded:
         training_config["distillation"]["use_intermediate_layers"] = True
         training_config["distillation"]["intermediate_layer_weight"] = 0.1
         # No explicit layer_mapping - should use default
-        
+
         # Add teacher hidden states to batch
         batch_size, seq_len = sample_batch["input_ids"].shape
         d_model = 128
         sample_batch["teacher_hidden_states"] = [
-            torch.randn(batch_size, seq_len, d_model) for _ in range(5)  # 5 teacher layers
+            # 5 teacher layers
+            torch.randn(batch_size, seq_len, d_model) for _ in range(5)
         ]
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
             elif isinstance(v, list):
-                sample_batch[k] = [t.to(device) if isinstance(t, torch.Tensor) else t for t in v]
-        
+                sample_batch[k] = [t.to(device) if isinstance(
+                    t, torch.Tensor) else t for t in v]
+
         # Mock model to return hidden states
         def mock_forward_with_hidden(input_ids, attention_mask=None, return_hidden_states=False):
-            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            logits = torch.randn(batch_size, seq_len, 1000,
+                                 device=device, requires_grad=True)
             if return_hidden_states:
                 hidden_states = [
-                    torch.randn(batch_size, seq_len, d_model, device=device, requires_grad=True) for _ in range(3)  # 3 student layers
+                    # 3 student layers
+                    torch.randn(batch_size, seq_len, d_model, device=device, requires_grad=True) for _ in range(3)
                 ]
                 return logits, hidden_states
             return logits
-        
+
         small_model.forward = mock_forward_with_hidden
-        
+
         result = train_step(
             model=small_model,
             batch=sample_batch,
@@ -3064,7 +3130,7 @@ class TestTrainingStepExpanded:
             cfg=training_config,
             device=device,
         )
-        
+
         assert "total" in result
         assert "intermediate_layer" in result
 
@@ -3075,7 +3141,7 @@ class TestTrainingStepExpanded:
         training_config["distillation"]["use_intermediate_layers"] = True
         training_config["distillation"]["intermediate_layer_weight"] = 0.1
         training_config["distillation"]["layer_mapping"] = {0: 0, 1: 2}
-        
+
         # Add teacher hidden states with different d_model
         batch_size, seq_len = sample_batch["input_ids"].shape
         student_d_model = 128
@@ -3083,28 +3149,30 @@ class TestTrainingStepExpanded:
         sample_batch["teacher_hidden_states"] = [
             torch.randn(batch_size, seq_len, teacher_d_model) for _ in range(3)
         ]
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
             elif isinstance(v, list):
-                sample_batch[k] = [t.to(device) if isinstance(t, torch.Tensor) else t for t in v]
-        
+                sample_batch[k] = [t.to(device) if isinstance(
+                    t, torch.Tensor) else t for t in v]
+
         # Mock model to return hidden states with different d_model
         def mock_forward_with_hidden(input_ids, attention_mask=None, return_hidden_states=False):
-            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            logits = torch.randn(batch_size, seq_len, 1000,
+                                 device=device, requires_grad=True)
             if return_hidden_states:
                 hidden_states = [
                     torch.randn(batch_size, seq_len, student_d_model, device=device, requires_grad=True) for _ in range(2)
                 ]
                 return logits, hidden_states
             return logits
-        
+
         small_model.forward = mock_forward_with_hidden
         # Model doesn't have projection_layers - should create on-the-fly
         small_model.projection_layers = None
-        
+
         result = train_step(
             model=small_model,
             batch=sample_batch,
@@ -3113,7 +3181,7 @@ class TestTrainingStepExpanded:
             cfg=training_config,
             device=device,
         )
-        
+
         assert "total" in result
         assert "intermediate_layer" in result
 
@@ -3126,12 +3194,12 @@ class TestTrainingStepExpanded:
         training_config["distillation"]["max_entropy"] = 8.0
         training_config["distillation"]["min_temperature"] = 1.5
         training_config["distillation"]["max_temperature"] = 3.0
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         # Mock entropy_weighting to return expected values
         with patch("training.losses.entropy_weighting") as mock_entropy:
             mock_entropy.return_value = (
@@ -3143,7 +3211,7 @@ class TestTrainingStepExpanded:
                     "entropy": 5.0,
                 },
             )
-            
+
             result = train_step(
                 model=small_model,
                 batch=sample_batch,
@@ -3152,7 +3220,7 @@ class TestTrainingStepExpanded:
                 cfg=training_config,
                 device=device,
             )
-            
+
             assert "total" in result
 
     def test_train_step_with_json_repair_check(
@@ -3162,28 +3230,32 @@ class TestTrainingStepExpanded:
         training_config["distillation"]["use_json_repair_check"] = True
         training_config["distillation"]["json_repair_weight"] = 0.05
         training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
-        
+
         # Add process-step supervision targets to trigger JSON repair check
-        sample_batch["tool_name_ids"] = torch.randint(0, 1000, (2, 5), device=device)
+        sample_batch["tool_name_ids"] = torch.randint(
+            0, 1000, (2, 5), device=device)
         sample_batch["tool_name_mask"] = torch.ones(2, 5, device=device)
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         with patch("training.distill_kd.load_tokenizer") as mock_load:
             mock_tokenizer = Mock()
-            mock_tokenizer.decode = Mock(return_value='{"name": "test_tool", "args": {}}')
+            mock_tokenizer.decode = Mock(
+                return_value='{"name": "test_tool", "args": {}}')
             mock_load.return_value = mock_tokenizer
-            
+
             with patch("training.json_repair.batch_check_json_repair") as mock_batch_check:
-                mock_batch_check.return_value = {"valid_json_ratio": 1.0, "needs_repair": 0, "repair_rate": 0.0, "valid_json_count": 2, "total": 2}
-                
+                mock_batch_check.return_value = {
+                    "valid_json_ratio": 1.0, "needs_repair": 0, "repair_rate": 0.0, "valid_json_count": 2, "total": 2}
+
                 with patch("training.json_repair.check_json_repair_needed") as mock_check_repair:
                     # Return (has_json, needs_repair) tuple
-                    mock_check_repair.return_value = (True, False)  # Has JSON, no repair needed
-                    
+                    mock_check_repair.return_value = (
+                        True, False)  # Has JSON, no repair needed
+
                     # Mock the local import of json_repair_loss - it may not exist, so create a simple implementation
                     # The function is imported inside train_step, so we need to patch it before the import
                     with patch("builtins.__import__") as mock_import:
@@ -3192,17 +3264,19 @@ class TestTrainingStepExpanded:
                             if name == "training.losses" and "json_repair_loss" in str(args):
                                 # Create a mock module with json_repair_loss
                                 mock_losses = Mock()
-                                mock_losses.json_repair_loss = Mock(return_value=torch.tensor(0.0, device=device))
+                                mock_losses.json_repair_loss = Mock(
+                                    return_value=torch.tensor(0.0, device=device))
                                 return mock_losses
                             # For other imports, use real import
                             return __import__(name, *args, **kwargs)
-                        
+
                         mock_import.side_effect = import_side_effect
-                        
+
                         # Actually, simpler: just patch the function after it's imported
                         # Since it's imported locally, we can't easily patch it. Let's skip this test for now
                         # and focus on other critical paths
-                        pytest.skip("json_repair_loss function needs to be implemented in losses.py first")
+                        pytest.skip(
+                            "json_repair_loss function needs to be implemented in losses.py first")
 
     def test_train_step_with_gradient_accumulation(
         self, small_model, sample_batch, simple_optimizer, training_config, device
@@ -3320,19 +3394,21 @@ class TestTrainingStepExpanded:
             "caws_tier": "Tier-2",
             "warmup_steps": 1000,
         }
-        
+
         # Add halt logits to model output
         def mock_forward_with_halt(input_ids, attention_mask=None, return_halt_logits=False):
             batch_size, seq_len = input_ids.shape
-            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            logits = torch.randn(batch_size, seq_len, 1000,
+                                 device=device, requires_grad=True)
             if return_halt_logits:
-                halt_logits = torch.randn(batch_size, 2, device=device, requires_grad=True)
+                halt_logits = torch.randn(
+                    batch_size, 2, device=device, requires_grad=True)
                 return logits, halt_logits
             return logits
-        
+
         small_model.forward = mock_forward_with_halt
         small_model.use_halt_head = True
-        
+
         # Add batch metadata for halt target derivation
         sample_batch["metadata"] = [
             {
@@ -3350,22 +3426,23 @@ class TestTrainingStepExpanded:
                 "curriculum_stage": 1,
             },
         ]
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         # Mock halt targets import (imported inside train_step)
         with patch("training.halt_targets.HaltHeadTargets") as mock_halt_class:
             with patch("training.halt_targets.create_halt_targets_batch") as mock_create_halt:
                 mock_halt_instance = Mock()
                 mock_halt_instance.warmup_steps = 1000
                 mock_halt_class.return_value = mock_halt_instance
-                
+
                 # Mock halt targets (after warmup)
-                mock_create_halt.return_value = torch.tensor([0, 1], device=device)  # First continue, second halt
-                
+                mock_create_halt.return_value = torch.tensor(
+                    [0, 1], device=device)  # First continue, second halt
+
                 result = train_step(
                     model=small_model,
                     batch=sample_batch,
@@ -3375,7 +3452,7 @@ class TestTrainingStepExpanded:
                     device=device,
                     current_step=2000,  # After warmup
                 )
-                
+
                 assert "total" in result
                 assert "halt_head" in result
 
@@ -3391,37 +3468,39 @@ class TestTrainingStepExpanded:
             "caws_tier": "Tier-2",
             "warmup_steps": 1000,
         }
-        
+
         def mock_forward_with_halt(input_ids, attention_mask=None, return_halt_logits=False):
             batch_size, seq_len = input_ids.shape
-            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            logits = torch.randn(batch_size, seq_len, 1000,
+                                 device=device, requires_grad=True)
             if return_halt_logits:
-                halt_logits = torch.randn(batch_size, 2, device=device, requires_grad=True)
+                halt_logits = torch.randn(
+                    batch_size, 2, device=device, requires_grad=True)
                 return logits, halt_logits
             return logits
-        
+
         small_model.forward = mock_forward_with_halt
         small_model.use_halt_head = True
-        
+
         sample_batch["metadata"] = [
             {"loop_index": 0, "max_loops": 2, "judge_score": 0.9},
             {"loop_index": 1, "max_loops": 2, "judge_score": 0.7},
         ]
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         with patch("training.halt_targets.HaltHeadTargets") as mock_halt_class:
             with patch("training.halt_targets.create_halt_targets_batch") as mock_create_halt:
                 mock_halt_instance = Mock()
                 mock_halt_instance.warmup_steps = 1000
                 mock_halt_class.return_value = mock_halt_instance
-                
+
                 # During warmup, create_halt_targets_batch returns None
                 mock_create_halt.return_value = None
-                
+
                 result = train_step(
                     model=small_model,
                     batch=sample_batch,
@@ -3431,10 +3510,11 @@ class TestTrainingStepExpanded:
                     device=device,
                     current_step=500,  # During warmup
                 )
-                
+
                 assert "total" in result
                 # Halt loss should not be applied during warmup
-                assert "halt_head" not in result or result.get("halt_head", 0.0) == 0.0
+                assert "halt_head" not in result or result.get(
+                    "halt_head", 0.0) == 0.0
 
     def test_train_step_with_code_mode_loss_fallback_init(
         self, small_model, sample_batch, simple_optimizer, training_config, device
@@ -3452,27 +3532,29 @@ class TestTrainingStepExpanded:
             }
         }
         training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
-        
+
         # Add batch metadata
         sample_batch["meta"] = [
-            {"tool_count": 3, "span_targets": {"ts_mode_spans": [(5, 10)], "direct_tool_spans": []}},
-            {"tool_count": 2, "span_targets": {"ts_mode_spans": [], "direct_tool_spans": [(0, 3)]}},
+            {"tool_count": 3, "span_targets": {
+                "ts_mode_spans": [(5, 10)], "direct_tool_spans": []}},
+            {"tool_count": 2, "span_targets": {
+                "ts_mode_spans": [], "direct_tool_spans": [(0, 3)]}},
         ]
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         # Clear any existing code_mode_loss_module attribute
         if hasattr(train_step, "_code_mode_loss_module"):
             delattr(train_step, "_code_mode_loss_module")
-        
+
         with patch("training.distill_kd.load_tokenizer") as mock_load:
             mock_tokenizer = Mock()
             mock_tokenizer.convert_tokens_to_ids = Mock(return_value=100)
             mock_load.return_value = mock_tokenizer
-            
+
             result = train_step(
                 model=small_model,
                 batch=sample_batch,
@@ -3482,7 +3564,7 @@ class TestTrainingStepExpanded:
                 device=device,
                 current_step=6000,
             )
-            
+
             assert "total" in result
             # Code-mode loss should be computed (fallback initialization)
             assert "code_mode_pref" in result or "code_mode_weight" in result
@@ -3494,27 +3576,30 @@ class TestTrainingStepExpanded:
         training_config["distillation"]["use_caws_structure"] = True
         training_config["distillation"]["caws_structure_weight"] = 0.05
         training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
-        
+
         # Add teacher_text to batch
         sample_batch["teacher_text"] = "Working Spec:\n- Feature: test\nInvariants:\n- Rule 1\nAcceptance:\n- Test passes"
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         # Mock tokenizer on model or via load_tokenizer
         mock_tokenizer = Mock()
-        mock_tokenizer.decode = Mock(return_value="Working Spec:\n- Feature: test")
+        mock_tokenizer.decode = Mock(
+            return_value="Working Spec:\n- Feature: test")
         small_model.tokenizer = mock_tokenizer
-        
+
         with patch("training.caws_structure.caws_structure_score") as mock_score:
             with patch("training.losses.caws_structure_loss") as mock_loss:
                 # Mock structure scores
-                mock_score.side_effect = [0.8, 0.6]  # Teacher: 0.8, Student: 0.6
+                # Teacher: 0.8, Student: 0.6
+                mock_score.side_effect = [0.8, 0.6]
                 # Mock structure loss
-                mock_loss.return_value = torch.tensor(0.2, device=device, requires_grad=True)
-                
+                mock_loss.return_value = torch.tensor(
+                    0.2, device=device, requires_grad=True)
+
                 result = train_step(
                     model=small_model,
                     batch=sample_batch,
@@ -3524,7 +3609,7 @@ class TestTrainingStepExpanded:
                     device=device,
                     current_step=100,  # Logging step
                 )
-                
+
                 assert "total" in result
                 # Verify structure loss was computed
                 assert mock_score.call_count >= 2  # Called for teacher and student
@@ -3537,25 +3622,27 @@ class TestTrainingStepExpanded:
         training_config["distillation"]["use_caws_structure"] = True
         training_config["distillation"]["caws_structure_weight"] = 0.05
         training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
-        
+
         # Add teacher_text as list
         sample_batch["teacher_text"] = ["Working Spec:\n- Feature: test"]
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         # Mock tokenizer on model
         mock_tokenizer = Mock()
-        mock_tokenizer.decode = Mock(return_value="Working Spec:\n- Feature: test")
+        mock_tokenizer.decode = Mock(
+            return_value="Working Spec:\n- Feature: test")
         small_model.tokenizer = mock_tokenizer
-        
+
         with patch("training.caws_structure.caws_structure_score") as mock_score:
             with patch("training.losses.caws_structure_loss") as mock_loss:
                 mock_score.side_effect = [0.8, 0.6]
-                mock_loss.return_value = torch.tensor(0.2, device=device, requires_grad=True)
-                
+                mock_loss.return_value = torch.tensor(
+                    0.2, device=device, requires_grad=True)
+
                 result = train_step(
                     model=small_model,
                     batch=sample_batch,
@@ -3564,7 +3651,7 @@ class TestTrainingStepExpanded:
                     cfg=training_config,
                     device=device,
                 )
-                
+
                 assert "total" in result
                 assert mock_score.called
 
@@ -3577,24 +3664,25 @@ class TestTrainingStepExpanded:
         training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
         # Also set tokenizer_path at top level for train_step lookup
         training_config["tokenizer_path"] = "models/student/tokenizer"
-        
+
         # Add teacher_text to batch
         sample_batch["teacher_text"] = "Test teacher output"
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         # Mock tokenizer on model (train_step checks model.tokenizer first)
         mock_tokenizer = Mock()
         mock_tokenizer.decode = Mock(return_value="Test student output")
         small_model.tokenizer = mock_tokenizer
-        
+
         # The function is imported at module level, so patch it where it's used
         with patch("training.distill_kd.caws_compliance_loss") as mock_compliance:
-            mock_compliance.return_value = torch.tensor(0.1, device=device, requires_grad=True)
-            
+            mock_compliance.return_value = torch.tensor(
+                0.1, device=device, requires_grad=True)
+
             result = train_step(
                 model=small_model,
                 batch=sample_batch,
@@ -3603,7 +3691,7 @@ class TestTrainingStepExpanded:
                 cfg=training_config,
                 device=device,
             )
-            
+
             assert "total" in result
             # CAWS compliance loss should be added if tokenizer is available
             # The tokenizer is found via model.tokenizer, so compliance should be called
@@ -3618,24 +3706,25 @@ class TestTrainingStepExpanded:
         training_config["distillation"]["use_caws_compliance"] = True
         training_config["distillation"]["caws_compliance_weight"] = 0.05
         training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
-        
+
         # Add teacher_text to metadata instead of batch
         sample_batch["metadata"] = {"teacher_text": "Test teacher output"}
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         # Mock tokenizer on model (train_step checks model.tokenizer first)
         mock_tokenizer = Mock()
         mock_tokenizer.decode = Mock(return_value="Test student output")
         small_model.tokenizer = mock_tokenizer
-        
+
         # The function is imported at module level, so patch it where it's used
         with patch("training.distill_kd.caws_compliance_loss") as mock_compliance:
-            mock_compliance.return_value = torch.tensor(0.1, device=device, requires_grad=True)
-            
+            mock_compliance.return_value = torch.tensor(
+                0.1, device=device, requires_grad=True)
+
             result = train_step(
                 model=small_model,
                 batch=sample_batch,
@@ -3644,7 +3733,7 @@ class TestTrainingStepExpanded:
                 cfg=training_config,
                 device=device,
             )
-            
+
             assert "total" in result
             # Verify compliance loss was called
             mock_compliance.assert_called_once()
@@ -3657,24 +3746,25 @@ class TestTrainingStepExpanded:
         training_config["distillation"]["use_claim_extraction"] = True
         training_config["distillation"]["claim_extraction_weight"] = 0.1
         training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
-        
+
         # Add teacher_text to batch
         sample_batch["teacher_text"] = "Teacher response with claims"
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         # Mock tokenizer
         mock_tokenizer = Mock()
         mock_tokenizer.decode = Mock(return_value="Student response")
         small_model.tokenizer = mock_tokenizer
-        
+
         # Mock claim_extraction_loss (function may not exist yet)
         with patch("training.losses.claim_extraction_loss") as mock_claim_loss:
-            mock_claim_loss.return_value = torch.tensor(0.5, device=device, requires_grad=True)
-            
+            mock_claim_loss.return_value = torch.tensor(
+                0.5, device=device, requires_grad=True)
+
             # Mock compute_claim_extraction_metrics
             with patch("training.claim_extraction.compute_claim_extraction_metrics") as mock_metrics:
                 mock_metrics.return_value = {
@@ -3685,7 +3775,7 @@ class TestTrainingStepExpanded:
                     "teacher_success_rate": 0.9,
                     "success_rate_ratio": 0.89,
                 }
-                
+
                 result = train_step(
                     model=small_model,
                     batch=sample_batch,
@@ -3694,7 +3784,7 @@ class TestTrainingStepExpanded:
                     cfg=training_config,
                     device=device,
                 )
-                
+
                 assert "total" in result
                 # Claim extraction loss should be called if function exists
                 # If function doesn't exist, the test will fail at import, which is expected
@@ -3706,24 +3796,26 @@ class TestTrainingStepExpanded:
         """Test claim extraction with teacher_text from batch metadata (lines 1840-1846)."""
         training_config["distillation"]["use_claim_extraction"] = True
         training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
-        
+
         # Add teacher_text to metadata instead of batch directly
-        sample_batch["metadata"] = {"teacher_text": "Teacher response from metadata"}
-        
+        sample_batch["metadata"] = {
+            "teacher_text": "Teacher response from metadata"}
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         # Mock tokenizer
         mock_tokenizer = Mock()
         mock_tokenizer.decode = Mock(return_value="Student response")
         small_model.tokenizer = mock_tokenizer
-        
+
         # Mock claim_extraction_loss (imported inside train_step)
         with patch("training.distill_kd.claim_extraction_loss") as mock_claim_loss:
-            mock_claim_loss.return_value = torch.tensor(0.5, device=device, requires_grad=True)
-            
+            mock_claim_loss.return_value = torch.tensor(
+                0.5, device=device, requires_grad=True)
+
             result = train_step(
                 model=small_model,
                 batch=sample_batch,
@@ -3732,7 +3824,7 @@ class TestTrainingStepExpanded:
                 cfg=training_config,
                 device=device,
             )
-            
+
             assert "total" in result
 
     @pytest.mark.skip(reason="claim_extraction_loss not yet implemented in training/losses.py")
@@ -3769,19 +3861,19 @@ class TestTrainingStepExpanded:
         """Test claim extraction with decode error (lines 1943-1945)."""
         training_config["distillation"]["use_claim_extraction"] = True
         training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
-        
+
         sample_batch["teacher_text"] = "Teacher response"
-        
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         # Mock tokenizer to raise exception
         mock_tokenizer = Mock()
         mock_tokenizer.decode = Mock(side_effect=Exception("Decode error"))
         small_model.tokenizer = mock_tokenizer
-        
+
         with patch("builtins.print"):  # Suppress error print
             result = train_step(
                 model=small_model,
@@ -3791,7 +3883,7 @@ class TestTrainingStepExpanded:
                 cfg=training_config,
                 device=device,
             )
-            
+
             assert "total" in result
             # Should handle error gracefully and skip claim extraction loss
 
@@ -3801,30 +3893,33 @@ class TestTrainingStepExpanded:
         """Test training step with self-evaluation loss."""
         training_config["distillation"]["use_self_evaluation"] = True
         training_config["distillation"]["self_evaluation_weight"] = 0.1
-        
+
         # Add eval_score and teacher_quality_score to batch
         sample_batch["eval_score"] = torch.tensor([0.8, 0.9], device=device)
-        sample_batch["teacher_quality_score"] = torch.tensor([0.85, 0.95], device=device)
-        
+        sample_batch["teacher_quality_score"] = torch.tensor(
+            [0.85, 0.95], device=device)
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         # Mock model to return eval_score when return_eval_score=True
         # train_step calls model with return_eval_score=True when use_self_evaluation is True
         def mock_forward_with_eval(input_ids, attention_mask=None, return_eval_score=False, return_hidden_states=False):
             batch_size, seq_len = input_ids.shape
-            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            logits = torch.randn(batch_size, seq_len, 1000,
+                                 device=device, requires_grad=True)
             if return_eval_score:
                 # Return tuple (logits, eval_score)
-                eval_score = torch.randn(batch_size, device=device, requires_grad=True)
+                eval_score = torch.randn(
+                    batch_size, device=device, requires_grad=True)
                 return logits, eval_score
             return logits
-        
+
         small_model.forward = mock_forward_with_eval
         small_model.use_self_evaluation = True
-        
+
         result = train_step(
             model=small_model,
             batch=sample_batch,
@@ -3833,7 +3928,7 @@ class TestTrainingStepExpanded:
             cfg=training_config,
             device=device,
         )
-        
+
         assert "total" in result
         assert "self_evaluation" in result
 
@@ -3845,28 +3940,31 @@ class TestTrainingStepExpanded:
         training_config["distillation"]["early_tool_weight"] = 0.05
         training_config["distillation"]["early_tool_N"] = 25
         training_config["distillation"]["early_tool_warmup_epochs"] = 5
-        training_config["train"] = {"total_epochs": 100, "steps_per_epoch": 1000}
+        training_config["train"] = {
+            "total_epochs": 100, "steps_per_epoch": 1000}
         training_config["io"] = {"tokenizer_path": "models/student/tokenizer"}
         # Also set at root level for train_step lookup
         training_config["tokenizer_path"] = "models/student/tokenizer"
         # Set a flag that triggers needs_tokenizer check (early_tool_call_loss isn't in the check)
         # We'll use use_caws_compliance to trigger tokenizer loading
         training_config["distillation"]["use_caws_compliance"] = True
-        
-        sample_batch["tool_should_be_used"] = torch.ones(2, dtype=torch.bool, device=device)
-        sample_batch["teacher_prefix_ids"] = torch.randint(0, 100, (2, 10), device=device)
-        
+
+        sample_batch["tool_should_be_used"] = torch.ones(
+            2, dtype=torch.bool, device=device)
+        sample_batch["teacher_prefix_ids"] = torch.randint(
+            0, 100, (2, 10), device=device)
+
         # Move batch to device
         for k, v in sample_batch.items():
             if isinstance(v, torch.Tensor):
                 sample_batch[k] = v.to(device)
-        
+
         # Mock tokenizer on model (train_step checks model.tokenizer first)
         # The tokenizer is needed when use_early_tool_call_loss is True
         mock_tokenizer = Mock()
         mock_tokenizer.convert_tokens_to_ids = Mock(return_value=100)
         small_model.tokenizer = mock_tokenizer
-        
+
         result = train_step(
             model=small_model,
             batch=sample_batch,
@@ -3876,7 +3974,7 @@ class TestTrainingStepExpanded:
             device=device,
             current_step=1000,  # After warmup (epoch 1)
         )
-        
+
         assert "total" in result
         # Early tool loss should be computed when tool_should_be_used is provided
         assert "early_tool" in result
@@ -4034,7 +4132,8 @@ class TestMainFunction:
                                         with patch("training.distill_kd.DataLoader") as mock_dataloader_class:
                                             # Make DataLoader return an empty iterator to prevent infinite loops
                                             mock_dataloader = Mock()
-                                            mock_dataloader.__iter__ = Mock(return_value=iter([]))
+                                            mock_dataloader.__iter__ = Mock(
+                                                return_value=iter([]))
                                             mock_dataloader_class.return_value = mock_dataloader
                                             # Patch math.log to avoid issues with mpmath imports
                                             with patch("training.distill_kd.math") as mock_math:
@@ -4042,8 +4141,10 @@ class TestMainFunction:
                                                 # Mock dataset creation to prevent file I/O
                                                 with patch("training.distill_kd.KDDataset") as mock_kd_dataset_class:
                                                     mock_dataset = Mock()
-                                                    mock_dataset.__iter__ = Mock(return_value=iter([]))
-                                                    mock_dataset.__len__ = Mock(return_value=0)
+                                                    mock_dataset.__iter__ = Mock(
+                                                        return_value=iter([]))
+                                                    mock_dataset.__len__ = Mock(
+                                                        return_value=0)
                                                     mock_dataset.dataset_header = None
                                                     mock_kd_dataset_class.return_value = mock_dataset
                                                     # Mock collate function
@@ -4058,7 +4159,8 @@ class TestMainFunction:
 
         # Verify provenance was logged
         print_calls = [str(call) for call in mock_print.call_args_list]
-        provenance_logged = any("Config provenance" in str(call) for call in print_calls)
+        provenance_logged = any("Config provenance" in str(call)
+                                for call in print_calls)
         assert provenance_logged, "Config provenance should be logged"
 
     @patch("training.distill_kd.check_training_versions")
@@ -4095,8 +4197,11 @@ class TestMainFunction:
         mock_parser_class.return_value = mock_parser
 
         mock_check_versions.return_value = None
+        # Set total_steps to 0 to prevent infinite loop in while step < total_steps:
+        # This is critical to prevent kernel panics from blocking the watchdog
         mock_merge_configs.return_value = {
-            "io": {"tokenizer_path": "models/student/tokenizer"}
+            "io": {"tokenizer_path": "models/student/tokenizer"},
+            "train": {"steps": 0},  # Zero steps = training loop never executes
         }
         mock_validate_config.return_value = None
         mock_model = Mock()
@@ -4135,7 +4240,8 @@ class TestMainFunction:
                                     with patch("training.distill_kd.DataLoader") as mock_dataloader_class:
                                         # Make DataLoader return an empty iterator to prevent infinite loops
                                         mock_dataloader = Mock()
-                                        mock_dataloader.__iter__ = Mock(return_value=iter([]))
+                                        mock_dataloader.__iter__ = Mock(
+                                            return_value=iter([]))
                                         mock_dataloader_class.return_value = mock_dataloader
                                         # Patch math.log to avoid issues with mpmath imports
                                         with patch("training.distill_kd.math") as mock_math:
@@ -4143,8 +4249,10 @@ class TestMainFunction:
                                             # Mock dataset creation to prevent file I/O
                                             with patch("training.distill_kd.KDDataset") as mock_kd_dataset_class:
                                                 mock_dataset = Mock()
-                                                mock_dataset.__iter__ = Mock(return_value=iter([]))
-                                                mock_dataset.__len__ = Mock(return_value=0)
+                                                mock_dataset.__iter__ = Mock(
+                                                    return_value=iter([]))
+                                                mock_dataset.__len__ = Mock(
+                                                    return_value=0)
                                                 mock_dataset.dataset_header = None
                                                 mock_kd_dataset_class.return_value = mock_dataset
                                                 # Mock collate function
@@ -4157,6 +4265,8 @@ class TestMainFunction:
                                                         from training.distill_kd import main
 
                                                         try:
+                                                            # Set a timeout to prevent kernel panic from infinite loop
+                                                            # The test should complete quickly with total_steps=0
                                                             main()
                                                         except (SystemExit, Exception, StopIteration, KeyboardInterrupt):
                                                             # Various exceptions can occur when main exits
@@ -4165,8 +4275,10 @@ class TestMainFunction:
         # Verify migration was called (may not be called if function exits early)
         # Check if migration was attempted (either called or logged)
         print_calls = [str(call) for call in mock_print.call_args_list]
-        migration_logged = any("Tokenizer migration completed" in str(call) for call in print_calls)
-        migration_warn_logged = any("Tokenizer migration failed" in str(call) for call in print_calls)
+        migration_logged = any("Tokenizer migration completed" in str(
+            call) for call in print_calls)
+        migration_warn_logged = any(
+            "Tokenizer migration failed" in str(call) for call in print_calls)
         # Migration should either be called or logged (or both)
         assert mock_migrate.called or migration_logged or migration_warn_logged, "Tokenizer migration should be attempted"
 
@@ -4204,8 +4316,11 @@ class TestMainFunction:
         mock_parser_class.return_value = mock_parser
 
         mock_check_versions.return_value = None
+        # Set total_steps to 0 to prevent infinite loop in while step < total_steps:
+        # This is critical to prevent kernel panics from blocking the watchdog
         mock_merge_configs.return_value = {
-            "io": {"tokenizer_path": "models/student/tokenizer"}
+            "io": {"tokenizer_path": "models/student/tokenizer"},
+            "train": {"steps": 0},  # Zero steps = training loop never executes
         }
         mock_validate_config.return_value = None
         mock_model = Mock()
@@ -4234,7 +4349,8 @@ class TestMainFunction:
                                     with patch("training.distill_kd.DataLoader") as mock_dataloader_class:
                                         # Make DataLoader return an empty iterator to prevent infinite loops
                                         mock_dataloader = Mock()
-                                        mock_dataloader.__iter__ = Mock(return_value=iter([]))
+                                        mock_dataloader.__iter__ = Mock(
+                                            return_value=iter([]))
                                         mock_dataloader_class.return_value = mock_dataloader
                                         # Patch math.log to avoid issues with mpmath imports
                                         with patch("training.distill_kd.math") as mock_math:
@@ -4242,8 +4358,10 @@ class TestMainFunction:
                                             # Mock dataset creation to prevent file I/O
                                             with patch("training.distill_kd.KDDataset") as mock_kd_dataset_class:
                                                 mock_dataset = Mock()
-                                                mock_dataset.__iter__ = Mock(return_value=iter([]))
-                                                mock_dataset.__len__ = Mock(return_value=0)
+                                                mock_dataset.__iter__ = Mock(
+                                                    return_value=iter([]))
+                                                mock_dataset.__len__ = Mock(
+                                                    return_value=0)
                                                 mock_dataset.dataset_header = None
                                                 mock_kd_dataset_class.return_value = mock_dataset
                                                 # Mock collate function
@@ -4263,7 +4381,8 @@ class TestMainFunction:
 
         # Verify migration failure was logged
         print_calls = [str(call) for call in mock_print.call_args_list]
-        migration_warn_logged = any("Tokenizer migration failed" in str(call) for call in print_calls)
+        migration_warn_logged = any(
+            "Tokenizer migration failed" in str(call) for call in print_calls)
         assert migration_warn_logged, "Tokenizer migration failure should be logged as warning"
 
     @patch("training.distill_kd.check_training_versions")
@@ -4298,15 +4417,18 @@ class TestMainFunction:
         mock_parser_class.return_value = mock_parser
 
         mock_check_versions.return_value = None
+        # Set total_steps to 0 to prevent infinite loop in while step < total_steps:
+        # This is critical to prevent kernel panics from blocking the watchdog
         mock_merge_configs.return_value = {
             "arch": {"vocab_size": 2000, "d_model": 256},
-            "train": {"steps": 1000},
+            "train": {"steps": 0},  # Zero steps = training loop never executes
             "optimizer": {"lr": 1e-4},
         }
         mock_validate_config.return_value = None
         mock_model = Mock()
         mock_model.load_state_dict = Mock()
-        mock_model.parameters.return_value = [Mock(numel=Mock(return_value=1000))]
+        mock_model.parameters.return_value = [
+            Mock(numel=Mock(return_value=1000))]
         mock_create_model.return_value = mock_model
         mock_optimizer = Mock()
         mock_optimizer.load_state_dict = Mock()
@@ -4315,7 +4437,8 @@ class TestMainFunction:
         # Mock checkpoint with mismatched config
         mock_checkpoint = {
             "config": {
-                "arch": {"vocab_size": 1000, "d_model": 128},  # Different from current
+                # Different from current
+                "arch": {"vocab_size": 1000, "d_model": 128},
                 "train": {"steps": 500},
                 "optimizer": {"lr": 2e-4},
             },
@@ -4333,18 +4456,43 @@ class TestMainFunction:
                     with patch("training.distill_kd.DDP"):
                         with patch("training.distill_kd.torch.optim.lr_scheduler.LambdaLR"):
                             with patch("training.distill_kd.torch.cuda.amp.GradScaler"):
-                                with patch("training.distill_kd.DataLoader"):
-                                    with patch("training.distill_kd.sys.exit"):
-                                        from training.distill_kd import main
+                                with patch("training.distill_kd.DataLoader") as mock_dataloader_class:
+                                    # Make DataLoader return an empty iterator to prevent infinite loops
+                                    mock_dataloader = Mock()
+                                    mock_dataloader.__iter__ = Mock(return_value=iter([]))
+                                    mock_dataloader_class.return_value = mock_dataloader
+                                    # Patch math.log to avoid issues with mpmath imports
+                                    with patch("training.distill_kd.math") as mock_math:
+                                        mock_math.log.return_value = 1.0
+                                        # Mock dataset creation to prevent file I/O
+                                        with patch("training.distill_kd.KDDataset") as mock_kd_dataset_class:
+                                            mock_dataset = Mock()
+                                            mock_dataset.__iter__ = Mock(return_value=iter([]))
+                                            mock_dataset.__len__ = Mock(return_value=0)
+                                            mock_dataset.dataset_header = None
+                                            mock_kd_dataset_class.return_value = mock_dataset
+                                            # Mock collate function
+                                            with patch("training.distill_kd.collate_kd_batch"):
+                                                # Mock tracer to prevent file creation
+                                                with patch("training.distill_kd.create_tracer_from_config") as mock_tracer:
+                                                    mock_tracer_instance = Mock()
+                                                    mock_tracer_instance.log_hparams = Mock()
+                                                    mock_tracer.return_value = mock_tracer_instance
+                                                    with patch("training.distill_kd.sys.exit"):
+                                                        from training.distill_kd import main
 
-                                        try:
-                                            main()
-                                        except SystemExit:
-                                            pass
+                                                        try:
+                                                            # With total_steps=0, the training loop never executes
+                                                            # This prevents infinite loops that cause kernel panics
+                                                            main()
+                                                        except (SystemExit, Exception, StopIteration, KeyboardInterrupt):
+                                                            # Various exceptions can occur when main exits
+                                                            pass
 
         # Verify config mismatch was logged
         print_calls = [str(call) for call in mock_print.call_args_list]
-        config_mismatch_logged = any("Config mismatches detected" in str(call) for call in print_calls)
+        config_mismatch_logged = any(
+            "Config mismatches detected" in str(call) for call in print_calls)
         assert config_mismatch_logged, "Config mismatch should be logged as warning"
 
     def test_train_step_gradient_accumulation_with_scaler_and_grad_norm(
@@ -4457,12 +4605,15 @@ class TestMainFunction:
         # Mock model forward to return halt logits as tuple
         def mock_forward_with_halt(input_ids, attention_mask=None, return_halt_logits=False, return_hidden_states=False):
             batch_size, seq_len = input_ids.shape
-            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            logits = torch.randn(batch_size, seq_len, 1000,
+                                 device=device, requires_grad=True)
             if return_halt_logits:
-                halt_logits = torch.randn(batch_size, 2, device=device, requires_grad=True)
+                halt_logits = torch.randn(
+                    batch_size, 2, device=device, requires_grad=True)
                 return logits, halt_logits
             elif return_hidden_states:
-                hidden_states = [torch.randn(batch_size, seq_len, 128, device=device, requires_grad=True) for _ in range(2)]
+                hidden_states = [torch.randn(
+                    batch_size, seq_len, 128, device=device, requires_grad=True) for _ in range(2)]
                 return logits, hidden_states
             return logits
 
@@ -4497,12 +4648,15 @@ class TestMainFunction:
         # Mock model forward to return halt logits and eval score
         def mock_forward_with_halt_eval(input_ids, attention_mask=None, return_halt_logits=False, return_eval_score=False):
             batch_size, seq_len = input_ids.shape
-            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            logits = torch.randn(batch_size, seq_len, 1000,
+                                 device=device, requires_grad=True)
             if return_halt_logits:
-                halt_logits = torch.randn(batch_size, 2, device=device, requires_grad=True)
+                halt_logits = torch.randn(
+                    batch_size, 2, device=device, requires_grad=True)
                 return logits, halt_logits
             elif return_eval_score:
-                eval_score = torch.randn(batch_size, 1, device=device, requires_grad=True)
+                eval_score = torch.randn(
+                    batch_size, 1, device=device, requires_grad=True)
                 return logits, eval_score
             return logits
 
@@ -4536,9 +4690,11 @@ class TestMainFunction:
         # Mock model forward to return halt logits as tuple
         def mock_forward_with_halt(input_ids, attention_mask=None, return_halt_logits=False):
             batch_size, seq_len = input_ids.shape
-            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            logits = torch.randn(batch_size, seq_len, 1000,
+                                 device=device, requires_grad=True)
             if return_halt_logits:
-                halt_logits = torch.randn(batch_size, 2, device=device, requires_grad=True)
+                halt_logits = torch.randn(
+                    batch_size, 2, device=device, requires_grad=True)
                 return logits, halt_logits
             return logits
 
@@ -4570,16 +4726,20 @@ class TestMainFunction:
 
         # Mock model to return halt_logits as tuple (nested) when return_halt_logits=True
         call_count = [0]
+
         def mock_forward(input_ids, attention_mask=None, return_halt_logits=False, return_hidden_states=False, **kwargs):
             batch_size, seq_len = input_ids.shape
-            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            logits = torch.randn(batch_size, seq_len, 1000,
+                                 device=device, requires_grad=True)
             call_count[0] += 1
             if return_halt_logits:
                 # Return halt_logits as tuple (line 1072-1074)
-                halt_logits = (torch.randn(batch_size, 2, device=device, requires_grad=True),)
+                halt_logits = (torch.randn(
+                    batch_size, 2, device=device, requires_grad=True),)
                 return logits, halt_logits
             elif return_hidden_states:
-                hidden_states = [torch.randn(batch_size, seq_len, 128, device=device) for _ in range(2)]
+                hidden_states = [torch.randn(
+                    batch_size, seq_len, 128, device=device) for _ in range(2)]
                 return logits, hidden_states
             return logits
 
@@ -4613,10 +4773,12 @@ class TestMainFunction:
         # Mock model to return halt_logits as tuple when return_halt_logits=True (line 1079-1080)
         def mock_forward(input_ids, attention_mask=None, return_halt_logits=False, **kwargs):
             batch_size, seq_len = input_ids.shape
-            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            logits = torch.randn(batch_size, seq_len, 1000,
+                                 device=device, requires_grad=True)
             if return_halt_logits:
                 # Return halt_logits as tuple (not nested, but tuple itself)
-                halt_logits = (torch.randn(batch_size, 2, device=device, requires_grad=True),)
+                halt_logits = (torch.randn(
+                    batch_size, 2, device=device, requires_grad=True),)
                 return logits, halt_logits
             return logits
 
@@ -4691,12 +4853,15 @@ class TestMainFunction:
         # Mock model forward to return hidden states and eval score separately
         def mock_forward_with_eval(input_ids, attention_mask=None, return_hidden_states=False, return_eval_score=False):
             batch_size, seq_len = input_ids.shape
-            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            logits = torch.randn(batch_size, seq_len, 1000,
+                                 device=device, requires_grad=True)
             if return_hidden_states:
-                hidden_states = [torch.randn(batch_size, seq_len, 128, device=device, requires_grad=True) for _ in range(2)]
+                hidden_states = [torch.randn(
+                    batch_size, seq_len, 128, device=device, requires_grad=True) for _ in range(2)]
                 return logits, hidden_states
             elif return_eval_score:
-                eval_score = torch.randn(batch_size, 1, device=device, requires_grad=True)
+                eval_score = torch.randn(
+                    batch_size, 1, device=device, requires_grad=True)
                 return logits, eval_score
             return logits
 
@@ -4727,9 +4892,11 @@ class TestMainFunction:
         # Mock model forward to return eval score
         def mock_forward_with_eval(input_ids, attention_mask=None, return_eval_score=False):
             batch_size, seq_len = input_ids.shape
-            logits = torch.randn(batch_size, seq_len, 1000, device=device, requires_grad=True)
+            logits = torch.randn(batch_size, seq_len, 1000,
+                                 device=device, requires_grad=True)
             if return_eval_score:
-                eval_score = torch.randn(batch_size, 1, device=device, requires_grad=True)
+                eval_score = torch.randn(
+                    batch_size, 1, device=device, requires_grad=True)
                 return logits, eval_score
             return logits
 

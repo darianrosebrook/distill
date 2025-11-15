@@ -31,17 +31,22 @@ def assert_loss_finite(loss_dict: Dict[str, Any], step: int = None) -> None:
         if not torch.isfinite(total_loss).all():
             nan_count = torch.isnan(total_loss).sum().item()
             inf_count = torch.isinf(total_loss).sum().item()
+            # Only call .item() if tensor is scalar
+            if total_loss.numel() == 1:
+                loss_value_str = f"loss value={total_loss.item()}"
+            else:
+                loss_value_str = f"loss shape={total_loss.shape}"
             raise RuntimeError(
                 f"Total loss is not finite{step_msg}: "
-                f"NaN count={nan_count}, Inf count={inf_count}, "
-                f"loss value={total_loss.item()}"
+                f"NaN count={nan_count}, Inf count={inf_count}, {loss_value_str}"
             )
-        if total_loss.item() == 0.0:
+        # Only check zero loss if tensor is scalar
+        if total_loss.numel() == 1 and total_loss.item() == 0.0:
             # Check if all weights are zero (which would cause zero loss)
             non_zero_components = [
                 k
                 for k, v in loss_dict.items()
-                if k != "total" and isinstance(v, torch.Tensor) and v.item() != 0.0
+                if k != "total" and isinstance(v, torch.Tensor) and v.numel() == 1 and v.item() != 0.0
             ]
             if not non_zero_components:
                 raise RuntimeError(
