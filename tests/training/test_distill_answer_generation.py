@@ -5,6 +5,7 @@ Tests model creation, training steps, and configuration loading.
 """
 # @author: @darianrosebrook
 
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
