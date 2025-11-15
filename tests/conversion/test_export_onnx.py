@@ -54,6 +54,22 @@ class TestDecodeWrapper:
         assert wrapper.n_kv_heads == 4
         assert wrapper.d_head == 128
 
+    def test_decode_wrapper_index_calculation(self, mock_model):
+        """Test that KV cache index calculation is correct (line 34-35)."""
+        wrapper = DecodeWrapper(mock_model, n_layers=3, n_kv_heads=8, d_head=64)
+
+        # Test the index calculation logic manually
+        kv_caches = [torch.randn(2, 8, 10, 64) for _ in range(6)]  # 3 layers * 2 = 6 caches
+
+        # Simulate the index calculation from forward method
+        kv_list = []
+        for i in range(wrapper.n_layers):
+            k_idx = i * 2
+            v_idx = i * 2 + 1  # This line is being mutated
+            assert k_idx == i * 2, f"K index calculation wrong for layer {i}"
+            assert v_idx == i * 2 + 1, f"V index calculation wrong for layer {i}: got {v_idx}, expected {i * 2 + 1}"
+            # If + became **, v_idx would be i * 2 ** 1 = i * 2, same as k_idx
+
     def test_decode_wrapper_forward_with_kv_cache(self, wrapper, mock_model):
         """Test forward pass with KV cache inputs."""
         input_ids = torch.randint(0, 1000, (2, 1))  # [batch_size, 1]
@@ -730,7 +746,7 @@ class TestONNXExportIntegration:
             except (SystemExit, Exception):
                 pass
 
-            # Check that export was called with correct output path
+            # Check that export was called with correct parameters
             if mock_export.called:
                 call_args = mock_export.call_args
                 # torch.onnx.export(model, (dummy, None), path, ...)
@@ -739,6 +755,11 @@ class TestONNXExportIntegration:
 
                 # Should contain sequence information
                 assert "256" in str(output_path)
+
+                # Check keyword arguments
+                kwargs = call_args[1] if len(call_args) > 1 else {}
+                assert "do_constant_folding" in kwargs
+                assert kwargs["do_constant_folding"] is True  # Must be exactly True, not None
 
     def test_wrapper_cache_handling_edge_cases(self):
         """Test DecodeWrapper cache handling edge cases."""

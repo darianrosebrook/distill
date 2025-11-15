@@ -125,7 +125,7 @@ class TestInputValidator:
     def test_contains_suspicious_patterns_no_match(self, strict_validator):
         """Test _contains_suspicious_patterns with no matching pattern (line 65)."""
         result = strict_validator._contains_suspicious_patterns("Clean text with no suspicious content")
-        assert not result
+        assert result is False  # Must be exactly False, not None
 
     def test_validate_numeric_input_valid(self, strict_validator):
         """Test validating valid numeric input."""
