@@ -27,6 +27,12 @@ class ModelCfg:
     rope_scaling: str = "dynamic"  # ["none","linear","dynamic"]
     dropout: float = 0.0
 
+    # Intermediate layer KD config (distillation-only, ignored at inference)
+    use_intermediate_layers: bool = False
+    teacher_d_model: Optional[int] = None
+    teacher_n_layers: Optional[int] = None
+    layer_mapping: Optional[List[Tuple[int, int]]] = None
+
 
 class RMSNorm(nn.Module):
     def __init__(self, d: int, eps: float = 1e-6):
@@ -320,6 +326,35 @@ class StudentLM(nn.Module):
         if use_halt_head:
             # Halt head outputs 2 logits: [continue, halt]
             self.halt_head = nn.Linear(self.cfg.d_model, 2)
+
+        # Intermediate layer aligner (optional, distillation-only)
+        self.intermediate_aligner = None
+        if self.cfg.use_intermediate_layers and self.cfg.teacher_d_model is not None and self.cfg.teacher_n_layers is not None:
+            from .intermediate_aligner import IntermediateAligner
+
+            student_n_layers = self.cfg.n_layers
+            teacher_n_layers = self.cfg.teacher_n_layers
+
+            # Use provided mapping or compute ratio-based mapping with clamping
+            if self.cfg.layer_mapping is not None:
+                mapping = self.cfg.layer_mapping
+            else:
+                mapping = []
+                # map [0..Ls-1] → [0..Lt-1] using ratio, with clamping
+                for si in range(student_n_layers):
+                    if student_n_layers == 1:
+                        teacher_idx = 0
+                    else:
+                        ratio = si / (student_n_layers - 1)
+                        teacher_idx = int(round(ratio * (teacher_n_layers - 1)))
+                    teacher_idx = max(0, min(teacher_n_layers - 1, teacher_idx))
+                    mapping.append((si, teacher_idx))
+
+            self.intermediate_aligner = IntermediateAligner(
+                mapping=mapping,
+                student_d_model=self.cfg.d_model,
+                teacher_d_model=self.cfg.teacher_d_model,
+            )
 
     def gradient_checkpointing_enable(self):
         """Enable gradient checkpointing to reduce memory usage during training."""

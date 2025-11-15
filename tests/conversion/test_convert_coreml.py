@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 import pytest
 import torch
 import torch.nn as nn
+import numpy as np
 
 # Import the module using importlib due to filename with digits
 import importlib
@@ -1048,3 +1049,498 @@ class TestCoreMLConversionIntegration:
         # Test contract structure validation (implicit through successful loads)
         # Valid contracts should load successfully
         # Invalid contracts would cause JSONDecodeError (tested above)
+
+    @patch("conversion.convert_coreml.detect_int64_tensors_on_attention_paths", return_value=[])
+    def test_contract_parsing_enumerated_t_handling(self, mock_detect_int64, tmp_path):
+        """Test contract parsing with enumerated_T handling."""
+        contract_data = {
+            "inputs": [{"name": "input_ids", "dtype": "int32", "shape": ["B", "T"]}],
+            "outputs": [{"name": "logits", "dtype": "float32"}],
+            "enumerated_T": [512, 1024, 2048]
+        }
+
+        contract_file = tmp_path / "contract.json"
+        with open(contract_file, "w") as f:
+            json.dump(contract_data, f)
+
+        with patch.dict("sys.modules", {"torch": Mock(), "coremltools": Mock(), "numpy": np}):
+            import sys
+            mock_torch = sys.modules["torch"]
+            mock_ct = sys.modules["coremltools"]
+            mock_np = sys.modules["numpy"]
+
+            # Mock numpy dtypes
+            mock_np.int32 = np.int32
+            mock_np.float32 = np.float32
+
+            mock_mlmodel = Mock()
+            mock_spec = Mock()
+            mock_output = Mock()
+            mock_output.name = "logits"
+            mock_spec.description.output = [mock_output]
+            mock_mlmodel.get_spec.return_value = mock_spec
+            mock_mlmodel.save = Mock()
+            mock_ct.convert.return_value = mock_mlmodel
+
+            output_path = str(tmp_path / "model.mlpackage")
+
+            # Test with enumerated_T - should use first value (512)
+            result = convert_pytorch_to_coreml(
+                pytorch_model=Mock(),
+                output_path=output_path,
+                contract_path=str(contract_file)
+            )
+
+            assert result == output_path
+            # Verify ct.TensorType was called with shape (1, 512)
+            mock_ct.TensorType.assert_called_once()
+            call_args = mock_ct.TensorType.call_args
+            assert call_args[1]['shape'] == (1, 512)
+
+    @patch("conversion.convert_coreml.detect_int64_tensors_on_attention_paths", return_value=[])
+    def test_contract_parsing_dtype_mapping(self, mock_detect_int64, tmp_path):
+        """Test contract parsing with various dtype mappings."""
+        # Test int64 dtype
+        contract_data = {
+            "inputs": [{"name": "input_ids", "dtype": "int64", "shape": ["B", "T"]}],
+            "outputs": [{"name": "logits", "dtype": "float32"}],
+            "enumerated_T": [256]
+        }
+
+        contract_file = tmp_path / "contract.json"
+        with open(contract_file, "w") as f:
+            json.dump(contract_data, f)
+
+        with patch.dict("sys.modules", {"torch": Mock(), "coremltools": Mock(), "numpy": np}):
+            import sys
+            mock_ct = sys.modules["coremltools"]
+            mock_np = sys.modules["numpy"]
+
+            # Mock numpy dtypes
+            mock_np.int64 = np.int64
+
+            mock_mlmodel = Mock()
+            mock_spec = Mock()
+            mock_output = Mock()
+            mock_output.name = "logits"
+            mock_spec.description.output = [mock_output]
+            mock_mlmodel.get_spec.return_value = mock_spec
+            mock_mlmodel.save = Mock()
+            mock_ct.convert.return_value = mock_mlmodel
+
+            output_path = str(tmp_path / "model.mlpackage")
+
+            result = convert_pytorch_to_coreml(
+                pytorch_model=Mock(),
+                output_path=output_path,
+                contract_path=str(contract_file)
+            )
+
+            assert result == output_path
+            # Verify int64 dtype was used
+            call_args = mock_ct.TensorType.call_args
+            assert call_args[1]['dtype'] == np.int64
+
+    @patch("conversion.convert_coreml.detect_int64_tensors_on_attention_paths", return_value=[])
+    def test_contract_parsing_invalid_enumerated_t(self, mock_detect_int64, tmp_path):
+        """Test contract parsing with invalid enumerated_T values."""
+        # Test empty enumerated_T list
+        contract_data = {
+            "inputs": [{"name": "input_ids", "dtype": "int32", "shape": ["B", "T"]}],
+            "outputs": [{"name": "logits", "dtype": "float32"}],
+            "enumerated_T": []
+        }
+
+        contract_file = tmp_path / "contract.json"
+        with open(contract_file, "w") as f:
+            json.dump(contract_data, f)
+
+        with patch.dict("sys.modules", {"torch": Mock(), "coremltools": Mock(), "numpy": np}):
+            import sys
+            mock_ct = sys.modules["coremltools"]
+            mock_np = sys.modules["numpy"]
+
+            mock_np.int32 = np.int32
+
+            mock_mlmodel = Mock()
+            mock_spec = Mock()
+            mock_output = Mock()
+            mock_output.name = "logits"
+            mock_spec.description.output = [mock_output]
+            mock_mlmodel.get_spec.return_value = mock_spec
+            mock_mlmodel.save = Mock()
+            mock_ct.convert.return_value = mock_mlmodel
+
+            output_path = str(tmp_path / "model.mlpackage")
+
+            # Should fall back to default seq_len of 128
+            result = convert_pytorch_to_coreml(
+                pytorch_model=Mock(),
+                output_path=output_path,
+                contract_path=str(contract_file)
+            )
+
+            assert result == output_path
+            call_args = mock_ct.TensorType.call_args
+            assert call_args[1]['shape'] == (1, 128)  # Default fallback
+
+    @patch("conversion.convert_coreml.detect_int64_tensors_on_attention_paths", return_value=[])
+    def test_contract_parsing_unknown_dtype_fallback(self, mock_detect_int64, tmp_path):
+        """Test contract parsing with unknown dtype falls back to int32."""
+        contract_data = {
+            "inputs": [{"name": "input_ids", "dtype": "unknown_dtype", "shape": ["B", "T"]}],
+            "outputs": [{"name": "logits", "dtype": "float32"}],
+            "enumerated_T": [256]
+        }
+
+        contract_file = tmp_path / "contract.json"
+        with open(contract_file, "w") as f:
+            json.dump(contract_data, f)
+
+        with patch.dict("sys.modules", {"torch": Mock(), "coremltools": Mock(), "numpy": np}):
+            import sys
+            mock_ct = sys.modules["coremltools"]
+            mock_np = sys.modules["numpy"]
+
+            mock_np.int32 = np.int32
+
+            mock_mlmodel = Mock()
+            mock_spec = Mock()
+            mock_output = Mock()
+            mock_output.name = "logits"
+            mock_spec.description.output = [mock_output]
+            mock_mlmodel.get_spec.return_value = mock_spec
+            mock_mlmodel.save = Mock()
+            mock_ct.convert.return_value = mock_mlmodel
+
+            output_path = str(tmp_path / "model.mlpackage")
+
+            result = convert_pytorch_to_coreml(
+                pytorch_model=Mock(),
+                output_path=output_path,
+                contract_path=str(contract_file)
+            )
+
+            assert result == output_path
+            # Should fall back to int32 for unknown dtype
+            call_args = mock_ct.TensorType.call_args
+            assert call_args[1]['dtype'] == np.int32
+
+    @patch("conversion.convert_coreml.detect_int64_tensors_on_attention_paths", return_value=[])
+    def test_contract_parsing_invalid_input_spec_type(self, mock_detect_int64, tmp_path, capsys):
+        """Test contract parsing with invalid input specification type falls back to inference."""
+        contract_data = {
+            "inputs": ["invalid_string_instead_of_dict"],
+            "outputs": [{"name": "logits", "dtype": "float32"}]
+        }
+
+        contract_file = tmp_path / "contract.json"
+        with open(contract_file, "w") as f:
+            json.dump(contract_data, f)
+
+        with patch.dict("sys.modules", {"torch": Mock(), "coremltools": Mock()}):
+            import sys
+            mock_torch = sys.modules["torch"]
+            mock_ct = sys.modules["coremltools"]
+
+            # Mock successful inference fallback
+            mock_mlmodel = Mock()
+            mock_spec = Mock()
+            mock_output = Mock()
+            mock_output.name = "logits"
+            mock_spec.description.output = [mock_output]
+            mock_mlmodel.get_spec.return_value = mock_spec
+            mock_mlmodel.save = Mock()
+            mock_ct.convert.return_value = mock_mlmodel
+
+            output_path = str(tmp_path / "model.mlpackage")
+
+            # Should fall back to inference and succeed
+            result = convert_pytorch_to_coreml(
+                pytorch_model=Mock(),
+                output_path=output_path,
+                contract_path=str(contract_file)
+            )
+
+            assert result == output_path
+
+            # Check that warning was printed about contract failure
+            captured = capsys.readouterr()
+            assert "Failed to load/validate contract.json" in captured.out
+            assert "Input specification must be a dictionary" in captured.out
+
+    def test_convert_pytorch_to_coreml_none_model_validation(self, tmp_path):
+        """Test convert_pytorch_to_coreml with None model validation."""
+        output_path = str(tmp_path / "model.mlpackage")
+
+        with pytest.raises(ValueError, match="pytorch_model cannot be None"):
+            convert_pytorch_to_coreml(
+                pytorch_model=None,
+                output_path=output_path
+            )
+
+    def test_convert_pytorch_to_coreml_invalid_output_path(self, tmp_path):
+        """Test convert_pytorch_to_coreml with invalid output path."""
+        # Create a file where we expect a directory
+        invalid_path = tmp_path / "existing_file.txt"
+        invalid_path.write_text("existing content")
+
+        with pytest.raises(ValueError, match="Output path exists and is not a directory"):
+            convert_pytorch_to_coreml(
+                pytorch_model=Mock(),
+                output_path=str(invalid_path)
+            )
+
+    def test_convert_pytorch_to_coreml_invalid_compute_units(self):
+        """Test convert_pytorch_to_coreml with invalid compute units."""
+        with pytest.raises(ValueError, match="compute_units must be one of"):
+            convert_pytorch_to_coreml(
+                pytorch_model=Mock(),
+                output_path="/tmp/test.mlpackage",
+                compute_units="invalid_units"
+            )
+
+    def test_convert_pytorch_to_coreml_invalid_contract_path(self):
+        """Test convert_pytorch_to_coreml with non-existent contract path."""
+        with pytest.raises(FileNotFoundError, match="Contract file not found"):
+            convert_pytorch_to_coreml(
+                pytorch_model=Mock(),
+                output_path="/tmp/test.mlpackage",
+                contract_path="/nonexistent/contract.json"
+            )
+
+    def test_convert_pytorch_to_coreml_contract_path_not_file(self, tmp_path):
+        """Test convert_pytorch_to_coreml with contract path that is not a file."""
+        # Create a directory instead of a file
+        contract_dir = tmp_path / "contract_dir"
+        contract_dir.mkdir()
+
+        with pytest.raises(ValueError, match="Contract path is not a file"):
+            convert_pytorch_to_coreml(
+                pytorch_model=Mock(),
+                output_path="/tmp/test.mlpackage",
+                contract_path=str(contract_dir)
+            )
+
+    @patch("conversion.convert_coreml.detect_int64_tensors_on_attention_paths", return_value=[])
+    def test_convert_pytorch_to_coreml_inference_fallback_int32_success(self, mock_detect_int64, tmp_path):
+        """Test inference fallback with int32[1,128] shape success."""
+        with patch.dict("sys.modules", {"torch": Mock(), "coremltools": Mock(), "numpy": np}):
+            import sys
+            mock_torch = sys.modules["torch"]
+            mock_ct = sys.modules["coremltools"]
+            mock_np = sys.modules["numpy"]
+
+            # Mock numpy dtypes
+            mock_np.int32 = np.int32
+
+            # Mock successful model inference with int32[1,128]
+            mock_model = Mock()
+            mock_model.return_value = Mock()  # Model accepts int32[1,128]
+
+            mock_mlmodel = Mock()
+            mock_spec = Mock()
+            mock_output = Mock()
+            mock_output.name = "logits"
+            mock_spec.description.output = [mock_output]
+            mock_mlmodel.get_spec.return_value = mock_spec
+            mock_mlmodel.save = Mock()
+            mock_ct.convert.return_value = mock_mlmodel
+
+            output_path = str(tmp_path / "model.mlpackage")
+
+            result = convert_pytorch_to_coreml(
+                pytorch_model=mock_model,
+                output_path=output_path
+            )
+
+            assert result == output_path
+            # Verify int32[1,128] shape was inferred
+            call_args = mock_ct.TensorType.call_args
+            assert call_args[1]['shape'] == (1, 128)
+            assert call_args[1]['dtype'] == np.int32
+            assert call_args[1]['name'] == "input_ids"
+
+    @patch("conversion.convert_coreml.detect_int64_tensors_on_attention_paths", return_value=[])
+    def test_convert_pytorch_to_coreml_inference_fallback_float32_success(self, mock_detect_int64, tmp_path, capsys):
+        """Test inference fallback with float32[1,128,64] shape success after int32 fails."""
+        with patch.dict("sys.modules", {"torch": Mock(), "coremltools": Mock(), "numpy": np}):
+            import sys
+            mock_torch = sys.modules["torch"]
+            mock_ct = sys.modules["coremltools"]
+            mock_np = sys.modules["numpy"]
+
+            # Mock numpy dtypes
+            mock_np.float32 = np.float32
+
+            # Mock model that fails int32[1,128] but succeeds with float32[1,128,64]
+            mock_model = Mock()
+            mock_model.side_effect = [
+                Exception("int32 failed"),  # First call (int32) fails
+                Mock()  # Second call (float32) succeeds
+            ]
+
+            mock_mlmodel = Mock()
+            mock_spec = Mock()
+            mock_output = Mock()
+            mock_output.name = "logits"
+            mock_spec.description.output = [mock_output]
+            mock_mlmodel.get_spec.return_value = mock_spec
+            mock_mlmodel.save = Mock()
+            mock_ct.convert.return_value = mock_mlmodel
+
+            output_path = str(tmp_path / "model.mlpackage")
+
+            result = convert_pytorch_to_coreml(
+                pytorch_model=mock_model,
+                output_path=output_path
+            )
+
+            assert result == output_path
+            # Verify float32[1,128,64] shape was inferred
+            call_args = mock_ct.TensorType.call_args
+            assert call_args[1]['shape'] == (1, 128, 64)
+            assert call_args[1]['dtype'] == np.float32
+            assert call_args[1]['name'] == "input"
+
+            # Check that error was logged for int32 failure
+            captured = capsys.readouterr()
+            assert "int32[1,128]" in captured.out
+
+    @patch("conversion.convert_coreml.detect_int64_tensors_on_attention_paths", return_value=[])
+    def test_convert_pytorch_to_coreml_inference_fallback_common_shapes(self, mock_detect_int64, tmp_path, capsys):
+        """Test inference fallback with common shapes [1,512], [1,1024], [1,2048]."""
+        with patch.dict("sys.modules", {"torch": Mock(), "coremltools": Mock(), "numpy": np}):
+            import sys
+            mock_torch = sys.modules["torch"]
+            mock_ct = sys.modules["coremltools"]
+            mock_np = sys.modules["numpy"]
+
+            # Mock numpy dtypes
+            mock_np.int32 = np.int32
+
+            # Mock model that fails int32[1,128] and float32[1,128,64], but succeeds with [1,512]
+            mock_model = Mock()
+            call_count = 0
+            def side_effect(input_tensor):
+                nonlocal call_count
+                call_count += 1
+                if call_count <= 2:  # First two calls (int32 and float32) fail
+                    raise Exception(f"Shape {call_count} failed")
+                return Mock()  # Third call ([1,512]) succeeds
+
+            mock_model.side_effect = side_effect
+
+            mock_mlmodel = Mock()
+            mock_spec = Mock()
+            mock_output = Mock()
+            mock_output.name = "logits"
+            mock_spec.description.output = [mock_output]
+            mock_mlmodel.get_spec.return_value = mock_spec
+            mock_mlmodel.save = Mock()
+            mock_ct.convert.return_value = mock_mlmodel
+
+            output_path = str(tmp_path / "model.mlpackage")
+
+            result = convert_pytorch_to_coreml(
+                pytorch_model=mock_model,
+                output_path=output_path
+            )
+
+            assert result == output_path
+            # Verify [1,512] shape was inferred
+            call_args = mock_ct.TensorType.call_args
+            assert call_args[1]['shape'] == (1, 512)
+            assert call_args[1]['dtype'] == np.int32
+            assert call_args[1]['name'] == "input_ids"
+
+    @patch("conversion.convert_coreml.detect_int64_tensors_on_attention_paths", return_value=[])
+    def test_convert_pytorch_to_coreml_inference_fallback_all_fail_allow_placeholder(self, mock_detect_int64, tmp_path, capsys):
+        """Test inference fallback when all shapes fail, with allow_placeholder=True."""
+        with patch.dict("sys.modules", {"torch": Mock(), "coremltools": Mock(), "numpy": np}):
+            import sys
+            mock_torch = sys.modules["torch"]
+            mock_ct = sys.modules["coremltools"]
+            mock_np = sys.modules["numpy"]
+
+            # Mock numpy dtypes
+            mock_np.int32 = np.int32
+
+            # Mock model that always fails
+            mock_model = Mock()
+            mock_model.side_effect = Exception("All shapes failed")
+
+            mock_mlmodel = Mock()
+            mock_spec = Mock()
+            mock_output = Mock()
+            mock_output.name = "logits"
+            mock_spec.description.output = [mock_output]
+            mock_mlmodel.get_spec.return_value = mock_spec
+            mock_mlmodel.save = Mock()
+            mock_ct.convert.return_value = mock_mlmodel
+
+            output_path = str(tmp_path / "model.mlpackage")
+
+            result = convert_pytorch_to_coreml(
+                pytorch_model=mock_model,
+                output_path=output_path,
+                allow_placeholder=True
+            )
+
+            assert result == output_path
+            # Verify default shape is used
+            call_args = mock_ct.TensorType.call_args
+            assert call_args[1]['shape'] == (1, 128)
+            assert call_args[1]['dtype'] == np.int32
+            assert call_args[1]['name'] == "input_ids"
+
+            # Check that warning was printed
+            captured = capsys.readouterr()
+            assert "WARN:" in captured.out
+            assert "Could not infer input shape from model" in captured.out
+            assert "Using default shape=(1, 128) dtype=int32" in captured.out
+
+    @patch("conversion.convert_coreml.detect_int64_tensors_on_attention_paths", return_value=[])
+    def test_convert_pytorch_to_coreml_inference_fallback_all_fail_no_placeholder(self, mock_detect_int64, tmp_path, capsys):
+        """Test inference fallback when all shapes fail, with allow_placeholder=False."""
+        with patch.dict("sys.modules", {"torch": Mock(), "coremltools": Mock(), "numpy": np}):
+            import sys
+            mock_torch = sys.modules["torch"]
+            mock_ct = sys.modules["coremltools"]
+            mock_np = sys.modules["numpy"]
+
+            # Mock numpy dtypes
+            mock_np.int32 = np.int32
+
+            # Mock model that always fails
+            mock_model = Mock()
+            mock_model.side_effect = Exception("All shapes failed")
+
+            mock_mlmodel = Mock()
+            mock_spec = Mock()
+            mock_output = Mock()
+            mock_output.name = "logits"
+            mock_spec.description.output = [mock_output]
+            mock_mlmodel.get_spec.return_value = mock_spec
+            mock_mlmodel.save = Mock()
+            mock_ct.convert.return_value = mock_mlmodel
+
+            output_path = str(tmp_path / "model.mlpackage")
+
+            result = convert_pytorch_to_coreml(
+                pytorch_model=mock_model,
+                output_path=output_path,
+                allow_placeholder=False
+            )
+
+            assert result == output_path
+            # Verify default shape is still used
+            call_args = mock_ct.TensorType.call_args
+            assert call_args[1]['shape'] == (1, 128)
+            assert call_args[1]['dtype'] == np.int32
+            assert call_args[1]['name'] == "input_ids"
+
+            # Check that error was printed (not warning)
+            captured = capsys.readouterr()
+            assert "ERROR:" in captured.out
+            assert "Could not infer input shape from model" in captured.out
