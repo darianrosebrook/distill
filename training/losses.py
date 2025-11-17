@@ -533,15 +533,17 @@ def early_tool_call_loss(
 
         if json_token_ids:
             # Compute log-probabilities for JSON start tokens
-            first_n_logits = logits[:, :N, :]  # [B, N, V]
-            log_probs = F.log_softmax(first_n_logits, dim=-1)  # [B, N, V]
+            # Use min(N, T) to handle cases where sequence is shorter than N
+            actual_n = min(N, T)
+            first_n_logits = logits[:, :actual_n, :]  # [B, actual_n, V]
+            log_probs = F.log_softmax(first_n_logits, dim=-1)  # [B, actual_n, V]
 
             # Extract log-probs for JSON tokens
             json_log_probs_list = []
             for token_id in json_token_ids:
                 try:
                     json_log_probs_list.append(
-                        log_probs[:, :, token_id])  # [B, N]
+                        log_probs[:, :, token_id])  # [B, actual_n]
                 except IndexError:
                     # Skip token IDs that are out of vocabulary bounds
                     pass
@@ -549,14 +551,14 @@ def early_tool_call_loss(
             if json_log_probs_list:
                 # Take max log-prob across JSON tokens at each position
                 json_log_probs = torch.stack(
-                    json_log_probs_list, dim=0).max(dim=0)[0]  # [B, N]
+                    json_log_probs_list, dim=0).max(dim=0)[0]  # [B, actual_n]
 
                 # Negative log-likelihood (we want high probability, so minimize negative)
-                json_nll = -json_log_probs  # [B, N]
+                json_nll = -json_log_probs  # [B, actual_n]
 
                 # Apply mask and average
                 mask_expanded = should_use_mask.unsqueeze(
-                    1).expand(-1, N)  # [B, N]
+                    1).expand(-1, actual_n)  # [B, actual_n]
                 json_nll_masked = json_nll * mask_expanded
                 json_nll_mean = json_nll_masked.sum() / (mask_expanded.sum() + 1e-8)
 

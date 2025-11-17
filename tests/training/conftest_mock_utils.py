@@ -182,6 +182,26 @@ def create_mock_tokenizer_subscriptable(
         return encode_plus_impl(text, **kwargs)
     tokenizer.__call__ = custom_call
     
+    # Add convert_tokens_to_ids method for token ID conversion
+    # Default mapping for common tokens
+    default_token_map = {
+        "{": 100,
+        "[": 101,
+        '"': 102,
+        "}": 103,
+        "]": 104,
+    }
+    
+    def convert_tokens_to_ids_impl(token):
+        """Convert token string to token ID."""
+        # Return from default map if available
+        if token in default_token_map:
+            return default_token_map[token]
+        # Otherwise return a default token ID (within vocab size)
+        return hash(token) % vocab_size if vocab_size > 0 else 100
+    
+    tokenizer.convert_tokens_to_ids = convert_tokens_to_ids_impl
+    
     return tokenizer
 
 
