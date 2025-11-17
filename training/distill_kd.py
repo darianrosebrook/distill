@@ -1734,9 +1734,11 @@ def train_step(
                 # Add to loss dict with configurable weight
                 intermediate_weight = kd_cfg.get(
                     "intermediate_layer_weight", 0.1)
-                loss_dict["intermediate_layer"] = intermediate_loss
+                # intermediate_loss is a dict with "total" key
+                intermediate_total = intermediate_loss.get("total", torch.tensor(0.0, device=device))
+                loss_dict["intermediate_layer"] = intermediate_total.item() if torch.is_tensor(intermediate_total) else intermediate_total
                 loss_dict["total"] = loss_dict["total"] + \
-                    intermediate_weight * intermediate_loss
+                    intermediate_weight * intermediate_total
 
         # ====================================================================
         # PRIORITY 3: JSON Repair Loop + Metric
