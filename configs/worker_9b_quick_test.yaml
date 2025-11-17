@@ -1,0 +1,70 @@
+arch:
+  d_model: 256  # Tiny model for quick test
+  n_layers: 2
+  n_heads: 4
+  n_kv_heads: 2
+  d_head: 64
+  vocab_size: 32000
+  rope_theta: 10000
+  rope_scaling: "dynamic"
+  norm: "rms"
+  mlp: "swiglu"
+  dropout: 0.0
+model:  # Alias for validation
+  d_model: 256
+  n_layers: 2
+  n_heads: 4
+  n_kv_heads: 2
+  d_head: 64
+  vocab_size: 32000
+  rope_theta: 10000
+  rope_scaling: "dynamic"
+  dropout: 0.0
+init:
+  base_checkpoint: null
+optimizer:
+  name: adamw
+  lr: 2.0e-4
+  betas: [0.9, 0.95]
+  weight_decay: 0.1
+train:
+  seq_lengths: [128, 256]  # Short sequences for quick test
+  micro_batch_size: 2
+  grad_accum: 4
+  steps: 4000  # Extended stress test
+  total_steps: 4000
+  save_every: 100  # Save checkpoint every 100 steps
+  log_every: 2
+  fp16: true
+  grad_checkpointing: false  # Disable for speed
+training:  # Alias for validation
+  steps: 4000
+  batch_size: 2
+  seq_length: 256
+  grad_accum_steps: 4
+  lr: 2.0e-4
+  save_every: 5
+io:
+  tokenizer_path: models/student/tokenizer
+  train_shards: [data/kd_mix.jsonl]
+  val_shards: []
+role: "worker"
+distillation:
+  type: "standard_kd"
+  kl_weight: 0.5
+  ce_teacher_weight: 0.3
+  ce_ground_truth_weight: 0.2
+  w_tool: 0.15
+  w_args: 0.15
+  w_integr: 0.10
+kd:
+  teacher_endpoint: "http://teacher.local"
+  kd_temperature: 2.0
+  teacher_logits_available: false
+curriculum:
+  schedule: []
+tracing:
+  log_dir: "runs"
+  use_tensorboard: false
+  use_wandb: false
+

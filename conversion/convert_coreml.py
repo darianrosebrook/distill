@@ -529,6 +529,7 @@ def convert_onnx_to_coreml(
         f"[convert_coreml] Converting ONNX→CoreML (target={target}, compute_units={compute_units})"
     )
 
+    mlmodel = None
     try:
         # Try public API: ct.convert with auto-detection
         mlmodel = ct.convert(
@@ -550,7 +551,7 @@ def convert_onnx_to_coreml(
                 print(
                     f"[convert_coreml] Renamed output '{old_name}' to 'logits'")
 
-    except Exception:
+    except Exception as e:
         # ONNX→CoreML conversion is not supported by CoreMLTools 9.0
         # This is a documented limitation, not a bug
         # Production path: Use PyTorch→CoreML conversion instead
@@ -565,6 +566,7 @@ def convert_onnx_to_coreml(
             return create_placeholder(output_path, onnx_path, error_msg)
         else:
             print("[convert_coreml] ERROR: ONNX→CoreML conversion not supported")
+            print(f"[convert_coreml] Error details: {e}")
             print("\n[convert_coreml] REMEDIATION:")
             print("  ONNX is not a supported production input to CoreML.")
             print("  For production conversion:")
@@ -572,11 +574,15 @@ def convert_onnx_to_coreml(
             print("  2. Use --backend pytorch with the PyTorch model")
             print("  3. Use --allow-placeholder only for smoke tests")
             sys.exit(2)
+            return  # Never reached, but helps static analysis
 
     # Apply FP16 quantization if requested (optional)
     # Note: mlprogram already uses FP16 by default
 
-    # Save model
+    # Save model (only if conversion succeeded)
+    if mlmodel is None:
+        raise RuntimeError("Conversion failed: mlmodel is None")
+    
     output_path_obj = Path(output_path)
     output_path_obj.parent.mkdir(parents=True, exist_ok=True)
     mlmodel.save(str(output_path_obj))
@@ -692,6 +698,7 @@ Examples:
             )
             print("\nSee docs/DEPLOYMENT.md for detailed environment setup instructions.")
             sys.exit(1)
+            return  # Never reached, but helps static analysis and prevents continuation in tests
     else:
         print("[convert_coreml] ⚠️  Skipping version check for toy model (testing mode)")
 

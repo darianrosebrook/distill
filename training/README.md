@@ -11,6 +11,15 @@ This directory contains the complete training pipeline for distilling student mo
 - **Code-Mode Training**: Latent reasoning and token reduction
 - **Quantization-Aware Training (QAT)**: INT8 quantization
 
+## Device Support
+
+All training scripts automatically detect and use the best available device:
+- **CUDA** (NVIDIA GPUs) - highest priority
+- **MPS** (Apple Silicon) - second priority  
+- **CPU** - fallback
+
+Device detection is handled by `device_utils.get_training_device()` which is used consistently across all training scripts.
+
 ## Key Training Scripts
 
 ### `distill_kd.py` (Main Training Script)

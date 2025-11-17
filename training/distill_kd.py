@@ -2375,7 +2375,8 @@ def main():
         device = torch.device(f"cuda:{args.local_rank}")
         is_main_process = args.local_rank == 0
     else:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        from training.device_utils import get_training_device
+        device = get_training_device()
         is_main_process = True
 
     # Load configs (with env var overrides)
@@ -2850,8 +2851,12 @@ def main():
     save_every = train_cfg.get("save_every", 2000)
     log_every = train_cfg.get("log_every", 50)
 
-    # Initialize training tracer
-    run_name = f"worker_9b_kd_{start_step}"
+    # Initialize training tracer with unique run name
+    # Use config run_name if provided, otherwise generate from total_steps
+    run_name = cfg.get("tracing", {}).get("run_name")
+    if not run_name:
+        # Generate unique run name based on total steps and start step
+        run_name = f"worker_9b_kd_{total_steps}s_{start_step}"
     tracer = create_tracer_from_config(
         cfg, run_name=run_name) if is_main_process else None
 
@@ -3193,7 +3198,7 @@ def main():
                                         "speed/ttft_ms_p95": aggregated["ttft_ms"]["p95"],
                                         "speed/tps_p50": aggregated["tps"]["p50"],
                                         "speed/tps_p95": aggregated["tps"]["p95"],
-                                        "speed/ttfa_tokens_p95": aggregated["ttfa_tokens"]["p95"],
+                                        "speed/ttfa_tokens_p95": aggregated["ttfa_tokens"]["p95"] if aggregated["ttfa_tokens"]["p95"] >= 0 else None,
                                         # Tag: export=False (proxy metrics)
                                         "speed/export": 0.0,
                                     },
@@ -3237,17 +3242,26 @@ def main():
                         save_every, max(100, save_every // 4)
                     )  # Save 4x more frequently for large models
 
-                should_save_checkpoint = step % checkpoint_frequency == 0 and is_main_process
+                # Track last checkpoint step to avoid duplicate saves
+                if not hasattr(train_step, "_last_checkpoint_step"):
+                    train_step._last_checkpoint_step = -1
 
+                should_save_checkpoint = False
+                is_regular_save = step % checkpoint_frequency == 0 and is_main_process
+                
                 # Always save checkpoint at milestones (10%, 25%, 50%, 75%, 90%, 100%)
                 total_steps = train_cfg.get("steps", 10000)
                 milestone_steps = [int(total_steps * pct)
                                    for pct in [0.1, 0.25, 0.5, 0.75, 0.9, 1.0]]
-                if step in milestone_steps:
+                is_milestone = step in milestone_steps
+                
+                # Only save if we haven't already saved at this step
+                if (is_regular_save or is_milestone) and train_step._last_checkpoint_step != step:
                     should_save_checkpoint = True
-                    print(
-                        f"[distill_kd] Milestone checkpoint at {step}/{total_steps} steps ({step / total_steps:.1%})"
-                    )
+                    if is_milestone:
+                        print(
+                            f"[distill_kd] Milestone checkpoint at {step}/{total_steps} steps ({step / total_steps:.1%})"
+                        )
 
                 if should_save_checkpoint:
                     # Capture RNG states for reproducibility
@@ -3282,35 +3296,39 @@ def main():
                         checkpoint_path=checkpoint_path,
                         dataset_position=step * effective_batch_size,
                     )
+                    
+                    # Track last checkpoint step to prevent duplicate saves
+                    train_step._last_checkpoint_step = step
 
-        # Final checkpoint
+        # Final checkpoint (only if not already saved at final step)
         if is_main_process:
-            # Capture RNG states for reproducibility
-            import random
-            import numpy as np
+            # Check if we already saved at the final step
+            last_checkpoint_step = getattr(train_step, "_last_checkpoint_step", -1)
+            if last_checkpoint_step != step:
+                # Capture RNG states for reproducibility
+                import random
+                import numpy as np
 
-            rng_states = {
-                "python": random.getstate(),
-                "numpy": np.random.get_state(),
-                "torch": torch.get_rng_state(),
-                "torch_cuda": torch.cuda.get_rng_state() if torch.cuda.is_available() else None,
-            }
+                rng_states = {
+                    "python": random.getstate(),
+                    "numpy": np.random.get_state(),
+                    "torch": torch.get_rng_state(),
+                    "torch_cuda": torch.cuda.get_rng_state() if torch.cuda.is_available() else None,
+                }
 
-            save_checkpoint(
-                model=model,
-                optimizer=optimizer,
-                step=step,
-                loss=loss_dict.get("total", 0.0),
-                output_dir=output_dir,
-                config=cfg,
-                loss_dict=loss_dict,
-                rng_states=rng_states,
-                data_shard_index=current_shard_index,
-                dataset_fingerprint=dataset.dataset_fingerprint
-                if hasattr(dataset, "dataset_fingerprint")
-                else None,
-                scaler=scaler,
-            )
+                save_checkpoint(
+                    model=model,
+                    optimizer=optimizer,
+                    step=step,
+                    loss=loss_dict.get("total", 0.0),
+                    output_dir=output_dir,
+                    config=cfg,
+                    loss_dict=loss_dict,
+                    rng_states=rng_states,
+                    data_shard_index=current_shard_index,
+                    dataset_fingerprint=dataset.dataset_fingerprint if hasattr(dataset, "dataset_fingerprint") else None,
+                    scaler=scaler,
+                )
 
             # Close tracer and save summary
         if tracer:

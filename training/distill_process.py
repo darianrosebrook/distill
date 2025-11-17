@@ -320,7 +320,8 @@ def main():
                     help="Log every N steps")
     args = ap.parse_args()
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    from training.device_utils import get_training_device
+    device = get_training_device()
 
     # Load configs
     cfg = merge_configs(args.config)

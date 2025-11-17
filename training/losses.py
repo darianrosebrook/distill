@@ -678,7 +678,12 @@ def combined_kd_loss(
         0.0, device=student_logits.device, dtype=student_logits.dtype)
 
     # KL divergence loss (if teacher logits available)
-    if teacher_logits is not None and kl_weight > 0:
+    if kl_weight > 0:
+        if teacher_logits is None:
+            raise ValueError(
+                f"kl_weight={kl_weight} > 0 but teacher_logits is None. "
+                "Either set kl_weight=0.0 or provide teacher_logits in the batch."
+            )
         kl_loss = kl_divergence(
             student_logits, teacher_logits, temperature=kd_temperature)
         losses["kl_div"] = kl_loss
