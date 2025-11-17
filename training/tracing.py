@@ -39,6 +39,7 @@ try:
     TENSORBOARD_AVAILABLE = True
 except ImportError:
     TENSORBOARD_AVAILABLE = False
+    SummaryWriter = None  # Make available for patching in tests
 
 try:
     import wandb
@@ -46,6 +47,7 @@ try:
     WANDB_AVAILABLE = True
 except ImportError:
     WANDB_AVAILABLE = False
+    wandb = None  # Make available for patching in tests
 
 
 class TrainingTracer:
