@@ -40,6 +40,11 @@ from training.losses import (
 from training.dataset import KDDataset, collate_kd_batch, load_tokenizer
 from training.tracing import create_tracer_from_config
 from training.assertions import assert_loss_finite, log_loss_components
+from training.progress_integration import (
+    training_progress_context,
+    get_recovery_checkpoint,
+    calculate_metrics_from_step,
+)
 
 
 def compute_distillation_quality_metrics(student_logits, teacher_logits, teacher_targets, temperature):
@@ -2497,8 +2502,18 @@ def main():
 
     # Resume from checkpoint if specified
     start_step = 0
-    optimizer_state_restored = False
-    scaler_state_restored = False
+
+    # Check for recovery checkpoint if no explicit resume specified
+    if not args.resume:
+        recovery_result = get_recovery_checkpoint(output_dir)
+        if recovery_result:
+            checkpoint_path, dataset_position = recovery_result
+            if is_main_process:
+                print(
+                    f"[distill_kd] Found recovery checkpoint: {checkpoint_path}")
+                print(f"[distill_kd] Dataset position: {dataset_position}")
+            args.resume = str(checkpoint_path)
+
     if args.resume:
         print(f"[distill_kd] Resuming from checkpoint: {args.resume}")
         from training.safe_checkpoint_loading import safe_load_checkpoint
@@ -2517,7 +2532,6 @@ def main():
         if "optimizer_state_dict" in checkpoint:
             try:
                 optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-                optimizer_state_restored = True
                 print("[distill_kd] Optimizer state restored from checkpoint")
             except Exception as e:
                 print(
@@ -2533,7 +2547,6 @@ def main():
                 try:
                     scaler.load_state_dict(
                         checkpoint["meta"]["scaler_state_dict"])
-                    scaler_state_restored = True
                     print("[distill_kd] GradScaler state restored from checkpoint")
                 except Exception as e:
                     print(
@@ -2864,381 +2877,412 @@ def main():
         "lr_multiplier", 0.1)  # Default: 10× lower LR
     base_lr = cfg.get("optimizer", {}).get("lr", 2e-4)
 
-    # Iterate over dataset multiple times if needed
-    while step < total_steps:
-        for batch_idx, batch in enumerate(dataloader):
-            if step >= total_steps:
-                break
+    # Setup progress tracking
+    with training_progress_context(
+        config=cfg,
+        output_dir=output_dir,
+        total_steps=total_steps,
+        is_main_process=is_main_process,
+    ) as progress:
+        # Iterate over dataset multiple times if needed
+        while step < total_steps:
+            for batch_idx, batch in enumerate(dataloader):
+                if step >= total_steps:
+                    break
 
-            try:
-                # Check if QAT should be enabled
-                qat_should_enable = should_enable_qat(
-                    step, total_steps, qat_cfg)
-                if qat_should_enable and not qat_applied:
-                    # Apply QAT to model
+                try:
+                    # Check if QAT should be enabled
+                    qat_should_enable = should_enable_qat(
+                        step, total_steps, qat_cfg)
+                    if qat_should_enable and not qat_applied:
+                        # Apply QAT to model
+                        print(
+                            f"[distill_kd] Step {step}: Enabling QAT (last {int((1 - qat_cfg.get('start_fraction', 0.8)) * 100)}% of training)"
+                        )
+                        if isinstance(model, DDP):
+                            model.module = apply_qat_to_model(
+                                model.module, qat_cfg, device)
+                        else:
+                            model = apply_qat_to_model(model, qat_cfg, device)
+
+                    # Recreate optimizer with lower LR for QAT
+                    qat_lr = base_lr * qat_lr_multiplier
                     print(
-                        f"[distill_kd] Step {step}: Enabling QAT (last {int((1 - qat_cfg.get('start_fraction', 0.8)) * 100)}% of training)"
-                    )
-                    if isinstance(model, DDP):
-                        model.module = apply_qat_to_model(
-                            model.module, qat_cfg, device)
-                    else:
-                        model = apply_qat_to_model(model, qat_cfg, device)
-
-                # Recreate optimizer with lower LR for QAT
-                qat_lr = base_lr * qat_lr_multiplier
-                print(
-                    f"[distill_kd] Adjusting LR for QAT: {base_lr} → {qat_lr}")
-                optimizer = create_optimizer(
-                    model.module if isinstance(model, DDP) else model,
-                    {
-                        **cfg.get("optimizer", {}),
-                        "lr": qat_lr,
-                    },
-                )
-
-                qat_applied = True
-                qat_enabled = True
-
-                # Check QAT stability periodically (every 100 steps)
-                if qat_enabled and step % 100 == 0:
-                    stability_metrics = check_qat_stability(
+                        f"[distill_kd] Adjusting LR for QAT: {base_lr} → {qat_lr}")
+                    optimizer = create_optimizer(
                         model.module if isinstance(model, DDP) else model,
-                        batch,
-                        device,
-                    )
-                    if stability_metrics.get("qat_stability.has_nan", 0.0) > 0:
-                        print(
-                            f"[distill_kd] WARN: NaN detected in QAT model at step {step}")
-                    if stability_metrics.get("qat_stability.cosine_sim", 1.0) < 0.999:
-                        print(
-                            f"[distill_kd] WARN: Low cosine similarity in QAT model at step {step}"
-                        )
-
-                # Sample sequence length (enumerated shapes or curriculum)
-                if use_enumerated_shapes:
-                    current_seq_len = sample_enumerated_shape(
-                        seq_lengths=seq_lengths,
-                        shape_probs=shape_probs,
-                        step=step,
-                        periodic_upweight_rare=train_cfg.get(
-                            "periodic_upweight_rare", True),
-                    )
-                    # Truncate batch to sampled shape
-                    batch = truncate_batch_to_shape(batch, current_seq_len)
-                else:
-                    # Fallback to curriculum learning
-                    current_seq_len = get_sequence_length(
-                        step, seq_lengths, cfg.get(
-                            "curriculum", {}).get("schedule")
+                        {
+                            **cfg.get("optimizer", {}),
+                            "lr": qat_lr,
+                        },
                     )
 
-                # Training step
-                loss_dict = train_step(
-                    model=model,
-                    batch=batch,
-                    optimizer=optimizer,
-                    scaler=scaler,
-                    cfg=cfg,
-                    device=device,
-                    grad_clip_norm=grad_clip_norm,
-                    grad_accum_steps=grad_accum,
-                    grad_accum_counter=grad_accum_counter,
-                    current_step=step,
-                    code_mode_loss_module=code_mode_loss_module,
-                )
+                    qat_applied = True
+                    qat_enabled = True
 
-                # Step learning rate scheduler after each optimizer step
-                if (grad_accum_counter + 1) % grad_accum == 0:
-                    scheduler.step()
-
-                grad_accum_counter = (grad_accum_counter + 1) % grad_accum
-                step += 1
-
-                # Log learning rate and memory usage periodically
-                if step % 100 == 0 and is_main_process:
-                    current_lr = optimizer.param_groups[0]["lr"]
-
-                    # Memory usage tracking
-                    if device.type == "cuda":
-                        memory_allocated = torch.cuda.memory_allocated(
-                            device) / 1024**3  # GB
-                        memory_info = f", gpu_mem={memory_allocated:.2f}GB"
-                    else:
-                        memory_info = ""
-
-                    # Enhanced progress reporting for large models
-                    progress_pct = step / total_steps * 100
-                    eta_hours = (total_steps - step) / 100 * \
-                        0.1  # Rough ETA based on steps/second
-
-                    if is_large_model:
-                        print(
-                            f"[distill_kd] Step {step}/{total_steps} ({progress_pct:.1f}%): loss={loss_dict.get('total', 0):.4f}, lr={current_lr:.2e}{memory_info}, ETA~{eta_hours:.1f}h"
+                    # Check QAT stability periodically (every 100 steps)
+                    if qat_enabled and step % 100 == 0:
+                        stability_metrics = check_qat_stability(
+                            model.module if isinstance(model, DDP) else model,
+                            batch,
+                            device,
                         )
-                    else:
-                        print(
-                            f"[distill_kd] Step {step}/{total_steps}: loss={loss_dict.get('total', 0):.4f}, lr={current_lr:.2e}{memory_info}"
-                        )
-            except Exception as e:
-                print(f"[distill_kd] ERROR: Training step {step} failed: {e}")
-                import traceback
-
-                traceback.print_exc()
-
-                # Enhanced error recovery for large models
-                if device.type == "cuda":
-                    try:
-                        # Aggressive memory cleanup for large models
-                        torch.cuda.empty_cache()
-                        torch.cuda.synchronize()  # Ensure cleanup completes
-                        print("[distill_kd] Cleared GPU cache after error")
-
-                        # Enhanced memory cleanup for large models
-                        if is_large_model:
-                            import gc
-
-                            # Force garbage collection
-                            collected = gc.collect()
+                        if stability_metrics.get("qat_stability.has_nan", 0.0) > 0:
                             print(
-                                f"[distill_kd] Garbage collection freed {collected} objects")
-
-                            # Clear any cached tensors in model components
-                            if hasattr(model, 'clear_cache'):
-                                model.clear_cache()
-                            elif isinstance(model, DDP) and hasattr(model.module, 'clear_cache'):
-                                model.module.clear_cache()
-
-                            # Additional CPU memory cleanup
-                            import torch
-                            if torch.cuda.is_available():
-                                # Clear CUDA cache more aggressively
-                                torch.cuda.empty_cache()
-                                torch.cuda.synchronize()
-
+                                f"[distill_kd] WARN: NaN detected in QAT model at step {step}")
+                        if stability_metrics.get("qat_stability.cosine_sim", 1.0) < 0.999:
                             print(
-                                "[distill_kd] Enhanced memory cleanup completed for large model")
+                                f"[distill_kd] WARN: Low cosine similarity in QAT model at step {step}"
+                            )
 
-                    except Exception as cache_e:
-                        print(
-                            f"[distill_kd] WARN: Failed to clear GPU cache: {cache_e}")
-
-                # Track consecutive failures to prevent infinite loops
-                if not hasattr(train_step, "_consecutive_failures"):
-                    train_step._consecutive_failures = 0
-
-                train_step._consecutive_failures += 1
-
-                # If too many consecutive failures, save emergency checkpoint and exit
-                max_consecutive_failures = (
-                    10 if not is_large_model else 5
-                )  # More strict for large models
-                if train_step._consecutive_failures >= max_consecutive_failures:
-                    print(
-                        f"[distill_kd] CRITICAL: {train_step._consecutive_failures} consecutive failures. Saving emergency checkpoint and exiting."
-                    )
-                    try:
-                        save_checkpoint(
-                            model=model,
-                            optimizer=optimizer,
+                    # Sample sequence length (enumerated shapes or curriculum)
+                    if use_enumerated_shapes:
+                        current_seq_len = sample_enumerated_shape(
+                            seq_lengths=seq_lengths,
+                            shape_probs=shape_probs,
                             step=step,
-                            loss=loss_dict.get("total", float("inf")),
-                            output_dir=output_dir,
-                            config=cfg,
-                            rng_states=None,  # Skip RNG states in emergency
-                            data_shard_index=current_shard_index,
-                            dataset_fingerprint=None,
-                            scaler=scaler,
+                            periodic_upweight_rare=train_cfg.get(
+                                "periodic_upweight_rare", True),
                         )
-                        print(
-                            "[distill_kd] Emergency checkpoint saved successfully")
-                    except Exception as ckpt_e:
-                        print(
-                            f"[distill_kd] CRITICAL: Failed to save emergency checkpoint: {ckpt_e}"
+                        # Truncate batch to sampled shape
+                        batch = truncate_batch_to_shape(batch, current_seq_len)
+                    else:
+                        # Fallback to curriculum learning
+                        current_seq_len = get_sequence_length(
+                            step, seq_lengths, cfg.get(
+                                "curriculum", {}).get("schedule")
                         )
 
-                    sys.exit(1)
+                    # Training step
+                    loss_dict = train_step(
+                        model=model,
+                        batch=batch,
+                        optimizer=optimizer,
+                        scaler=scaler,
+                        cfg=cfg,
+                        device=device,
+                        grad_clip_norm=grad_clip_norm,
+                        grad_accum_steps=grad_accum,
+                        grad_accum_counter=grad_accum_counter,
+                        current_step=step,
+                        code_mode_loss_module=code_mode_loss_module,
+                    )
 
-                # Enhanced error recovery - reset gradients and clear any corrupted state
-                try:
-                    # Clear any accumulated gradients that might be corrupted
-                    if hasattr(optimizer, 'zero_grad'):
-                        optimizer.zero_grad()
+                    # Step learning rate scheduler after each optimizer step
+                    if (grad_accum_counter + 1) % grad_accum == 0:
+                        scheduler.step()
 
-                    # Clear any cached computations that might be corrupted
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
+                    grad_accum_counter = (grad_accum_counter + 1) % grad_accum
+                    step += 1
 
-                    print(
-                        "[distill_kd] Cleared optimizer state and GPU cache after error")
-                except Exception as cleanup_e:
-                    print(
-                        f"[distill_kd] WARN: Failed to clean up after error: {cleanup_e}")
+                    # Update progress metrics
+                    loss_value, loss_components, lr = calculate_metrics_from_step(
+                        loss_dict.get("total", torch.tensor(0.0)),
+                        loss_dict=loss_dict,
+                        scheduler=scheduler,
+                    )
+                    progress.update_metrics(
+                        step=step,
+                        loss=loss_value,
+                        loss_components=loss_components,
+                        learning_rate=lr,
+                        samples_processed=step * effective_batch_size,
+                        tokens_processed=step * effective_batch_size * max_seq_len,
+                    )
 
-                # Continue to next step instead of crashing
-                step += 1
-                continue
+                    # Log learning rate and memory usage periodically
+                    if step % 100 == 0 and is_main_process:
+                        current_lr = optimizer.param_groups[0]["lr"]
 
-            # Speed metrics during validation (every N steps)
-            # Default: every 1000 steps
-            val_every = train_cfg.get("val_every", 1000)
-            if SPEED_METRICS_AVAILABLE and step % val_every == 0 and is_main_process:
-                try:
-                    # Load tokenizer if available
-                    from training.dataset import load_tokenizer
+                        # Memory usage tracking
+                        if device.type == "cuda":
+                            memory_allocated = torch.cuda.memory_allocated(
+                                device) / 1024**3  # GB
+                            memory_info = f", gpu_mem={memory_allocated:.2f}GB"
+                        else:
+                            memory_info = ""
 
-                    val_tokenizer = load_tokenizer(tokenizer_path)
+                        # Enhanced progress reporting for large models
+                        progress_pct = step / total_steps * 100
+                        eta_hours = (total_steps - step) / 100 * \
+                            0.1  # Rough ETA based on steps/second
 
-                    # Measure speed metrics on a few batches
-                    speed_metrics_list = []
-                    # Measure on up to 5 batches
-                    val_batch_count = min(5, len(dataloader))
-
-                    for val_batch_idx, val_batch in enumerate(dataloader):
-                        if val_batch_idx >= val_batch_count:
-                            break
-
-                        # Truncate to reasonable length for speed measurement
-                        if use_enumerated_shapes:
-                            val_batch = truncate_batch_to_shape(
-                                val_batch, min(seq_lengths))
-
-                        metrics = measure_proxy(
-                            model=model.module if isinstance(
-                                model, DDP) else model,
-                            batch=val_batch,
-                            tokenizer=val_tokenizer,
-                            device=device,
-                            max_new_tokens=64,
-                        )
-                        speed_metrics_list.append(metrics)
-
-                    # Aggregate metrics
-                    if speed_metrics_list:
-                        aggregated = aggregate_speed_metrics(
-                            speed_metrics_list)
-
-                        # Log with export=False tag (these are proxies)
-                        if tracer:
-                            tracer.log_metrics(
-                                step=step,
-                                metrics={
-                                    "speed/ttft_ms_p50": aggregated["ttft_ms"]["p50"],
-                                    "speed/ttft_ms_p95": aggregated["ttft_ms"]["p95"],
-                                    "speed/tps_p50": aggregated["tps"]["p50"],
-                                    "speed/tps_p95": aggregated["tps"]["p95"],
-                                    "speed/ttfa_tokens_p95": aggregated["ttfa_tokens"]["p95"],
-                                    # Tag: export=False (proxy metrics)
-                                    "speed/export": 0.0,
-                                },
-                                prefix="val/",
+                        if is_large_model:
+                            print(
+                                f"[distill_kd] Step {step}/{total_steps} ({progress_pct:.1f}%): loss={loss_dict.get('total', 0):.4f}, lr={current_lr:.2e}{memory_info}, ETA~{eta_hours:.1f}h"
                             )
                         else:
                             print(
-                                f"[distill_kd] Step {step} speed metrics (proxy): "
-                                f"TTFT p50={aggregated['ttft_ms']['p50']:.1f}ms, "
-                                f"TPS p50={aggregated['tps']['p50']:.1f} tok/s"
+                                f"[distill_kd] Step {step}/{total_steps}: loss={loss_dict.get('total', 0):.4f}, lr={current_lr:.2e}{memory_info}"
                             )
                 except Exception as e:
                     print(
-                        f"[distill_kd] WARN: Failed to measure speed metrics: {e}")
+                        f"[distill_kd] ERROR: Training step {step} failed: {e}")
+                    import traceback
 
-            # Logging
-            if step % log_every == 0 and is_main_process:
-                if tracer:
-                    # Log to tracer (includes console, TensorBoard, WandB, JSON)
-                    tracer.log_metrics(
-                        step=step, metrics=loss_dict, prefix="train/")
+                    traceback.print_exc()
 
-                    # Also log learning rate if available
-                    if hasattr(optimizer, "param_groups") and optimizer.param_groups:
-                        lr = optimizer.param_groups[0].get("lr", 0.0)
-                        tracer.log_metrics(
-                            step=step, metrics={"learning_rate": lr}, prefix="train/"
+                    # Enhanced error recovery for large models
+                    if device.type == "cuda":
+                        try:
+                            # Aggressive memory cleanup for large models
+                            torch.cuda.empty_cache()
+                            torch.cuda.synchronize()  # Ensure cleanup completes
+                            print("[distill_kd] Cleared GPU cache after error")
+
+                            # Enhanced memory cleanup for large models
+                            if is_large_model:
+                                import gc
+
+                                # Force garbage collection
+                                collected = gc.collect()
+                                print(
+                                    f"[distill_kd] Garbage collection freed {collected} objects")
+
+                                # Clear any cached tensors in model components
+                                if hasattr(model, 'clear_cache'):
+                                    model.clear_cache()
+                                elif isinstance(model, DDP) and hasattr(model.module, 'clear_cache'):
+                                    model.module.clear_cache()
+
+                                # Additional CPU memory cleanup
+                                import torch
+                                if torch.cuda.is_available():
+                                    # Clear CUDA cache more aggressively
+                                    torch.cuda.empty_cache()
+                                    torch.cuda.synchronize()
+
+                                print(
+                                    "[distill_kd] Enhanced memory cleanup completed for large model")
+
+                        except Exception as cache_e:
+                            print(
+                                f"[distill_kd] WARN: Failed to clear GPU cache: {cache_e}")
+
+                    # Track consecutive failures to prevent infinite loops
+                    if not hasattr(train_step, "_consecutive_failures"):
+                        train_step._consecutive_failures = 0
+
+                    train_step._consecutive_failures += 1
+
+                    # If too many consecutive failures, save emergency checkpoint and exit
+                    max_consecutive_failures = (
+                        10 if not is_large_model else 5
+                    )  # More strict for large models
+                    if train_step._consecutive_failures >= max_consecutive_failures:
+                        print(
+                            f"[distill_kd] CRITICAL: {train_step._consecutive_failures} consecutive failures. Saving emergency checkpoint and exiting."
                         )
-                else:
-                    # Fallback to console logging
-                    loss_str = ", ".join(
-                        [f"{k}={v:.4f}" for k, v in loss_dict.items()])
+                        try:
+                            save_checkpoint(
+                                model=model,
+                                optimizer=optimizer,
+                                step=step,
+                                loss=loss_dict.get("total", float("inf")),
+                                output_dir=output_dir,
+                                config=cfg,
+                                rng_states=None,  # Skip RNG states in emergency
+                                data_shard_index=current_shard_index,
+                                dataset_fingerprint=None,
+                                scaler=scaler,
+                            )
+                            print(
+                                "[distill_kd] Emergency checkpoint saved successfully")
+                        except Exception as ckpt_e:
+                            print(
+                                f"[distill_kd] CRITICAL: Failed to save emergency checkpoint: {ckpt_e}"
+                            )
+
+                        sys.exit(1)
+
+                    # Enhanced error recovery - reset gradients and clear any corrupted state
+                    try:
+                        # Clear any accumulated gradients that might be corrupted
+                        if hasattr(optimizer, 'zero_grad'):
+                            optimizer.zero_grad()
+
+                        # Clear any cached computations that might be corrupted
+                        if torch.cuda.is_available():
+                            torch.cuda.empty_cache()
+
+                        print(
+                            "[distill_kd] Cleared optimizer state and GPU cache after error")
+                    except Exception as cleanup_e:
+                        print(
+                            f"[distill_kd] WARN: Failed to clean up after error: {cleanup_e}")
+
+                    # Continue to next step instead of crashing
+                    step += 1
+                    continue
+
+                # Speed metrics during validation (every N steps)
+                # Default: every 1000 steps
+                val_every = train_cfg.get("val_every", 1000)
+                if SPEED_METRICS_AVAILABLE and step % val_every == 0 and is_main_process:
+                    try:
+                        # Load tokenizer if available
+                        from training.dataset import load_tokenizer
+
+                        val_tokenizer = load_tokenizer(tokenizer_path)
+
+                        # Measure speed metrics on a few batches
+                        speed_metrics_list = []
+                        # Measure on up to 5 batches
+                        val_batch_count = min(5, len(dataloader))
+
+                        for val_batch_idx, val_batch in enumerate(dataloader):
+                            if val_batch_idx >= val_batch_count:
+                                break
+
+                            # Truncate to reasonable length for speed measurement
+                            if use_enumerated_shapes:
+                                val_batch = truncate_batch_to_shape(
+                                    val_batch, min(seq_lengths))
+
+                            metrics = measure_proxy(
+                                model=model.module if isinstance(
+                                    model, DDP) else model,
+                                batch=val_batch,
+                                tokenizer=val_tokenizer,
+                                device=device,
+                                max_new_tokens=64,
+                            )
+                            speed_metrics_list.append(metrics)
+
+                        # Aggregate metrics
+                        if speed_metrics_list:
+                            aggregated = aggregate_speed_metrics(
+                                speed_metrics_list)
+
+                            # Log with export=False tag (these are proxies)
+                            if tracer:
+                                tracer.log_metrics(
+                                    step=step,
+                                    metrics={
+                                        "speed/ttft_ms_p50": aggregated["ttft_ms"]["p50"],
+                                        "speed/ttft_ms_p95": aggregated["ttft_ms"]["p95"],
+                                        "speed/tps_p50": aggregated["tps"]["p50"],
+                                        "speed/tps_p95": aggregated["tps"]["p95"],
+                                        "speed/ttfa_tokens_p95": aggregated["ttfa_tokens"]["p95"],
+                                        # Tag: export=False (proxy metrics)
+                                        "speed/export": 0.0,
+                                    },
+                                    prefix="val/",
+                                )
+                            else:
+                                print(
+                                    f"[distill_kd] Step {step} speed metrics (proxy): "
+                                    f"TTFT p50={aggregated['ttft_ms']['p50']:.1f}ms, "
+                                    f"TPS p50={aggregated['tps']['p50']:.1f} tok/s"
+                                )
+                    except Exception as e:
+                        print(
+                            f"[distill_kd] WARN: Failed to measure speed metrics: {e}")
+
+                # Logging
+                if step % log_every == 0 and is_main_process:
+                    if tracer:
+                        # Log to tracer (includes console, TensorBoard, WandB, JSON)
+                        tracer.log_metrics(
+                            step=step, metrics=loss_dict, prefix="train/")
+
+                        # Also log learning rate if available
+                        if hasattr(optimizer, "param_groups") and optimizer.param_groups:
+                            lr = optimizer.param_groups[0].get("lr", 0.0)
+                            tracer.log_metrics(
+                                step=step, metrics={"learning_rate": lr}, prefix="train/"
+                            )
+                    else:
+                        # Fallback to console logging
+                        loss_str = ", ".join(
+                            [f"{k}={v:.4f}" for k, v in loss_dict.items()])
+                        print(
+                            f"[distill_kd] Step {step}/{total_steps}: {loss_str}")
+
+                # Intelligent checkpointing for large models
+                # Save more frequently for large models to prevent loss of progress
+                checkpoint_frequency = save_every
+                if is_large_model:
+                    checkpoint_frequency = min(
+                        save_every, max(100, save_every // 4)
+                    )  # Save 4x more frequently for large models
+
+                should_save_checkpoint = step % checkpoint_frequency == 0 and is_main_process
+
+                # Always save checkpoint at milestones (10%, 25%, 50%, 75%, 90%, 100%)
+                total_steps = train_cfg.get("steps", 10000)
+                milestone_steps = [int(total_steps * pct)
+                                   for pct in [0.1, 0.25, 0.5, 0.75, 0.9, 1.0]]
+                if step in milestone_steps:
+                    should_save_checkpoint = True
                     print(
-                        f"[distill_kd] Step {step}/{total_steps}: {loss_str}")
+                        f"[distill_kd] Milestone checkpoint at {step}/{total_steps} steps ({step / total_steps:.1%})"
+                    )
 
-            # Intelligent checkpointing for large models
-            # Save more frequently for large models to prevent loss of progress
-            checkpoint_frequency = save_every
-            if is_large_model:
-                checkpoint_frequency = min(
-                    save_every, max(100, save_every // 4)
-                )  # Save 4x more frequently for large models
+                if should_save_checkpoint:
+                    # Capture RNG states for reproducibility
+                    import random
+                    import numpy as np
 
-            should_save_checkpoint = step % checkpoint_frequency == 0 and is_main_process
+                    rng_states = {
+                        "python": random.getstate(),
+                        "numpy": np.random.get_state(),
+                        "torch": torch.get_rng_state(),
+                        "torch_cuda": torch.cuda.get_rng_state() if torch.cuda.is_available() else None,
+                    }
 
-            # Always save checkpoint at milestones (10%, 25%, 50%, 75%, 90%, 100%)
-            total_steps = train_cfg.get("steps", 10000)
-            milestone_steps = [int(total_steps * pct)
-                               for pct in [0.1, 0.25, 0.5, 0.75, 0.9, 1.0]]
-            if step in milestone_steps:
-                should_save_checkpoint = True
-                print(
-                    f"[distill_kd] Milestone checkpoint at {step}/{total_steps} steps ({step / total_steps:.1%})"
-                )
+                    save_checkpoint(
+                        model=model,
+                        optimizer=optimizer,
+                        step=step,
+                        loss=loss_dict.get("total", 0.0),
+                        output_dir=output_dir,
+                        config=cfg,
+                        loss_dict=loss_dict,
+                        rng_states=rng_states,
+                        data_shard_index=current_shard_index,
+                        dataset_fingerprint=dataset.dataset_fingerprint,
+                        scaler=scaler,
+                    )
 
-            if should_save_checkpoint:
-                # Capture RNG states for reproducibility
-                import random
-                import numpy as np
+                    # Record checkpoint for recovery
+                    checkpoint_path = output_dir / f"checkpoint_{step}.pt"
+                    progress.record_checkpoint(
+                        step=step,
+                        checkpoint_path=checkpoint_path,
+                        dataset_position=step * effective_batch_size,
+                    )
 
-                rng_states = {
-                    "python": random.getstate(),
-                    "numpy": np.random.get_state(),
-                    "torch": torch.get_rng_state(),
-                    "torch_cuda": torch.cuda.get_rng_state() if torch.cuda.is_available() else None,
-                }
+        # Final checkpoint
+        if is_main_process:
+            # Capture RNG states for reproducibility
+            import random
+            import numpy as np
 
-                save_checkpoint(
-                    model=model,
-                    optimizer=optimizer,
-                    step=step,
-                    loss=loss_dict.get("total", 0.0),
-                    output_dir=output_dir,
-                    config=cfg,
-                    loss_dict=loss_dict,
-                    rng_states=rng_states,
-                    data_shard_index=current_shard_index,
-                    dataset_fingerprint=dataset.dataset_fingerprint,
-                    scaler=scaler,
-                )
+            rng_states = {
+                "python": random.getstate(),
+                "numpy": np.random.get_state(),
+                "torch": torch.get_rng_state(),
+                "torch_cuda": torch.cuda.get_rng_state() if torch.cuda.is_available() else None,
+            }
 
-    # Final checkpoint
-    if is_main_process:
-        # Capture RNG states for reproducibility
-        import random
-        import numpy as np
+            save_checkpoint(
+                model=model,
+                optimizer=optimizer,
+                step=step,
+                loss=loss_dict.get("total", 0.0),
+                output_dir=output_dir,
+                config=cfg,
+                loss_dict=loss_dict,
+                rng_states=rng_states,
+                data_shard_index=current_shard_index,
+                dataset_fingerprint=dataset.dataset_fingerprint
+                if hasattr(dataset, "dataset_fingerprint")
+                else None,
+                scaler=scaler,
+            )
 
-        rng_states = {
-            "python": random.getstate(),
-            "numpy": np.random.get_state(),
-            "torch": torch.get_rng_state(),
-            "torch_cuda": torch.cuda.get_rng_state() if torch.cuda.is_available() else None,
-        }
-
-        save_checkpoint(
-            model=model,
-            optimizer=optimizer,
-            step=step,
-            loss=loss_dict.get("total", 0.0),
-            output_dir=output_dir,
-            config=cfg,
-            loss_dict=loss_dict,
-            rng_states=rng_states,
-            data_shard_index=current_shard_index,
-            dataset_fingerprint=dataset.dataset_fingerprint
-            if hasattr(dataset, "dataset_fingerprint")
-            else None,
-            scaler=scaler,
-        )
-
-        # Close tracer and save summary
+            # Close tracer and save summary
         if tracer:
             tracer.close()
             print(f"[distill_kd] Training logs: {tracer.log_dir}")

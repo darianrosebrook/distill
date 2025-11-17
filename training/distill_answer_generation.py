@@ -20,6 +20,11 @@ from training.dataset_answer_generation import (
     collate_answer_generation_batch,
 )
 from training.tracing import create_tracer_from_config
+from training.progress_integration import (
+    training_progress_context,
+    get_recovery_checkpoint,
+    calculate_metrics_from_step,
+)
 
 
 def load_config(config_path: str) -> Dict[str, Any]:
@@ -50,7 +55,8 @@ def create_model(cfg: Dict[str, Any], device: torch.device) -> nn.Module:
     init_cfg = cfg.get("init", {})
     base_checkpoint = init_cfg.get("base_checkpoint")
     if base_checkpoint and Path(base_checkpoint).exists():
-        print(f"[distill_answer_generation] Loading checkpoint: {base_checkpoint}")
+        print(
+            f"[distill_answer_generation] Loading checkpoint: {base_checkpoint}")
         from training.safe_checkpoint_loading import safe_load_checkpoint
         checkpoint = safe_load_checkpoint(base_checkpoint, map_location="cpu")
         if "model_state_dict" in checkpoint:
@@ -109,8 +115,10 @@ def main() -> None:
     """Main training entry point."""
     ap = argparse.ArgumentParser(description="Answer generation training")
     ap.add_argument("--config", required=True, help="Config file")
-    ap.add_argument("--data", required=True, help="Path to answer generation JSONL file")
-    ap.add_argument("--output-dir", default="models/student/checkpoints", help="Output directory")
+    ap.add_argument("--data", required=True,
+                    help="Path to answer generation JSONL file")
+    ap.add_argument(
+        "--output-dir", default="models/student/checkpoints", help="Output directory")
     ap.add_argument("--resume", help="Resume from checkpoint")
     args = ap.parse_args()
 
@@ -142,7 +150,8 @@ def main() -> None:
     scaler = torch.cuda.amp.GradScaler() if use_fp16 and device.type == "cuda" else None
 
     # Create dataset
-    tokenizer_path = cfg.get("io", {}).get("tokenizer_path", "models/student/tokenizer")
+    tokenizer_path = cfg.get("io", {}).get(
+        "tokenizer_path", "models/student/tokenizer")
     dataset = AnswerGenerationDataset(
         data_path=args.data,
         tokenizer_path=tokenizer_path,
@@ -173,44 +182,69 @@ def main() -> None:
     save_every = train_cfg.get("save_every", 1000)
     log_every = train_cfg.get("log_every", 50)
 
-    step = 0
-    for epoch in range(100):
-        for batch in dataloader:
+    # Check for recovery checkpoint
+    recovery_result = get_recovery_checkpoint(output_dir)
+    start_step = 0
+    if recovery_result:
+        checkpoint_path, dataset_position = recovery_result
+        print(
+            f"[distill_answer_generation] Found recovery checkpoint: {checkpoint_path}")
+        start_step = int(checkpoint_path.stem.split('_')[-1])
+
+    with training_progress_context(cfg, output_dir, total_steps) as progress:
+        step = start_step
+        for epoch in range(100):
+            for batch in dataloader:
+                if step >= total_steps:
+                    break
+
+                loss_dict = train_step(
+                    model=model,
+                    batch=batch,
+                    optimizer=optimizer,
+                    scaler=scaler,
+                    cfg=cfg,
+                    device=device,
+                )
+
+                step += 1
+
+                # Update progress metrics
+                loss_value, loss_components, lr = calculate_metrics_from_step(
+                    loss_dict.get("total", torch.tensor(0.0)), loss_dict, None
+                )
+                progress.update_metrics(
+                    step, loss_value, loss_components, opt_cfg.get("lr", 2e-4),
+                    step * train_cfg.get("micro_batch_size", 2),
+                    step * train_cfg.get("micro_batch_size", 2) *
+                    train_cfg.get("max_seq_length", 8192)
+                )
+
+                # Logging
+                if step % log_every == 0:
+                    tracer.log_metrics(
+                        step=step, metrics=loss_dict, prefix="train/")
+
+                # Checkpointing
+                if step % save_every == 0:
+                    checkpoint_path = output_dir / f"final_step_{step}.pt"
+                    torch.save(
+                        {
+                            "step": step,
+                            "model_state_dict": model.state_dict(),
+                            "optimizer_state_dict": optimizer.state_dict(),
+                            "loss": loss_dict.get("total", 0.0),
+                            "config": cfg,
+                        },
+                        checkpoint_path,
+                    )
+                    print(
+                        f"[distill_answer_generation] Saved checkpoint: {checkpoint_path}")
+                    progress.record_checkpoint(
+                        step, checkpoint_path, step * train_cfg.get("micro_batch_size", 2))
+
             if step >= total_steps:
                 break
-
-            loss_dict = train_step(
-                model=model,
-                batch=batch,
-                optimizer=optimizer,
-                scaler=scaler,
-                cfg=cfg,
-                device=device,
-            )
-
-            step += 1
-
-            # Logging
-            if step % log_every == 0:
-                tracer.log_metrics(step=step, metrics=loss_dict, prefix="train/")
-
-            # Checkpointing
-            if step % save_every == 0:
-                checkpoint_path = output_dir / f"final_step_{step}.pt"
-                torch.save(
-                    {
-                        "step": step,
-                        "model_state_dict": model.state_dict(),
-                        "optimizer_state_dict": optimizer.state_dict(),
-                        "loss": loss_dict.get("total", 0.0),
-                        "config": cfg,
-                    },
-                    checkpoint_path,
-                )
-                print(f"[distill_answer_generation] Saved checkpoint: {checkpoint_path}")
-
-        if step >= total_steps:
-            break
 
     # Final checkpoint
     final_path = output_dir / "final_latest.pt"

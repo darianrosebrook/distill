@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 import torch
 
 from training.dataset_answer_generation import AnswerGenerationDataset
+from .conftest_mock_utils import create_mock_encoded_output
 
 
 class TestAnswerGenerationDataset:

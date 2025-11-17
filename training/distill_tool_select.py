@@ -22,6 +22,11 @@ from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
 from training.dataset_tool_select import ToolSelectDataset, collate_tool_select_batch
 from training.process_losses import json_validity_loss, tool_selection_loss
 from training.tracing import create_tracer_from_config
+from training.progress_integration import (
+    training_progress_context,
+    get_recovery_checkpoint,
+    calculate_metrics_from_step,
+)
 from coreml.runtime.constrained_decode import JSONConstrainedDecoder
 
 
@@ -106,7 +111,8 @@ def train_step(
             # Need tokenizer for text generation
             from training.dataset import load_tokenizer
 
-            tokenizer_path = cfg.get("io", {}).get("tokenizer_path", "models/student/tokenizer")
+            tokenizer_path = cfg.get("io", {}).get(
+                "tokenizer_path", "models/student/tokenizer")
             tokenizer = load_tokenizer(tokenizer_path)
 
             # Generate text with constrained decoding if decoder is available
@@ -123,10 +129,12 @@ def train_step(
                     # Generate token by token with constraint masking
                     for t in range(seq_len):
                         # Get logits for this position
-                        step_logits = logits[i, t, :].detach().cpu().numpy()  # [V]
+                        step_logits = logits[i, t,
+                                             :].detach().cpu().numpy()  # [V]
 
                         # Apply token mask from constrained decoder
-                        mask = decoder.allowed_token_mask(state, step_logits.shape)
+                        mask = decoder.allowed_token_mask(
+                            state, step_logits.shape)
                         step_logits[~mask] = -float("inf")
 
                         # Sample token (greedy)
@@ -141,7 +149,8 @@ def train_step(
                             break
 
                     # Decode generated tokens
-                    text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+                    text = tokenizer.decode(
+                        generated_tokens, skip_special_tokens=True)
 
                     # Validate with decoder
                     try:
@@ -153,7 +162,8 @@ def train_step(
                             generated_texts.append(text)
                     except ValueError:
                         # Invalid JSON according to decoder
-                        generated_texts.append(text)  # Still add for loss computation
+                        # Still add for loss computation
+                        generated_texts.append(text)
                 else:
                     # Fallback to simple greedy decode
                     pred_ids = logits[i].argmax(dim=-1)
@@ -164,7 +174,8 @@ def train_step(
         json_validity_weight = proc_cfg.get("json_validity_weight", 0.3)
         json_loss = torch.tensor(0.0, device=device)
         if json_validity_weight > 0 and generated_texts:
-            json_loss = json_validity_loss(logits, generated_texts, ignore_index=-100)
+            json_loss = json_validity_loss(
+                logits, generated_texts, ignore_index=-100)
 
         # Tool selection loss
         tool_select_weight = proc_cfg.get("tool_select_weight", 0.7)
@@ -172,7 +183,8 @@ def train_step(
         if tool_select_weight > 0 and generated_texts and tool_names:
             from training.dataset import load_tokenizer
 
-            tokenizer_path = cfg.get("io", {}).get("tokenizer_path", "models/student/tokenizer")
+            tokenizer_path = cfg.get("io", {}).get(
+                "tokenizer_path", "models/student/tokenizer")
             tokenizer = load_tokenizer(tokenizer_path)
             tool_select_loss = tool_selection_loss(
                 logits,
@@ -185,7 +197,8 @@ def train_step(
 
         # Combined loss
         total_loss = (
-            ce_loss + json_validity_weight * json_loss + tool_select_weight * tool_select_loss
+            ce_loss + json_validity_weight * json_loss +
+            tool_select_weight * tool_select_loss
         )
 
     # Backward pass
@@ -209,7 +222,8 @@ def main():
     ap = argparse.ArgumentParser(description="Tool selection training")
     ap.add_argument("--config", required=True, help="Config file")
     ap.add_argument("--data", required=True, help="Path to tool_select.jsonl")
-    ap.add_argument("--output-dir", default="models/student/checkpoints", help="Output directory")
+    ap.add_argument(
+        "--output-dir", default="models/student/checkpoints", help="Output directory")
     ap.add_argument("--resume", help="Resume from checkpoint")
     args = ap.parse_args()
 
@@ -248,7 +262,8 @@ def main():
     }
 
     # Get tokenizer (need to load it)
-    tokenizer_path = cfg.get("io", {}).get("tokenizer_path", "models/student/tokenizer")
+    tokenizer_path = cfg.get("io", {}).get(
+        "tokenizer_path", "models/student/tokenizer")
     from training.dataset import load_tokenizer
 
     tokenizer = load_tokenizer(tokenizer_path)
@@ -285,45 +300,71 @@ def main():
     save_every = train_cfg.get("save_every", 1000)
     log_every = train_cfg.get("log_every", 50)
 
-    step = 0
-    for epoch in range(100):
-        for batch in dataloader:
+    # Check for recovery checkpoint
+    recovery_result = get_recovery_checkpoint(output_dir)
+    start_step = 0
+    if recovery_result:
+        checkpoint_path, dataset_position = recovery_result
+        print(
+            f"[distill_tool_select] Found recovery checkpoint: {checkpoint_path}")
+        start_step = int(checkpoint_path.stem.split('_')[-1])
+
+    with training_progress_context(cfg, output_dir, total_steps) as progress:
+        step = start_step
+        for epoch in range(100):
+            for batch in dataloader:
+                if step >= total_steps:
+                    break
+
+                loss_dict = train_step(
+                    model=model,
+                    batch=batch,
+                    optimizer=optimizer,
+                    scaler=scaler,
+                    cfg=cfg,
+                    device=device,
+                    decoder=decoder,
+                )
+
+                step += 1
+
+                # Update progress metrics
+                loss_value, loss_components, lr = calculate_metrics_from_step(
+                    loss_dict.get("total", torch.tensor(0.0)), loss_dict, None
+                )
+                progress.update_metrics(
+                    step, loss_value, loss_components, opt_cfg.get("lr", 2e-4),
+                    step * train_cfg.get("micro_batch_size", 2),
+                    step * train_cfg.get("micro_batch_size", 2) *
+                    train_cfg.get("max_seq_length", 2048)
+                )
+
+                # Logging
+                if step % log_every == 0:
+                    tracer.log_metrics(
+                        step=step, metrics=loss_dict, prefix="train/")
+
+                # Checkpointing
+                if step % save_every == 0:
+                    checkpoint_path = output_dir / \
+                        f"tool_select_step_{step}.pt"
+                    torch.save(
+                        {
+                            "step": step,
+                            "model_state_dict": model.state_dict(),
+                            "optimizer_state_dict": optimizer.state_dict(),
+                            "loss": loss_dict.get("total", 0.0),
+                            "config": cfg,
+                        },
+                        checkpoint_path,
+                    )
+                    print(
+                        f"[distill_tool_select] Saved checkpoint: {checkpoint_path}")
+                    progress.record_checkpoint(
+                        step, checkpoint_path, step * train_cfg.get("micro_batch_size", 2))
+
             if step >= total_steps:
                 break
-
-            loss_dict = train_step(
-                model=model,
-                batch=batch,
-                optimizer=optimizer,
-                scaler=scaler,
-                cfg=cfg,
-                device=device,
-                decoder=decoder,
-            )
-
-            step += 1
-
-            # Logging
-            if step % log_every == 0:
-                tracer.log_metrics(step=step, metrics=loss_dict, prefix="train/")
-
-            # Checkpointing
-            if step % save_every == 0:
-                checkpoint_path = output_dir / f"tool_select_step_{step}.pt"
-                torch.save(
-                    {
-                        "step": step,
-                        "model_state_dict": model.state_dict(),
-                        "optimizer_state_dict": optimizer.state_dict(),
-                        "loss": loss_dict.get("total", 0.0),
-                        "config": cfg,
-                    },
-                    checkpoint_path,
-                )
-                print(f"[distill_tool_select] Saved checkpoint: {checkpoint_path}")
-
-        if step >= total_steps:
-            break
 
     # Final checkpoint
     final_path = output_dir / "tool_select_latest.pt"

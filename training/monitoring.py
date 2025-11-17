@@ -121,6 +121,75 @@ class MetricsCollector:
             "first": values[0],
         }
 
+    # Convenience aliases for test compatibility
+    def add_metric(self, point: MetricPoint) -> None:
+        """Add a metric point (alias for record_metric compatibility).
+
+        Args:
+            point: MetricPoint to add
+        """
+        with self.lock:
+            self.metrics.append(point)
+            if len(self.metrics) > self.max_points:
+                self.metrics = self.metrics[-self.max_points :]
+
+    def get_metrics_by_name(self, name: str) -> List[MetricPoint]:
+        """Get all metrics with a specific name.
+
+        Args:
+            name: Metric name to filter by
+
+        Returns:
+            List of matching metric points
+        """
+        return self.get_metrics(name=name)
+
+    def get_metrics_by_tags(self, tags: Dict[str, str]) -> List[MetricPoint]:
+        """Get metrics matching specific tags.
+
+        Args:
+            tags: Dictionary of tags to match
+
+        Returns:
+            List of matching metric points
+        """
+        with self.lock:
+            metrics = self.metrics.copy()
+
+        # Filter by all tags
+        for key, value in tags.items():
+            metrics = [m for m in metrics if m.tags.get(key) == value]
+
+        return metrics
+
+    def get_latest_metric(self, name: str) -> Optional[MetricPoint]:
+        """Get the latest metric with a specific name.
+
+        Args:
+            name: Metric name
+
+        Returns:
+            Latest MetricPoint or None if not found
+        """
+        metrics = self.get_metrics(name=name)
+        return metrics[-1] if metrics else None
+
+    def get_metric_statistics(self, name: str) -> Dict[str, Any]:
+        """Get statistics for a metric (alias for get_summary_stats).
+
+        Args:
+            name: Metric name
+
+        Returns:
+            Dictionary with statistics
+        """
+        return self.get_summary_stats(name)
+
+    def clear_metrics(self) -> None:
+        """Clear all stored metrics."""
+        with self.lock:
+            self.metrics = []
+
     def save_to_file(self, output_path: Path) -> None:
         """Save metrics to JSON file.
 

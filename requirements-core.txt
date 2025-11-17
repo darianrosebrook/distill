@@ -3,6 +3,8 @@
 
 coremltools==9.0
 onnx==1.19.1
+onnxruntime>=1.18.0  # For ONNX inference testing
+onnxscript>=0.5.0  # Required for torch.onnx.export
 numpy<2.0.0  # PyTorch compatibility
 protobuf>=4.21.0,<5.0.0
 typing-extensions>=4.0.0

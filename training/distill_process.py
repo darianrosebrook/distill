@@ -35,6 +35,11 @@ from models.student.architectures.gqa_transformer import StudentLM, ModelCfg
 from training.losses import combined_kd_loss
 from training.process_losses import process_supervision_loss
 from training.dataset import KDDataset, collate_kd_batch
+from training.progress_integration import (
+    training_progress_context,
+    get_recovery_checkpoint,
+    calculate_metrics_from_step,
+)
 
 
 def load_config(config_path: str) -> Dict[str, Any]:
@@ -54,7 +59,7 @@ def merge_configs(configs: list) -> Dict[str, Any]:
             else:
                 result[key] = value
         return result
-    
+
     merged = {}
     for config_path in configs:
         config = load_config(config_path)
@@ -373,6 +378,16 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Check for recovery checkpoint
+    start_step = 0
+    recovery_result = get_recovery_checkpoint(output_dir)
+    if recovery_result:
+        checkpoint_path, dataset_position = recovery_result
+        print(
+            f"[distill_process] Found recovery checkpoint: {checkpoint_path}")
+        print(f"[distill_process] Dataset position: {dataset_position}")
+        start_step = int(checkpoint_path.stem.split('_')[-1])
+
     print("[distill_process] Starting process supervision training:")
     print(f"  Device: {device}")
     print(f"  Steps: {args.steps}")
@@ -381,62 +396,95 @@ def main():
     print(
         f"  Tool selection weight: {proc_cfg.get('loss_tool_select_weight', 0.7)}")
 
-    step = 0
-    for epoch in range(100):  # Max epochs
-        for batch in dataloader:
+    # Setup progress tracking
+    with training_progress_context(
+        config=cfg,
+        output_dir=output_dir,
+        total_steps=args.steps,
+        is_main_process=True,
+    ) as progress:
+        step = start_step
+        for epoch in range(100):  # Max epochs
+            for batch in dataloader:
+                if step >= args.steps:
+                    break
+
+                loss_dict = train_step_process(
+                    model=model,
+                    batch=batch,
+                    optimizer=optimizer,
+                    scaler=scaler,
+                    cfg=cfg,
+                    device=device,
+                    tokenizer=tokenizer,
+                    proc_cfg=proc_cfg,
+                )
+
+                step += 1
+
+                # Update progress metrics
+                loss_value, loss_components, lr = calculate_metrics_from_step(
+                    loss_dict.get("total", torch.tensor(0.0)),
+                    loss_dict=loss_dict,
+                    scheduler=None,
+                )
+                progress.update_metrics(
+                    step=step,
+                    loss=loss_value,
+                    loss_components=loss_components,
+                    learning_rate=opt_cfg.get("lr", 2e-4),
+                    samples_processed=step *
+                    train_cfg.get("micro_batch_size", 2),
+                    tokens_processed=step *
+                    train_cfg.get("micro_batch_size", 2) * seq_lengths[0],
+                )
+
+                if step % args.log_every == 0:
+                    loss_str = ", ".join(
+                        [f"{k}={v:.4f}" for k, v in loss_dict.items()])
+                    print(
+                        f"[distill_process] Step {step}/{args.steps}: {loss_str}")
+
+                if step % args.save_every == 0:
+                    checkpoint_path = output_dir / \
+                        f"process_supervised_step_{step}.pt"
+                    torch.save(
+                        {
+                            "step": step,
+                            "model_state_dict": model.state_dict(),
+                            "optimizer_state_dict": optimizer.state_dict(),
+                            "loss": loss_dict.get("total", 0.0),
+                            "config": cfg,
+                        },
+                        checkpoint_path,
+                    )
+                    print(
+                        f"[distill_process] Saved checkpoint: {checkpoint_path}")
+
+                    # Record checkpoint for recovery
+                    progress.record_checkpoint(
+                        step=step,
+                        checkpoint_path=checkpoint_path,
+                        dataset_position=step *
+                        train_cfg.get("micro_batch_size", 2),
+                    )
+
             if step >= args.steps:
                 break
 
-            loss_dict = train_step_process(
-                model=model,
-                batch=batch,
-                optimizer=optimizer,
-                scaler=scaler,
-                cfg=cfg,
-                device=device,
-                tokenizer=tokenizer,
-                proc_cfg=proc_cfg,
+            # Final checkpoint
+            final_path = output_dir / "process_supervised_latest.pt"
+            torch.save(
+                {
+                    "step": step,
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "loss": loss_dict.get("total", 0.0),
+                    "config": cfg,
+                },
+                final_path,
             )
-
-            step += 1
-
-            if step % args.log_every == 0:
-                loss_str = ", ".join(
-                    [f"{k}={v:.4f}" for k, v in loss_dict.items()])
-                print(
-                    f"[distill_process] Step {step}/{args.steps}: {loss_str}")
-
-            if step % args.save_every == 0:
-                checkpoint_path = output_dir / \
-                    f"process_supervised_step_{step}.pt"
-                torch.save(
-                    {
-                        "step": step,
-                        "model_state_dict": model.state_dict(),
-                        "optimizer_state_dict": optimizer.state_dict(),
-                        "loss": loss_dict.get("total", 0.0),
-                        "config": cfg,
-                    },
-                    checkpoint_path,
-                )
-                print(f"[distill_process] Saved checkpoint: {checkpoint_path}")
-
-        if step >= args.steps:
-            break
-
-    # Final checkpoint
-    final_path = output_dir / "process_supervised_latest.pt"
-    torch.save(
-        {
-            "step": step,
-            "model_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-            "loss": loss_dict.get("total", 0.0),
-            "config": cfg,
-        },
-        final_path,
-    )
-    print(f"[distill_process] ✅ Training complete: {final_path}")
+            print(f"[distill_process] ✅ Training complete: {final_path}")
 
 
 if __name__ == "__main__":

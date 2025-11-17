@@ -304,7 +304,7 @@ class KDDataset(Dataset):
                 sample["integration_mask"], dtype=torch.bool)
 
         # Add teacher targets (use teacher tokens as targets)
-        if teacher_tokens:
+        if teacher_tokens is not None and len(teacher_tokens) > 0:
             teacher_target_ids = torch.tensor(
                 teacher_tokens[: len(labels)], dtype=torch.long)
             # Pad or truncate to match labels length
