@@ -78,16 +78,17 @@ def extract_json_from_text(text: str, require_valid: bool = False) -> Optional[s
             except json.JSONDecodeError:
                 continue
     else:
-        # Return the first JSON-like pattern found (even if invalid)
-        if matches:
-            return matches[0]
+        # Return the first valid JSON-like pattern found
+        # Even if require_valid=False, we should still validate to ensure it's parseable
+        for match in matches:
+            try:
+                json.loads(match)
+                return match
+            except json.JSONDecodeError:
+                continue
         
-        # If no balanced matches, look for incomplete JSON patterns (starts with {)
-        incomplete_pattern = r"\{[^}]*"
-        incomplete_matches = re.findall(incomplete_pattern, text)
-        if incomplete_matches:
-            # Return the longest incomplete match
-            return max(incomplete_matches, key=len)
+        # If no valid balanced matches, don't return incomplete patterns
+        # Incomplete JSON is not useful and should return None
 
     # Try parsing entire text
     try:
@@ -197,9 +198,25 @@ def check_json_repair_needed(text: str, use_jsonrepair: bool = True) -> Tuple[bo
     # Extract JSON from text
     json_str = extract_json_from_text(text)
 
+    # If extract_json_from_text returns None, look for JSON patterns directly
+    # (it may have returned None for incomplete JSON, but we still want to try repair)
     if json_str is None:
-        return False, False
-
+        # Look for JSON-like patterns (including incomplete ones for repair)
+        json_pattern = r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}"
+        matches = re.findall(json_pattern, text)
+        
+        # Also look for incomplete patterns
+        incomplete_pattern = r"\{[^}]*"
+        incomplete_matches = re.findall(incomplete_pattern, text)
+        
+        # Combine and try to find something repairable
+        all_matches = matches + incomplete_matches
+        if not all_matches:
+            return False, False
+        
+        # Use the longest match (most likely to be repairable)
+        json_str = max(all_matches, key=len)
+    
     # Check if valid
     is_valid = validate_json(json_str)
 

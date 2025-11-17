@@ -538,19 +538,9 @@ class TestCollateKDBatch:
 class TestKDDatasetEnhanced:
     """Enhanced tests for KDDataset to improve coverage."""
 
-    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
-    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
-    def setup_mock_tokenizer(self, mock_safe_tokenizer):
-        """Set up mock tokenizer for tests."""
-        mock_tokenizer = Mock()
-        mock_tokenizer.pad_token = "[PAD]"
-        mock_tokenizer.eos_token = "[EOS]"
-        mock_tokenizer.pad_token_id = 0
-        mock_tokenizer.encode.return_value = [1, 2, 3, 4, 5]
-        mock_tokenizer.encode_plus.return_value = {
-            "input_ids": [1, 2, 3, 4, 5],
-            "attention_mask": [1, 1, 1, 1, 1],
-        }
+    def _setup_mock_tokenizer(self, mock_safe_tokenizer):
+        """Set up mock tokenizer for tests - non-decorated helper."""
+        mock_tokenizer = create_mock_tokenizer_subscriptable()
         mock_safe_tokenizer.return_value = mock_tokenizer
         return mock_tokenizer
 
@@ -636,8 +626,8 @@ class TestKDDatasetEnhanced:
         self._setup_mock_tokenizer(mock_safe_tokenizer)
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
-            f.write('{"incomplete": json}\n')
-            f.write('{"valid": "json"}\n')
+            f.write('{"incomplete": json}\n')  # Malformed JSON
+            f.write('{"prompt": "test", "teacher_text": "response", "valid": "json"}\n')  # Valid JSON with required fields
             temp_path = f.name
 
         try:
@@ -653,8 +643,8 @@ class TestKDDatasetEnhanced:
     def test_kd_dataset_tokenization_with_special_tokens(self, mock_safe_tokenizer):
         """Test tokenization handling with special tokens."""
         mock_tokenizer = self._setup_mock_tokenizer(mock_safe_tokenizer)
-        mock_tokenizer.encode.return_value = [
-            101, 2057, 102]  # [CLS] hello [SEP]
+        # encode should be a Mock, not just return_value
+        mock_tokenizer.encode = Mock(return_value=[101, 2057, 102])  # [CLS] hello [SEP]
 
         sample_data = {
             "prompt": "hello world",
@@ -671,7 +661,7 @@ class TestKDDatasetEnhanced:
             item = dataset[0]
 
             # Check tokenization was called
-            mock_tokenizer.encode.assert_called()
+            assert mock_tokenizer.encode.called
             assert "input_ids" in item
             assert "attention_mask" in item
             assert "labels" in item
@@ -732,7 +722,7 @@ class TestKDDatasetEnhanced:
             temp_path = f.name
 
         try:
-            dataset = KDDataset(temp_path, "test_tokenizer")
+            dataset = KDDataset(temp_path, "test_tokenizer", teacher_logits_available=True)
             item = dataset[0]
 
             # Check all supervision targets are present
@@ -885,7 +875,8 @@ class TestKDDatasetEnhanced:
     def test_kd_dataset_tokenization_error_handling(self, mock_safe_tokenizer):
         """Test error handling during tokenization."""
         mock_tokenizer = self._setup_mock_tokenizer(mock_safe_tokenizer)
-        mock_tokenizer.encode.side_effect = Exception("Tokenization failed")
+        # Make encode raise an exception on all calls
+        mock_tokenizer.encode = Mock(side_effect=Exception("Tokenization failed"))
 
         sample_data = {
             "prompt": "test prompt",
@@ -900,7 +891,7 @@ class TestKDDatasetEnhanced:
         try:
             dataset = KDDataset(temp_path, "test_tokenizer")
 
-            # Should handle tokenization error gracefully
+            # Should raise exception when tokenization fails
             with pytest.raises((Exception, RuntimeError)):
                 dataset[0]
 

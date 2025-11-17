@@ -20,13 +20,35 @@ class TestLossMaskCorrectness:
     def mock_tokenizer(self):
         """Create mock tokenizer."""
         tokenizer = Mock()
-        tokenizer.encode = Mock(return_value=[1, 2, 3, 4, 5])
-        tokenizer.convert_tokens_to_ids = Mock(
-            side_effect=lambda x: {
-                "<bot>": BOT_TOKEN_ID,
-                "<eot>": EOT_TOKEN_ID,
-            }.get(x, None)
-        )
+        
+        # Map tokens to IDs
+        token_to_id = {
+            "<bot>": BOT_TOKEN_ID,
+            "<eot>": EOT_TOKEN_ID,
+        }
+        
+        def convert_tokens_to_ids(token):
+            return token_to_id.get(token, None)
+        
+        def encode(text, add_special_tokens=False):
+            # Simulate tokenization: split by spaces and map to IDs
+            # Special tokens get their mapped IDs, regular words get sequential IDs
+            tokens = []
+            words = text.split()
+            word_id = 10  # Start word IDs at 10
+            
+            for word in words:
+                if word in token_to_id:
+                    tokens.append(token_to_id[word])
+                else:
+                    # Assign sequential ID for regular words
+                    tokens.append(word_id)
+                    word_id += 1
+            
+            return tokens
+        
+        tokenizer.convert_tokens_to_ids = Mock(side_effect=convert_tokens_to_ids)
+        tokenizer.encode = Mock(side_effect=encode)
         return tokenizer
 
     @pytest.fixture

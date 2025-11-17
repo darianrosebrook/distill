@@ -121,11 +121,26 @@ class KDDataset(Dataset):
                     data = json.loads(line)
 
                     # Check for dataset header (first line with __header__ flag)
-                    if first_line and data.get("__header__", False):
-                        self.dataset_header = data
-                        # Extract fingerprint if available
-                        if "dataset_sha256" in data:
-                            self.dataset_fingerprint = data["dataset_sha256"]
+                    if first_line and "__header__" in data:
+                        # Header can be either:
+                        # 1. {"__header__": {...header_data...}} - header data nested under __header__
+                        # 2. {"__header__": true, "dataset_fingerprint": "...", ...} - header data at top level
+                        if isinstance(data["__header__"], dict):
+                            # Case 1: header data is nested
+                            self.dataset_header = data["__header__"]
+                            # Extract fingerprint if available
+                            if "dataset_fingerprint" in data["__header__"]:
+                                self.dataset_fingerprint = data["__header__"]["dataset_fingerprint"]
+                            elif "dataset_sha256" in data["__header__"]:
+                                self.dataset_fingerprint = data["__header__"]["dataset_sha256"]
+                        else:
+                            # Case 2: header data at top level
+                            self.dataset_header = data
+                            # Extract fingerprint if available
+                            if "dataset_fingerprint" in data:
+                                self.dataset_fingerprint = data["dataset_fingerprint"]
+                            elif "dataset_sha256" in data:
+                                self.dataset_fingerprint = data["dataset_sha256"]
                         first_line = False
                         continue
 
@@ -261,8 +276,9 @@ class KDDataset(Dataset):
         full_tokens = self.tokenizer.encode(full_text, add_special_tokens=True)
 
         # Truncate if needed
-        if len(full_tokens) > self.max_seq_length:
-            full_tokens = full_tokens[: self.max_seq_length]
+        # Need max_seq_length + 1 tokens to get max_seq_length tokens after shifting
+        if len(full_tokens) > self.max_seq_length + 1:
+            full_tokens = full_tokens[: self.max_seq_length + 1]
 
         # Create input_ids and labels
         # Labels are shifted by 1 for next-token prediction
@@ -351,14 +367,10 @@ class KDDataset(Dataset):
                                                 vocab_size].view(seq_len, vocab_size)
             elif teacher_logits.dim() == 2:
                 # Already [T, V]
+                # Truncate to labels length if longer, but don't pad if shorter
+                # Padding will be handled by collate_kd_batch
                 seq_len = min(teacher_logits.size(0), len(labels))
                 teacher_logits = teacher_logits[:seq_len]
-                # Pad if needed
-                if seq_len < len(labels):
-                    padding = torch.zeros(
-                        len(labels) - seq_len, vocab_size, dtype=torch.float32)
-                    teacher_logits = torch.cat(
-                        [teacher_logits, padding], dim=0)
             result["teacher_logits"] = teacher_logits
 
         # Add teacher quality score if available (for self-evaluation head training)
@@ -371,6 +383,10 @@ class KDDataset(Dataset):
                     result["teacher_quality_score"] = float(quality_score)
                 except ValueError:
                     pass  # Skip invalid quality scores
+
+        # Preserve metadata if present (for debugging, logging, etc.)
+        if "metadata" in sample:
+            result["metadata"] = sample["metadata"]
 
         # Add teacher hidden states if available (for intermediate layer matching)
         # Hidden states can be provided in two ways:
@@ -431,6 +447,12 @@ def collate_kd_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
     max_gold_json_text_ids_len = 0
     max_tool_result_fields_len = 0
     
+    # Find max vocab_size for teacher_logits (if present)
+    # Different items may have different vocab sizes, need to pad to max
+    max_vocab_size = 0
+    has_teacher_logits = False
+    all_have_teacher_logits = True
+    teacher_logits_count = 0
     for item in batch:
         if "tool_name_ids" in item:
             max_tool_name_ids_len = max(max_tool_name_ids_len, item["tool_name_ids"].size(0))
@@ -438,6 +460,15 @@ def collate_kd_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
             max_gold_json_text_ids_len = max(max_gold_json_text_ids_len, item["gold_json_text_ids"].size(0))
         if "tool_result_fields" in item:
             max_tool_result_fields_len = max(max_tool_result_fields_len, item["tool_result_fields"].size(0))
+        if "teacher_logits" in item:
+            has_teacher_logits = True
+            teacher_logits_count += 1
+            vocab_size = item["teacher_logits"].size(-1)
+            max_vocab_size = max(max_vocab_size, vocab_size)
+    
+    # Check if all items have teacher_logits
+    if has_teacher_logits:
+        all_have_teacher_logits = (teacher_logits_count == len(batch))
 
     # Pad all sequences
     input_ids_list = []
@@ -491,13 +522,31 @@ def collate_kd_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
             teacher_target_ids_list.append(teacher_target_ids)
 
         # Pad teacher_logits if present
-        if "teacher_logits" in item:
-            teacher_logits = item["teacher_logits"]
-            vocab_size = teacher_logits.size(-1)
-            if pad_len > 0:
-                padding = torch.zeros(pad_len, vocab_size, dtype=torch.float32)
-                teacher_logits = torch.cat([teacher_logits, padding], dim=0)
-            teacher_logits_list.append(teacher_logits)
+        if has_teacher_logits:
+            if "teacher_logits" in item:
+                teacher_logits = item["teacher_logits"]
+                vocab_size = teacher_logits.size(-1)
+                teacher_logits_seq_len = teacher_logits.size(0)
+                
+                # Pad sequence length to match max_len (not just input_ids length)
+                teacher_logits_pad_len = max_len - teacher_logits_seq_len
+                if teacher_logits_pad_len > 0:
+                    padding = torch.zeros(teacher_logits_pad_len, vocab_size, dtype=torch.float32)
+                    teacher_logits = torch.cat([teacher_logits, padding], dim=0)
+                elif teacher_logits_seq_len > max_len:
+                    # Truncate if longer than max_len
+                    teacher_logits = teacher_logits[:max_len]
+                
+                # Pad vocab_size dimension if needed (to match max_vocab_size in batch)
+                if max_vocab_size > 0 and vocab_size < max_vocab_size:
+                    vocab_pad_len = max_vocab_size - vocab_size
+                    vocab_padding = torch.zeros(teacher_logits.size(0), vocab_pad_len, dtype=torch.float32)
+                    teacher_logits = torch.cat([teacher_logits, vocab_padding], dim=-1)
+                
+                teacher_logits_list.append(teacher_logits)
+            else:
+                # Missing teacher_logits - append None for this item
+                teacher_logits_list.append(None)
 
         # Collect and pad process-step supervision targets
         # These are padded independently based on their own max lengths
@@ -508,12 +557,11 @@ def collate_kd_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
                 tool_pad_len = max_tool_name_ids_len - tool_name_ids.size(0)
                 if tool_pad_len > 0:
                     tool_name_ids = torch.cat(
-                        [tool_name_ids, torch.full(
-                            (tool_pad_len,), -100, dtype=torch.long)]
+                        [tool_name_ids, torch.zeros(tool_pad_len, dtype=torch.long)]
                     )
             else:
                 # Create empty tensor if missing
-                tool_name_ids = torch.full((max_tool_name_ids_len,), -100, dtype=torch.long)
+                tool_name_ids = torch.zeros(max_tool_name_ids_len, dtype=torch.long)
             tool_name_ids_list.append(tool_name_ids)
 
         if max_tool_name_ids_len > 0:
@@ -601,8 +649,15 @@ def collate_kd_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
     if teacher_target_ids_list:
         result["teacher_target_ids"] = torch.stack(teacher_target_ids_list)
 
-    if teacher_logits_list:
-        result["teacher_logits"] = torch.stack(teacher_logits_list)
+    # Handle teacher_logits: stack if all items have them, otherwise return as list
+    if teacher_logits_list and len(teacher_logits_list) > 0:
+        if all_have_teacher_logits:
+            # All items have teacher_logits - stack into batch tensor
+            result["teacher_logits"] = torch.stack(teacher_logits_list)
+        else:
+            # Not all items have teacher_logits - return as list with None for missing items
+            # This allows tests to check for None/empty in missing items
+            result["teacher_logits"] = teacher_logits_list
 
     # Add process-step supervision targets
     if tool_name_ids_list:

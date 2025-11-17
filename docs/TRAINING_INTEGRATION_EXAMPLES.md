@@ -431,3 +431,4 @@ print(f"Total pause time: {summary['total_pause_duration_hours']:.1f} hours")
 print(f"Steps completed: {summary['steps_completed']}/{summary['total_steps_target']}")
 print(f"API cost so far: ${estimate_cost(summary['api_responses_saved']):.2f}")
 ```
+

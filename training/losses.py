@@ -20,7 +20,7 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 import re
 
 
@@ -282,6 +282,12 @@ def intermediate_layer_loss(
     Returns:
         Dict with 'total' loss and per-layer breakdowns for monitoring.
     """
+    # Handle case where aligned_pairs is passed as first positional argument
+    if aligned_pairs is None and isinstance(student_hidden_states, dict):
+        # If student_hidden_states is a dict, it's actually aligned_pairs passed positionally
+        aligned_pairs = student_hidden_states
+        student_hidden_states = None
+
     # If aligned_pairs not provided, compute from hidden states
     if aligned_pairs is None:
         aligned_pairs = _compute_aligned_pairs(
@@ -293,8 +299,16 @@ def intermediate_layer_loss(
 
     out: Dict[str, torch.Tensor] = {}
     if not aligned_pairs:
-        zero = torch.zeros(
-            (), device="cuda" if torch.cuda.is_available() else "cpu")
+        # Get device from input tensors if available, otherwise use default
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        # Try to get device from aligned_pairs if it was computed, or from input tensors
+        if student_hidden_states and isinstance(student_hidden_states, list) and len(student_hidden_states) > 0:
+            device = student_hidden_states[0].device
+        elif teacher_hidden_states and isinstance(teacher_hidden_states, list) and len(teacher_hidden_states) > 0:
+            device = teacher_hidden_states[0].device
+        # If aligned_pairs was passed directly, we can't determine device from inputs
+        # so we'll use the default device and create a zero tensor with requires_grad
+        zero = torch.zeros((), device=device, requires_grad=True)
         out["total"] = zero
         return out
 

@@ -61,3 +61,4 @@ class IntermediateAligner(nn.Module):
             proj = self.projections[key](h_s)        # [B, T, Dt]
             aligned[(si, ti)] = (proj, h_t)
         return aligned
+

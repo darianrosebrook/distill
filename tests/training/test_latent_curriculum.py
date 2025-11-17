@@ -18,12 +18,38 @@ class TestLatentCurriculum:
     def mock_tokenizer(self):
         """Create mock tokenizer."""
         tokenizer = Mock()
-        tokenizer.convert_tokens_to_ids = Mock(
-            side_effect=lambda x: {
-                BOT_TOKEN: 3,
-                EOT_TOKEN: 4,
-            }.get(x, None)
-        )
+        
+        # Map tokens to IDs
+        token_to_id = {
+            BOT_TOKEN: 3,
+            EOT_TOKEN: 4,
+        }
+        
+        def convert_tokens_to_ids(token):
+            return token_to_id.get(token, None)
+        
+        def encode(text, add_special_tokens=False):
+            # Simulate tokenization: split by spaces and map to IDs
+            # For simplicity, assign sequential IDs to words
+            # Special tokens get their mapped IDs
+            tokens = []
+            words = text.split()
+            word_id = 10  # Start word IDs at 10
+            
+            for word in words:
+                if word == BOT_TOKEN:
+                    tokens.append(token_to_id[BOT_TOKEN])
+                elif word == EOT_TOKEN:
+                    tokens.append(token_to_id[EOT_TOKEN])
+                else:
+                    # Assign sequential ID for regular words
+                    tokens.append(word_id)
+                    word_id += 1
+            
+            return tokens
+        
+        tokenizer.convert_tokens_to_ids = Mock(side_effect=convert_tokens_to_ids)
+        tokenizer.encode = Mock(side_effect=encode)
         return tokenizer
 
     @pytest.fixture

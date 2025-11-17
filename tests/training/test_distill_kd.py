@@ -4732,9 +4732,12 @@ class TestMainFunction:
         }
         mock_validate_config.return_value = None
 
-        with patch("training.distill_kd.sys.exit") as mock_exit:
+        with patch("training.distill_kd.sys.exit", side_effect=SystemExit(1)) as mock_exit:
             from training.distill_kd import main
-            main()
+            try:
+                main()
+            except SystemExit:
+                pass
             mock_exit.assert_called_once_with(1)
 
     @patch("training.distill_kd.check_training_versions")
@@ -4772,9 +4775,12 @@ class TestMainFunction:
         # Config validation fails
         mock_validate_config.side_effect = ValueError("Invalid config")
 
-        with patch("training.distill_kd.sys.exit") as mock_exit:
+        with patch("training.distill_kd.sys.exit", side_effect=SystemExit(1)) as mock_exit:
             from training.distill_kd import main
-            main()
+            try:
+                main()
+            except SystemExit:
+                pass
             mock_exit.assert_called_once_with(1)
 
     @patch("training.distill_kd.check_training_versions")
@@ -4811,11 +4817,6 @@ class TestMainFunction:
 
             main()
 
-    @patch("training.distill_kd.check_training_versions")
-    @patch("training.distill_kd.merge_configs")
-    @patch("training.distill_kd.validate_config")
-    @patch("training.distill_kd.create_model")
-    @patch("training.distill_kd.create_optimizer")
     @patch("training.distill_kd.check_training_versions")
     @patch("training.distill_kd.merge_configs")
     @patch("training.distill_kd.validate_config")

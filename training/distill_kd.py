@@ -173,7 +173,27 @@ def compute_required_fields_present(
     Returns:
         [B] boolean tensor: True if all required fields present, False otherwise
     """
-    B = batch.get("input_ids", torch.empty(0)).size(0)
+    # Try to get batch size from input_ids, attention_mask, student_logits, or other batch fields
+    B = 0
+    if "input_ids" in batch:
+        B = batch["input_ids"].size(0)
+    elif "student_logits" in batch:
+        B = batch["student_logits"].size(0)
+    elif "attention_mask" in batch:
+        B = batch["attention_mask"].size(0)
+    elif "labels" in batch:
+        B = batch["labels"].size(0)
+    elif "gold_json_text_ids" in batch:
+        B = batch["gold_json_text_ids"].size(0)
+    elif "mask_valid_json_tokens" in batch:
+        B = batch["mask_valid_json_tokens"].size(0)
+    elif "validated_args" in batch and isinstance(batch["validated_args"], list):
+        # Fallback: use length of validated_args list if it's a list
+        B = len(batch["validated_args"])
+    elif "tool_names" in batch and isinstance(batch["tool_names"], list):
+        # Fallback: use length of tool_names list if it's a list
+        B = len(batch["tool_names"])
+    
     if B == 0:
         return torch.zeros(0, dtype=torch.bool, device=device)
 
@@ -2366,6 +2386,15 @@ def main():
         validate_config(cfg)
     except ValueError as e:
         print(f"[distill_kd] ERROR: {e}")
+        sys.exit(1)
+
+    # Check for required tokenizer_path early (before creating model/optimizer)
+    tokenizer_path = cfg.get("io", {}).get("tokenizer_path")
+    if not tokenizer_path:
+        # Fallback: try configs/worker_9b.yaml tokenizer path
+        tokenizer_path = cfg.get("tokenizer", {}).get("path")
+    if not tokenizer_path:
+        print("[distill_kd] ERROR: tokenizer_path must be specified in config (io.tokenizer_path)")
         sys.exit(1)
 
     # Log provenance for reproducibility

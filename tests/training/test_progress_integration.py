@@ -421,3 +421,4 @@ class TestContextManagerConvenience:
             )
 
             assert progress.tracker.session.steps_completed == 1
+

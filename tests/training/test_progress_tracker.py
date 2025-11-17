@@ -447,3 +447,4 @@ class TestStatePersistence:
         assert tracker2.session.last_checkpoint_step == 50
         assert tracker2.session.samples_processed == 1600
         assert len(tracker2.session.checkpoints) == 1
+

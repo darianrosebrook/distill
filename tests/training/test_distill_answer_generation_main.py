@@ -228,3 +228,4 @@ class TestMain:
             assert len(checkpoint_files) > 0 or final_checkpoint.exists()
             mock_tracer.close.assert_called_once()
 
+
