@@ -536,8 +536,8 @@ class TestMainFunction:
     @patch("training.quant_qat_int8.yaml.safe_load")
     @patch("builtins.open", new_callable=mock_open)
     def test_main_qat_disabled(self, mock_file, mock_yaml, mock_parse_args,
-                              mock_optimizer, mock_quantize, mock_load_checkpoint,
-                              mock_dataset, mock_dataloader, mock_save):
+                               mock_optimizer, mock_quantize, mock_load_checkpoint,
+                               mock_dataset, mock_dataloader, mock_save):
         """Test main function when QAT is disabled."""
         # Mock config with QAT disabled
         mock_yaml.return_value = {"qat": {"enable": False}}
@@ -563,8 +563,8 @@ class TestMainFunction:
     @patch("training.quant_qat_int8.yaml.safe_load")
     @patch("builtins.open", new_callable=mock_open)
     def test_main_training_loop(self, mock_file, mock_yaml, mock_parse_args,
-                               mock_optimizer, mock_quantize, mock_load_checkpoint,
-                               mock_dataset, mock_dataloader, mock_save):
+                                mock_optimizer, mock_quantize, mock_load_checkpoint,
+                                mock_dataset, mock_dataloader, mock_save):
         """Test main function training loop setup."""
         # Mock config with QAT enabled
         mock_yaml.return_value = {

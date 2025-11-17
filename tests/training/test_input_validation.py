@@ -106,7 +106,8 @@ class TestInputValidator:
     def test_validate_text_input_suspicious_lenient(self, lenient_validator, capsys):
         """Test suspicious pattern in lenient mode (line 114)."""
         malicious_text = '<script>alert("xss")</script>'
-        result = lenient_validator.validate_text_input(malicious_text, "test_field")
+        result = lenient_validator.validate_text_input(
+            malicious_text, "test_field")
         # Should return the text but print warning
         assert result == malicious_text
         captured = capsys.readouterr()
@@ -119,33 +120,39 @@ class TestInputValidator:
 
     def test_contains_suspicious_patterns_matches(self, strict_validator):
         """Test _contains_suspicious_patterns with matching pattern (line 62-65)."""
-        result = strict_validator._contains_suspicious_patterns('<script>alert("xss")</script>')
+        result = strict_validator._contains_suspicious_patterns(
+            '<script>alert("xss")</script>')
         assert result
 
     def test_contains_suspicious_patterns_no_match(self, strict_validator):
         """Test _contains_suspicious_patterns with no matching pattern (line 65)."""
-        result = strict_validator._contains_suspicious_patterns("Clean text with no suspicious content")
+        result = strict_validator._contains_suspicious_patterns(
+            "Clean text with no suspicious content")
         assert result is False  # Must be exactly False, not None
 
     def test_validate_numeric_input_valid(self, strict_validator):
         """Test validating valid numeric input."""
-        result = strict_validator.validate_numeric_input(42, "test_num", min_val=0, max_val=100)
+        result = strict_validator.validate_numeric_input(
+            42, "test_num", min_val=0, max_val=100)
         assert result == 42
 
     def test_validate_numeric_input_string_number(self, strict_validator):
         """Test validating string number."""
-        result = strict_validator.validate_numeric_input("42", "test_num", min_val=0, max_val=100)
+        result = strict_validator.validate_numeric_input(
+            "42", "test_num", min_val=0, max_val=100)
         assert result == 42.0
 
     def test_validate_numeric_input_below_min(self, strict_validator):
         """Test validating number below minimum."""
         with pytest.raises(ValidationError, match="must be >="):
-            strict_validator.validate_numeric_input(5, "test_num", min_val=10, max_val=100)
+            strict_validator.validate_numeric_input(
+                5, "test_num", min_val=10, max_val=100)
 
     def test_validate_numeric_input_above_max(self, strict_validator):
         """Test validating number above maximum."""
         with pytest.raises(ValidationError, match="must be <="):
-            strict_validator.validate_numeric_input(150, "test_num", min_val=0, max_val=100)
+            strict_validator.validate_numeric_input(
+                150, "test_num", min_val=0, max_val=100)
 
     def test_validate_numeric_input_invalid_type(self, strict_validator):
         """Test validating non-numeric input."""
@@ -200,7 +207,8 @@ class TestInputValidator:
 
     def test_validate_tools_too_many(self, strict_validator):
         """Test validating too many tools."""
-        tools = [{"name": f"tool{i}", "description": f"Tool {i}"} for i in range(strict_validator.MAX_TOOL_COUNT + 1)]
+        tools = [{"name": f"tool{i}", "description": f"Tool {i}"}
+                 for i in range(strict_validator.MAX_TOOL_COUNT + 1)]
         with pytest.raises(ValidationError, match="too many tools"):
             strict_validator.validate_tools(tools)
 
@@ -243,7 +251,8 @@ class TestInputValidator:
     def test_validate_structured_data_custom_required_fields(self, strict_validator):
         """Test validating structured data with custom required fields."""
         data = {"custom_field": "value"}
-        result = strict_validator.validate_structured_data(data, required_fields=["custom_field"])
+        result = strict_validator.validate_structured_data(
+            data, required_fields=["custom_field"])
         assert result["custom_field"] == "value"
 
     def test_validate_structured_data_invalid_required_type(self, strict_validator):
@@ -254,7 +263,8 @@ class TestInputValidator:
 
     def test_validate_structured_data_nested_dict(self, strict_validator):
         """Test validating structured data with nested dict."""
-        data = {"prompt": "Test", "response": "Test", "metadata": {"key": "value"}}
+        data = {"prompt": "Test", "response": "Test",
+                "metadata": {"key": "value"}}
         result = strict_validator.validate_structured_data(data)
         assert result["metadata"] == {"key": "value"}
 
@@ -286,7 +296,8 @@ class TestInputValidator:
 
     def test_validate_structured_data_optional_string_field(self, strict_validator):
         """Test validating structured data with optional string field (line 195)."""
-        data = {"prompt": "Test", "response": "Test", "optional_field": "optional value"}
+        data = {"prompt": "Test", "response": "Test",
+                "optional_field": "optional value"}
         result = strict_validator.validate_structured_data(data)
         assert result["optional_field"] == "optional value"
 
@@ -317,7 +328,8 @@ class TestInputValidator:
 
     def test_validate_training_example_invalid_cot_steps(self, strict_validator):
         """Test validating training example with invalid cot_steps (line 334)."""
-        example = {"prompt": "Test prompt", "response": "Test response", "cot_steps": "not a list"}
+        example = {"prompt": "Test prompt",
+                   "response": "Test response", "cot_steps": "not a list"}
         with pytest.raises(ValidationError, match="must be a list"):
             strict_validator.validate_training_example(example)
 
@@ -453,7 +465,8 @@ class TestInputValidator:
         """Test validating valid file path."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("test content")
-        result = strict_validator.validate_file_path(test_file, must_exist=True)
+        result = strict_validator.validate_file_path(
+            test_file, must_exist=True)
         # Function returns str, not Path (line 497)
         assert isinstance(result, str)
         assert Path(result).exists()
@@ -467,7 +480,8 @@ class TestInputValidator:
     def test_validate_file_path_not_exist_optional(self, strict_validator, tmp_path):
         """Test validating file path that doesn't exist (optional)."""
         non_existent = tmp_path / "nonexistent.txt"
-        result = strict_validator.validate_file_path(non_existent, must_exist=False)
+        result = strict_validator.validate_file_path(
+            non_existent, must_exist=False)
         assert isinstance(result, str)
 
     def test_validate_file_path_permission_error(self, strict_validator, tmp_path, monkeypatch):
@@ -496,6 +510,7 @@ class TestInputValidator:
 
     def test_validate_file_path_invalid_path(self, strict_validator, monkeypatch):
         """Test validating file path with invalid path (line 469-470)."""
+
         def mock_relative_to(self, other):
             raise ValueError("Invalid path")
 
@@ -514,7 +529,8 @@ class TestInputValidator:
         """Test validating file path with file that is too large."""
         large_file = tmp_path / "large.txt"
         # Create a file larger than MAX_FILE_SIZE_MB
-        large_content = "x" * (strict_validator.MAX_FILE_SIZE_MB * 1024 * 1024 + 1)
+        large_content = "x" * \
+            (strict_validator.MAX_FILE_SIZE_MB * 1024 * 1024 + 1)
         large_file.write_text(large_content)
         with pytest.raises(ValidationError, match="too large"):
             strict_validator.validate_file_path(large_file)
@@ -607,17 +623,20 @@ class TestValidateToolTrace:
 
     def test_validate_tool_trace_non_string_input(self):
         """Test validating tool trace with non-string tool_input."""
-        trace = [{"tool_name": "tool1", "tool_input": {"json": "object"}, "tool_output": "output"}]
+        trace = [{"tool_name": "tool1", "tool_input": {
+            "json": "object"}, "tool_output": "output"}]
         result = validate_tool_trace(trace)
         assert result[0]["tool_input"] == {"json": "object"}
 
     def test_validate_tool_trace_non_string_output(self):
         """Test validating tool trace with non-string tool_output (line 578)."""
-        trace = [{"tool_name": "tool1", "tool_input": "input", "tool_output": {"json": "object"}}]
+        trace = [{"tool_name": "tool1", "tool_input": "input",
+                  "tool_output": {"json": "object"}}]
         result = validate_tool_trace(trace)
         assert result[0]["tool_output"] == {"json": "object"}
         # Test with string output to ensure isinstance check works (line 578)
-        trace_str = [{"tool_name": "tool1", "tool_input": "input", "tool_output": "string output"}]
+        trace_str = [{"tool_name": "tool1",
+                      "tool_input": "input", "tool_output": "string output"}]
         result_str = validate_tool_trace(trace_str)
         assert result_str[0]["tool_output"] == "string output"
 
@@ -683,7 +702,7 @@ class TestInputValidatorAdditional:
             return Path.stat(self)
 
         monkeypatch.setattr(Path, "stat", mock_stat)
-        
+
         with pytest.raises(ValidationError, match="cannot access file"):
             strict_validator.validate_file_path(test_file, must_exist=True)
 
@@ -704,17 +723,19 @@ class TestInputValidatorAdditional:
         example_with_suspicious_answer = {
             "prompt": "Test prompt",
             "response": "Test response",
-            "answer": '<script>alert("xss")</script>',  # Suspicious answer should be caught
+            # Suspicious answer should be caught
+            "answer": '<script>alert("xss")</script>',
         }
         with pytest.raises(ValidationError, match="contains suspicious content"):
-            strict_validator.validate_training_example(example_with_suspicious_answer)
+            strict_validator.validate_training_example(
+                example_with_suspicious_answer)
 
     def test_validate_file_path_directory_not_file(self, strict_validator, tmp_path):
         """Test validate_file_path when path exists but is a directory (not a file) - line 485."""
         # Create a directory
         test_dir = tmp_path / "test_dir"
         test_dir.mkdir()
-        
+
         # Directory exists but is not a file, so file size check is skipped
         result = strict_validator.validate_file_path(test_dir, must_exist=True)
         assert isinstance(result, str)
@@ -725,7 +746,7 @@ class TestInputValidatorAdditional:
         # Path exists but is not a file - should skip file size check
         test_dir = tmp_path / "subdir"
         test_dir.mkdir()
-        
+
         result = strict_validator.validate_file_path(test_dir, must_exist=True)
         assert isinstance(result, str)
         # Should not raise error for directory (file size check only for files)
@@ -736,7 +757,7 @@ class TestInputValidatorAdditional:
         class MockTensor:
             shape = (2, 128)
             # Don't define isnan() - hasattr() check will return False
-        
+
         batch = {"input_ids": MockTensor()}
         # Should not raise error if isnan() is not available (hasattr check returns False)
         result = strict_validator.validate_batch(batch)
@@ -747,11 +768,12 @@ class TestInputValidatorAdditional:
         # Create a mock tensor-like object without isinf() method
         class MockTensor:
             shape = (2, 128)
+
             def isnan(self):
                 # Return a mock result object with .any() method
                 return type('MockResult', (), {'any': lambda self: False})()
             # Don't define isinf() - hasattr() check will return False
-        
+
         batch = {"input_ids": MockTensor()}
         # Should not raise error if isinf() is not available (hasattr check returns False)
         result = strict_validator.validate_batch(batch)
@@ -762,8 +784,9 @@ class TestInputValidatorAdditional:
         # Normal path should succeed relative_to check
         test_file = tmp_path / "test.txt"
         test_file.write_text("test")
-        
-        result = strict_validator.validate_file_path(test_file, must_exist=True)
+
+        result = strict_validator.validate_file_path(
+            test_file, must_exist=True)
         assert isinstance(result, str)
         assert Path(result).exists()
 
@@ -775,7 +798,7 @@ class TestInputValidatorAdditional:
         }
         result = strict_validator.validate_metadata(metadata)
         assert result["eligible_for_code_mode"] is True
-        
+
         # Test invalid type
         invalid_metadata = {"eligible_for_code_mode": "not a boolean"}
         with pytest.raises(ValidationError, match="must be a boolean"):
@@ -786,7 +809,8 @@ class TestInputValidatorAdditional:
         example = {
             "prompt": "Test prompt",
             "response": "Test response",
-            "cot_steps": ["Step 1", '<script>alert("xss")</script>'],  # Suspicious content in cot_step
+            # Suspicious content in cot_step
+            "cot_steps": ["Step 1", '<script>alert("xss")</script>'],
         }
         with pytest.raises(ValidationError, match="contains suspicious content"):
             strict_validator.validate_training_example(example)
@@ -794,7 +818,7 @@ class TestInputValidatorAdditional:
     def test_validate_batch_partial_tensor_fields(self, strict_validator):
         """Test validate_batch with only some tensor fields present."""
         import torch
-        
+
         # Only input_ids present (not labels or attention_mask)
         batch = {"input_ids": torch.randint(0, 1000, (2, 128))}
         result = strict_validator.validate_batch(batch)
@@ -805,7 +829,7 @@ class TestInputValidatorAdditional:
     def test_validate_batch_all_tensor_fields(self, strict_validator):
         """Test validate_batch with all tensor fields present."""
         import torch
-        
+
         batch = {
             "input_ids": torch.randint(0, 1000, (2, 128)),
             "labels": torch.randint(0, 1000, (2, 128)),
@@ -848,5 +872,3 @@ class TestInputValidatorAdditional:
         assert "another_unknown" in result
         assert result["unknown_field"] == "should be preserved"
         assert result["another_unknown"] == 42
-
-

@@ -241,7 +241,8 @@ def intermediate_layer_loss(
     """
     out: Dict[str, torch.Tensor] = {}
     if not aligned_pairs:
-        zero = torch.zeros((), device="cuda" if torch.cuda.is_available() else "cpu")
+        zero = torch.zeros(
+            (), device="cuda" if torch.cuda.is_available() else "cpu")
         out["total"] = zero
         return out
 

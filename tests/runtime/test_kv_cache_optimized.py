@@ -42,7 +42,8 @@ class TestOptimizedKVCacheInit:
         assert cache.v_cache.dtype == np.float16
 
         # Check cache size calculation
-        expected_size = 4 * 64 * 128 * 2 * 2  # n_heads * head_dim * max_seq_len * 2(K+V) * 2(fp16)
+        # n_heads * head_dim * max_seq_len * 2(K+V) * 2(fp16)
+        expected_size = 4 * 64 * 128 * 2 * 2
         assert cache.cache_size_bytes == expected_size
 
     def test_init_torch_fp32(self):
@@ -183,7 +184,8 @@ class TestOptimizedKVCacheOperations:
 
         # Should return available data + zeros
         assert k_slice.shape == (4, 8, 64)  # 10-2 = 8 positions
-        assert np.allclose(k_slice[:, :3, :], k_data[:, 2:5, :])  # Available data
+        assert np.allclose(k_slice[:, :3, :],
+                           k_data[:, 2:5, :])  # Available data
         assert np.all(k_slice[:, 3:, :] == 0)  # Rest should be zeros
 
     def test_reset(self, cache):

@@ -47,7 +47,8 @@ class TestDecodeWrapper:
 
     def test_decode_wrapper_initialization(self, mock_model):
         """Test DecodeWrapper initialization."""
-        wrapper = DecodeWrapper(mock_model, n_layers=6, n_kv_heads=4, d_head=128)
+        wrapper = DecodeWrapper(mock_model, n_layers=6,
+                                n_kv_heads=4, d_head=128)
 
         assert wrapper.model == mock_model
         assert wrapper.n_layers == 6
@@ -56,10 +57,12 @@ class TestDecodeWrapper:
 
     def test_decode_wrapper_index_calculation(self, mock_model):
         """Test that KV cache index calculation is correct (line 34-35)."""
-        wrapper = DecodeWrapper(mock_model, n_layers=3, n_kv_heads=8, d_head=64)
+        wrapper = DecodeWrapper(mock_model, n_layers=3,
+                                n_kv_heads=8, d_head=64)
 
         # Test the index calculation logic manually
-        kv_caches = [torch.randn(2, 8, 10, 64) for _ in range(6)]  # 3 layers * 2 = 6 caches
+        kv_caches = [torch.randn(2, 8, 10, 64)
+                     for _ in range(6)]  # 3 layers * 2 = 6 caches
 
         # Simulate the index calculation from forward method
         kv_list = []
@@ -67,7 +70,8 @@ class TestDecodeWrapper:
             k_idx = i * 2
             v_idx = i * 2 + 1  # This line is being mutated
             assert k_idx == i * 2, f"K index calculation wrong for layer {i}"
-            assert v_idx == i * 2 + 1, f"V index calculation wrong for layer {i}: got {v_idx}, expected {i * 2 + 1}"
+            assert v_idx == i * 2 + \
+                1, f"V index calculation wrong for layer {i}: got {v_idx}, expected {i * 2 + 1}"
             # If + became **, v_idx would be i * 2 ** 1 = i * 2, same as k_idx
 
     def test_decode_wrapper_forward_with_kv_cache(self, wrapper, mock_model):
@@ -106,7 +110,8 @@ class TestDecodeWrapper:
 
     def test_decode_wrapper_forward_empty_cache(self, mock_model):
         """Test forward pass with empty KV cache."""
-        wrapper = DecodeWrapper(mock_model, n_layers=1, n_kv_heads=4, d_head=64)
+        wrapper = DecodeWrapper(mock_model, n_layers=1,
+                                n_kv_heads=4, d_head=64)
 
         input_ids = torch.randint(0, 1000, (1, 1))
 
@@ -123,7 +128,8 @@ class TestDecodeWrapper:
 
     def test_decode_wrapper_forward_mixed_cache(self, mock_model):
         """Test forward pass with mix of empty and non-empty caches."""
-        wrapper = DecodeWrapper(mock_model, n_layers=2, n_kv_heads=4, d_head=64)
+        wrapper = DecodeWrapper(mock_model, n_layers=2,
+                                n_kv_heads=4, d_head=64)
 
         input_ids = torch.randint(0, 1000, (1, 1))
 
@@ -146,7 +152,8 @@ class TestDecodeWrapper:
 
     def test_decode_wrapper_forward_missing_cache_args(self, mock_model):
         """Test forward pass with missing cache arguments."""
-        wrapper = DecodeWrapper(mock_model, n_layers=2, n_kv_heads=4, d_head=64)
+        wrapper = DecodeWrapper(mock_model, n_layers=2,
+                                n_kv_heads=4, d_head=64)
 
         input_ids = torch.randint(0, 1000, (1, 1))
 
@@ -202,8 +209,10 @@ class TestDecodeWrapper:
         mock_model.forward_decode.return_value = (
             torch.randn(batch_size, 1, 32000),  # logits [B=4, T=1, vocab_size]
             [  # updated_caches for 2 layers
-                (torch.randn(batch_size, 8, 16, 64), torch.randn(batch_size, 8, 16, 64)),
-                (torch.randn(batch_size, 8, 16, 64), torch.randn(batch_size, 8, 16, 64)),
+                (torch.randn(batch_size, 8, 16, 64),
+                 torch.randn(batch_size, 8, 16, 64)),
+                (torch.randn(batch_size, 8, 16, 64),
+                 torch.randn(batch_size, 8, 16, 64)),
             ],
         )
 
@@ -244,7 +253,8 @@ class TestMainFunction:
     ):
         """Test main function exporting both prefill and decode modes."""
         # Mock config data
-        config_data = [{"seq": 128, "batch": 1}, {"seq": 256, "batch": 1}, {"seq": 512, "batch": 1}]
+        config_data = [{"seq": 128, "batch": 1}, {
+            "seq": 256, "batch": 1}, {"seq": 512, "batch": 1}]
         mock_json_load.return_value = config_data
 
         # Mock file opening
@@ -402,7 +412,7 @@ class TestMainFunction:
     def test_main_config_not_found(self, mock_echo, mock_open, mock_json_load, mock_model_cfg, mock_student_lm, mock_makedirs, mock_decode_wrapper, mock_onnx_export):
         """Test main function with missing config file."""
         mock_open.side_effect = FileNotFoundError("Config not found")
-        
+
         # Mock ModelCfg and StudentLM to prevent actual model creation
         mock_cfg = Mock()
         mock_cfg.n_heads = 32  # Valid GQA config
@@ -411,12 +421,12 @@ class TestMainFunction:
         mock_cfg.d_head = 128
         mock_cfg.d_model = 4096
         mock_model_cfg.return_value = mock_cfg
-        
+
         mock_model = Mock()
         mock_model.cfg = mock_cfg
         mock_model.eval = Mock()
         mock_student_lm.return_value = mock_model
-        
+
         # Mock DecodeWrapper and ONNX export
         mock_wrapper = Mock()
         mock_wrapper.eval = Mock()
@@ -442,8 +452,9 @@ class TestMainFunction:
     @patch("conversion.export_onnx.typer.echo")
     def test_main_invalid_config(self, mock_echo, mock_open, mock_json_load, mock_model_cfg, mock_student_lm, mock_makedirs, mock_decode_wrapper, mock_onnx_export):
         """Test main function with invalid config file."""
-        mock_json_load.side_effect = json.JSONDecodeError("Invalid JSON", "", 0)
-        
+        mock_json_load.side_effect = json.JSONDecodeError(
+            "Invalid JSON", "", 0)
+
         # Mock ModelCfg and StudentLM to prevent actual model creation
         mock_cfg = Mock()
         mock_cfg.n_heads = 32  # Valid GQA config
@@ -452,12 +463,12 @@ class TestMainFunction:
         mock_cfg.d_head = 128
         mock_cfg.d_model = 4096
         mock_model_cfg.return_value = mock_cfg
-        
+
         mock_model = Mock()
         mock_model.cfg = mock_cfg
         mock_model.eval = Mock()
         mock_student_lm.return_value = mock_model
-        
+
         # Mock DecodeWrapper and ONNX export
         mock_wrapper = Mock()
         mock_wrapper.eval = Mock()
@@ -483,7 +494,7 @@ class TestMainFunction:
     def test_main_fallback_config(self, mock_echo, mock_open, mock_json_load, mock_makedirs, mock_onnx_export, mock_model_cfg, mock_student_lm):
         """Test main function with fallback config when file operations fail."""
         mock_open.side_effect = Exception("File operation failed")
-        
+
         # Mock ModelCfg and StudentLM to prevent actual model creation
         mock_cfg = Mock()
         mock_cfg.n_heads = 32  # Valid GQA config
@@ -492,12 +503,12 @@ class TestMainFunction:
         mock_cfg.d_head = 128
         mock_cfg.d_model = 4096
         mock_model_cfg.return_value = mock_cfg
-        
+
         mock_model = Mock()
         mock_model.cfg = mock_cfg
         mock_model.eval = Mock()
         mock_student_lm.return_value = mock_model
-        
+
         # Mock ONNX export to succeed
         mock_onnx_export.return_value = None
 
@@ -632,11 +643,13 @@ class TestONNXExportIntegration:
             )
         )
 
-        wrapper = DecodeWrapper(mock_model, n_layers=2, n_kv_heads=4, d_head=32)
+        wrapper = DecodeWrapper(mock_model, n_layers=2,
+                                n_kv_heads=4, d_head=32)
 
         # Test with realistic inputs
         input_ids = torch.tensor([[42]], dtype=torch.long)
-        kv_caches = [torch.randn(1, 4, 15, 32) for _ in range(4)]  # 2 layers * 2 caches
+        kv_caches = [torch.randn(1, 4, 15, 32)
+                     for _ in range(4)]  # 2 layers * 2 caches
 
         result = wrapper(input_ids, *kv_caches)
 
@@ -662,20 +675,20 @@ class TestONNXExportIntegration:
         mock_cfg.d_head = 128
         mock_cfg.d_model = 4096
         mock_model_cfg.return_value = mock_cfg
-        
+
         mock_model = Mock()
         mock_model.cfg = mock_cfg
         mock_model.eval = Mock()
         mock_student_lm.return_value = mock_model
-        
+
         mock_wrapper = Mock()
         mock_wrapper.eval = Mock()
         mock_decode_wrapper.return_value = mock_wrapper
         mock_onnx_export.return_value = None
-        
+
         # Test with empty config
         with patch("conversion.export_onnx.json.load", return_value=[]), \
-             patch("conversion.export_onnx.open"):
+                patch("conversion.export_onnx.open"):
             # Should use fallback config
             try:
                 main(config="empty_config.json", mode="prefill")
@@ -685,7 +698,7 @@ class TestONNXExportIntegration:
 
         # Test with config missing seq field
         with patch("conversion.export_onnx.json.load", return_value=[{"batch": 1}]), \
-             patch("conversion.export_onnx.open"):
+                patch("conversion.export_onnx.open"):
             try:
                 main(config="missing_seq_config.json", mode="prefill")
                 assert True  # Should use fallback
@@ -695,7 +708,8 @@ class TestONNXExportIntegration:
     def test_export_directory_creation(self, tmp_path):
         """Test that export directories are created properly."""
         with (
-            patch("conversion.export_onnx.json.load", return_value=[{"seq": 128, "batch": 1}]),
+            patch("conversion.export_onnx.json.load",
+                  return_value=[{"seq": 128, "batch": 1}]),
             patch("conversion.export_onnx.open"),
             patch("conversion.export_onnx.os.makedirs") as mock_makedirs,
             patch("conversion.export_onnx.torch.onnx.export"),
@@ -735,12 +749,12 @@ class TestONNXExportIntegration:
             mock_cfg.d_head = 128
             mock_cfg.d_model = 4096
             mock_model_cfg.return_value = mock_cfg
-            
+
             mock_model = Mock()
             mock_model.cfg = mock_cfg
             mock_model.eval = Mock()
             mock_student_lm.return_value = mock_model
-            
+
             try:
                 main(config="test_config.json", mode="prefill")
             except (SystemExit, Exception):
@@ -759,19 +773,22 @@ class TestONNXExportIntegration:
                 # Check keyword arguments
                 kwargs = call_args[1] if len(call_args) > 1 else {}
                 assert "do_constant_folding" in kwargs
-                assert kwargs["do_constant_folding"] is True  # Must be exactly True, not None
+                # Must be exactly True, not None
+                assert kwargs["do_constant_folding"] is True
 
     def test_wrapper_cache_handling_edge_cases(self):
         """Test DecodeWrapper cache handling edge cases."""
         mock_model = Mock()
-        wrapper = DecodeWrapper(mock_model, n_layers=3, n_kv_heads=8, d_head=64)
+        wrapper = DecodeWrapper(mock_model, n_layers=3,
+                                n_kv_heads=8, d_head=64)
 
         # Test with no cache arguments at all
         input_ids = torch.tensor([[1]], dtype=torch.long)
 
         mock_model.forward_decode.return_value = (
             torch.randn(1, 1, 1000),
-            [(torch.randn(1, 8, 5, 64), torch.randn(1, 8, 5, 64)) for _ in range(3)],
+            [(torch.randn(1, 8, 5, 64), torch.randn(1, 8, 5, 64))
+             for _ in range(3)],
         )
 
         wrapper(input_ids)
@@ -784,7 +801,8 @@ class TestONNXExportIntegration:
     def test_mode_validation(self):
         """Test mode parameter validation."""
         with (
-            patch("conversion.export_onnx.json.load", return_value=[{"seq": 128}]),
+            patch("conversion.export_onnx.json.load",
+                  return_value=[{"seq": 128}]),
             patch("conversion.export_onnx.open"),
             patch("conversion.export_onnx.os.makedirs"),
             patch("conversion.export_onnx.torch.onnx.export"),
@@ -804,7 +822,8 @@ class TestONNXExportIntegration:
     def test_checkpoint_loading_and_model_creation(self):
         """Test checkpoint loading and model creation flow."""
         with (
-            patch("conversion.export_onnx.json.load", return_value=[{"seq": 128}]),
+            patch("conversion.export_onnx.json.load",
+                  return_value=[{"seq": 128}]),
             patch("conversion.export_onnx.open"),
             patch("conversion.export_onnx.os.makedirs"),
             patch("conversion.export_onnx.torch.onnx.export"),
