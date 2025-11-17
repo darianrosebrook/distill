@@ -1,0 +1,10 @@
+{
+  "prompt": "Search for recent papers on transformer architectures and list their titles.",
+  "teacher_text": "",
+  "teacher_logits": null,
+  "metadata": {
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 1024
+  }
+}

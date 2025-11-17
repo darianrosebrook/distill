@@ -1,0 +1,10 @@
+{
+  "prompt": "Write a Python function to reverse a linked list.",
+  "teacher_text": "Here is a Python implementation for reversing a singly linked list, including both iterative and recursive approaches:\n\n```python\nclass Node:\n    \"\"\"Node class for singly linked list.\"\"\"\n    def __init__(self, data: int):\n        self.data = data\n        self.next = None\n\ndef reverse_linked_list_iterative(head: Node) -> Node:\n    \"\"\"\n    Reverses a singly linked list iteratively.\n    Time: O(n), Space: O(1)\n    \n    Args:\n        head: The head node of the linked list\n        \n    Returns:\n        The new head node of the reversed linked list\n    \"\"\"\n    prev = None\n    current = head\n    \n    while current is not None:\n        next_node = current.next  # Store next node\n        current.next = prev       # Reverse the pointer\n        prev = current            # Move prev forward\n        current = next_node       # Move current forward\n    \n    return prev  # New head of reversed list\n\ndef reverse_linked_list_recursive(head: Node) -> Node:\n    \"\"\"\n    Reverses a singly linked list recursively.\n    Time: O(n), Space: O(n) for recursion stack\n    \n    Args:\n        head: The head node of the linked list\n        \n    Returns:\n        The new head node of the reversed linked list\n    \"\"\"\n    # Base case: empty list",
+  "teacher_logits": null,
+  "metadata": {
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 1024
+  }
+}

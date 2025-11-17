@@ -1,0 +1,10 @@
+{
+  "prompt": "Implement a binary search tree in Python.",
+  "teacher_text": "",
+  "teacher_logits": null,
+  "metadata": {
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 1024
+  }
+}

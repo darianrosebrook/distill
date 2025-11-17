@@ -84,9 +84,25 @@ class TeacherClient:
         self._model = None
         self._tokenizer = None
         self._pipeline = None
-        # Default to FREE tier so tier-aware backoff works from the start
-        self._tier: Optional[APITier] = APITier.FREE
-        self._tier_limits: Optional[TierLimits] = TIER_LIMITS[APITier.FREE]
+        # Check for manual tier override via environment variable
+        tier_override = os.environ.get("MOONSHOT_TIER_OVERRIDE", "").lower()
+        if tier_override in {"free", "tier1", "tier2", "tier3", "tier4", "tier5"}:
+            tier_map = {
+                "free": APITier.FREE,
+                "tier1": APITier.TIER1,
+                "tier2": APITier.TIER2,
+                "tier3": APITier.TIER3,
+                "tier4": APITier.TIER4,
+                "tier5": APITier.TIER5,
+            }
+            self._tier = tier_map[tier_override]
+            self._tier_limits = TIER_LIMITS[self._tier]
+            print(
+                f"[TeacherClient] Using tier override: {self._tier.value} (RPM: {self._tier_limits.rpm}, delay: {self._tier_limits.delay}s)")
+        else:
+            # Default to FREE tier so tier-aware backoff works from the start
+            self._tier: Optional[APITier] = APITier.FREE
+            self._tier_limits: Optional[TierLimits] = TIER_LIMITS[APITier.FREE]
         self._max_retries = kwargs.get("max_retries", 5)
         self._retry_backoff_factor = kwargs.get("retry_backoff_factor", 2.0)
         self._retry_status_codes = kwargs.get(

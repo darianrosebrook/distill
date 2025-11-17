@@ -1,0 +1,10 @@
+{
+  "prompt": "What is the derivative of f(x) = x^3 + 2x^2 - 5x + 1?",
+  "teacher_text": "To find the derivative of f(x) = x\u00b3 + 2x\u00b2 - 5x + 1, we apply the power rule to each term:\n\n- The derivative of x\u00b3 is **3x\u00b2**\n- The derivative of 2x\u00b2 is **4x**\n- The derivative of -5x is **-5**\n- The derivative of the constant 1 is **0**\n\n**f'(x) = 3x\u00b2 + 4x - 5**",
+  "teacher_logits": null,
+  "metadata": {
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 1024
+  }
+}

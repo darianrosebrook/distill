@@ -1,0 +1,10 @@
+{
+  "prompt": "Read the code in src/main.py and identify all function definitions.",
+  "teacher_text": "I cannot access files on your local system. To help you identify function definitions in `src/main.py`, please provide the code content by:\n\n1. **Copying and pasting the code** directly in your message, OR\n2. **Using a code block** with the file content\n\nOnce you share the code, I'll identify all function definitions including:\n- Function names\n- Parameters\n- Return types (if annotated)\n- Docstrings\n- Line numbers\n\nFor example, if you share code like this:\n\n```python\ndef calculate_sum(a: int, b: int) -> int:\n    \"\"\"Calculate the sum of two numbers.\"\"\"\n    return a + b\n\nclass MyClass:\n    def method_one(self):\n        pass\n```\n\nI'll identify:\n- `calculate_sum` (line 1)\n- `method_one` (line 6) - which is a method within a class\n\nPlease share your `src/main.py` code and I'll analyze it for you.",
+  "teacher_logits": null,
+  "metadata": {
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 1024
+  }
+}

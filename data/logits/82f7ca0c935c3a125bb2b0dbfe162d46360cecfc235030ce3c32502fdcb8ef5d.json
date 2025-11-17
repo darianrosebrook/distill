@@ -1,0 +1,10 @@
+{
+  "prompt": "How does a compiler work?",
+  "teacher_text": "A compiler is a program that translates human-readable source code into machine-executable code. It typically works through a pipeline of distinct phases, each transforming the representation of the program. Here's how it works, using the example:\n\n```c\nint result = 5 + 3 * 2;\n```\n\n---\n\n### **1. Lexical Analysis (Scanning)**\nThe compiler reads the source code as a stream of characters and groups them into **tokens**\u2014the smallest meaningful units.\n\n- **Input**: `int result = 5 + 3 * 2;`\n- **Output**: Token stream  \n  `INT_KEYWORD`, `IDENTIFIER(result)`, `EQUALS`, `NUMBER(5)`, `PLUS`, `NUMBER(3)`, `STAR`, `NUMBER(2)`, `SEMICOLON`\n\nThis phase strips whitespace/comments and identifies keywords, operators, and literals.\n\n---\n\n### **2. Syntax Analysis (Parsing)**\nTokens are assembled into a **parse tree** or **Abstract Syntax Tree (AST)** that represents the grammatical structure of the code.\n\nThe parser verifies the code follows the language's grammar rules (e.g., expressions, statements). For our example, it builds a tree where multiplication has higher precedence than addition:\n\n```\n     =\n    / \\\nresult   +\n        / \\\n       5   *\n          / \\\n         3   2\n```\n\n---\n\n### **3. Semantic Analysis**\nThe compiler checks **meaning** beyond syntax:\n- **Type checking**: Are operations valid? (e.g., `int + int` is okay)\n- **Scope resolution**: Is `result` declared? Where?\n- **Symbol table**: A data structure tracks identifiers, their types, and scopes.\n\nIt decorates the AST with type information and may reject invalid code (e.g., adding a string to an integer).\n\n---\n\n### **4.",
+  "teacher_logits": null,
+  "metadata": {
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 1024
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "prompt": "What is the difference between a stack and a queue?",
+  "teacher_text": "The main difference is **how elements are removed**:\n\n- **Stack**: **LIFO** (Last-In, First-Out) \u2013 The last element added is the first one removed\n- **Queue**: **FIFO** (First-In, First-Out) \u2013 The first element added is the first one removed\n\n---\n\n### **Core Operations**\n\n| Stack | Queue |\n|-------|-------|\n| `push()` - Add to top | `enqueue()` - Add to back/end |\n| `pop()` - Remove from top | `dequeue()` - Remove from front |\n| `peek()` - View top element | `peek()` - View front element |\n\n---\n\n### **Real-World Analogies**\n\n- **Stack**: A stack of plates. You add plates on top and take from the top.\n- **Queue**: A line at a coffee shop. The first person in line is the first to be served.\n\n---\n\n### **Visual Representation**\n\n**Stack (LIFO):**\n```\npush(5) \u2192 [5]\npush(3) \u2192 [3, 5]\npush(7) \u2192 [7, 3, 5]\npop()   \u2192 returns 7, stack becomes [3, 5]\n```\n\n**Queue (FIFO):**\n```\nenqueue(5) \u2192 [5]\nenqueue(3) \u2192 [5, 3]\nenqueue(7) \u2192 [5, 3, 7]\ndequeue()  \u2192 returns 5, queue becomes [3, 7]\n```\n\n---\n\n### **Common Use Cases**\n\n**Stacks:**\n- Function call stack (recursion)\n- Undo/redo functionality\n- Browser history (back button)\n- Expression evaluation (postfix/infix)\n- Depth-First Search (DFS)\n\n**Queues:**\n- Task scheduling (CPU processes)\n- Print job management\n- Breadth-First Search (BFS)\n- Message buffering\n- Handling requests (web servers)\n\n---\n\n### **Implementation Notes**\n\nBoth can be implemented using **arrays** or **linked lists**:\n- **Stack**: Single pointer at the top (simpler)\n- **Queue**: Requires two pointers (front and rear) for efficient operations\n- **Time Complexity**: All basic operations are **O(1)** for both\n\n### **Key Takeaway**\nUse a **stack** when you need to access the most recent item first, and a **queue** when you need to process items in the order they arrived.",
+  "teacher_logits": null,
+  "metadata": {
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 1024
+  }
+}

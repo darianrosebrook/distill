@@ -1,0 +1,10 @@
+{
+  "prompt": "Read the README.md file and extract all code examples.",
+  "teacher_text": "I'd be happy to extract all code examples from a README.md file! However, I don't see any file content provided yet.\n\nPlease share the README.md file in one of these ways:\n\n1. **Paste the content directly** in your message\n2. **Provide a URL** if the file is publicly accessible online\n3. **Upload the file** if your platform supports file attachments\n\nOnce you provide the README.md content, I'll extract:\n- All code blocks (with language identifiers if present)\n- Inline code examples\n- Command-line examples\n- Configuration snippets\n\nAnd I'll format them clearly with their respective languages and context.",
+  "teacher_logits": null,
+  "metadata": {
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 1024
+  }
+}

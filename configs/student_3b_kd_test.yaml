@@ -60,17 +60,18 @@ role: "worker"
 
 distillation:
   type: "standard_kd"
-  # First run: no teacher logits -> KL disabled
+  # CE-only KD: no teacher logits available, so KL divergence disabled
+  # This run validates the KD training loop, not perfect loss weighting
   kl_weight: 0.0
-  ce_teacher_weight: 0.5
-  ce_ground_truth_weight: 0.5
-  # Process-step supervision weights
-  w_tool: 0.15
-  w_args: 0.15
-  w_integr: 0.10
+  ce_teacher_weight: 0.7  # Emphasize teacher guidance
+  ce_ground_truth_weight: 0.3  # Ground truth still important
+  # Process-step supervision weights (keep low for v0)
+  w_tool: 0.0
+  w_args: 0.0
+  w_integr: 0.0
 
 kd:
-  teacher_endpoint: "https://api.kimi.com/v1"
+  teacher_endpoint: "https://api.moonshot.ai/v1"
   kd_temperature: 2.0
   teacher_logits_available: false  # Only teacher tokens/text for now
 

@@ -1,0 +1,10 @@
+{
+  "prompt": "Calculate the integral of \u222b(x^2 + 3x + 2)dx",
+  "teacher_text": "The integral of \u222b(x\u00b2 + 3x + 2)dx is:\n\n$$\\int (x^2 + 3x + 2)dx = \\frac{x^3}{3} + \\frac{3x^2}{2} + 2x + C$$\n\nwhere **C** is the constant of integration.\n\n**Step-by-step solution:**\n1. Integrate each term separately using the power rule \u222bx^n dx = x^(n+1)/(n+1)\n   - \u222bx\u00b2 dx = x\u00b3/3\n   - \u222b3x dx = 3(x\u00b2/2) = 3x\u00b2/2\n   - \u222b2 dx = 2x\n2. Add the results together and include the constant of integration C",
+  "teacher_logits": null,
+  "metadata": {
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 1024
+  }
+}

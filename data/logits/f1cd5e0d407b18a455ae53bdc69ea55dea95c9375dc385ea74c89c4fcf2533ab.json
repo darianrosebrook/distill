@@ -1,0 +1,10 @@
+{
+  "prompt": "Write a function to check if a string is a palindrome.",
+  "teacher_text": "Here are several approaches to check if a string is a palindrome, from basic to more robust:\n\n### 1. Two-Pointer Approach (Recommended)\nThis is the most efficient method with O(1) extra space and O(n) time complexity.\n\n```python\ndef is_palindrome(s: str) -> bool:\n    \"\"\"\n    Check if a string is a palindrome using two-pointer technique.\n    \"\"\"\n    left, right = 0, len(s) - 1\n    \n    while left < right:\n        if s[left] != s[right]:\n            return False\n        left += 1\n        right -= 1\n    \n    return True\n```\n\n### 2. Pythonic Slicing Approach\nSimple and concise, though it uses O(n) extra space for the reversed string.\n\n```python\ndef is_palindrome_pythonic(s: str) -> bool:\n    \"\"\"Check if a string is a palindrome using string slicing.\"\"\"\n    return s == s[::-1]\n",
+  "teacher_logits": null,
+  "metadata": {
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 1024
+  }
+}

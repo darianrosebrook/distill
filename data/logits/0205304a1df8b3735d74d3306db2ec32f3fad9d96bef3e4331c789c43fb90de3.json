@@ -1,0 +1,10 @@
+{
+  "prompt": "What is the Taylor series expansion of e^x?",
+  "teacher_text": "The Taylor series expansion of \\( e^x \\) about \\( x = 0 \\) (Maclaurin series) is:\n\n$$\ne^x = \\sum_{n=0}^{\\infty} \\frac{x^n}{n!} = 1 + x + \\frac{x^2}{2!} + \\frac{x^3}{3!} + \\frac{x^4}{4!} + \\cdots\n$$\n\n**Key points:**\n- **General term:** The nth term is \\(\\frac{x^n}{n!}\\)\n- **Radius of convergence:** The series converges for all real numbers \\( x \\) (infinite radius of convergence)\n- **Derivation:** Since all derivatives of \\( e^x \\) are \\( e^x \\), and \\( e^0 = 1 \\), the coefficients \\( f^{(n)}(0)/n! = 1/n! \\)\n\nFor expansion about any point \\( a \\):\n$$\ne^x = e^a \\sum_{n=0}^{\\infty} \\frac{(x-a)^n}{n!} = e^a \\left[1 + (x-a) + \\frac{(x-a)^2}{2!} + \\frac{(x-a)^3}{3!} + \\cdots\\right]\n$$",
+  "teacher_logits": null,
+  "metadata": {
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 1024
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "prompt": "What is the sum of the first 100 natural numbers?",
+  "teacher_text": "The sum of the first 100 natural numbers is **5,050**.\n\nThis can be calculated using the formula for the sum of an arithmetic series:\nSum = n(n + 1) / 2\n\nWhere n = 100:\nSum = 100(100 + 1) / 2 = 100 * 101 / 2 = 10,100 / 2 = 5,050\n\nAlternatively, you can pair the numbers from opposite ends (1+100, 2+99, 3+98, etc.). Each pair sums to 101, and there are 50 such pairs: 50 * 101 = 5,050.",
+  "teacher_logits": null,
+  "metadata": {
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 1024
+  }
+}

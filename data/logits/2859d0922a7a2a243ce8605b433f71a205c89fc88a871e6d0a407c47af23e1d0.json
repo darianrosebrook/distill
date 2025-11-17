@@ -1,0 +1,10 @@
+{
+  "prompt": "Explain quantum entanglement in simple terms.",
+  "teacher_text": "Imagine you have two magic coins that are connected in a special way.\n\nWhen you flip them both, they don't land as heads or tails immediately. Instead, they stay spinning in a fuzzy, undefined state. But here's the weird part: **the coins are linked**.\n\nNow you separate them\u2014put one coin on Earth and send the other to Mars. When you finally slap the Earth coin down to stop it, it randomly becomes heads or tails. **At that exact instant**, the coin on Mars stops spinning too and lands on the *opposite* side.\n\nThe key is that before you measured the Earth coin, it wasn't heads or tails\u2014it was both at once. The measurement *creates* the definite outcome for *both* coins simultaneously, no matter how far apart they are.\n\n**Important caveat**: You can't control whether your coin shows heads or tails\u2014it's random. So you can't use this to send messages faster than light. The entanglement just guarantees perfect correlation, not communication.",
+  "teacher_logits": null,
+  "metadata": {
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "max_tokens": 1024
+  }
+}
