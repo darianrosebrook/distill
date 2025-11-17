@@ -538,3 +538,512 @@ class TestCollateKDBatch:
         assert result["input_ids"][0, 0] == 1
         # Assuming pad_token_id = 0
         assert torch.all(result["input_ids"][0, 1:] == 0)
+
+
+class TestKDDatasetEnhanced:
+    """Enhanced tests for KDDataset to improve coverage."""
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def setup_mock_tokenizer(self, mock_safe_tokenizer):
+        """Set up mock tokenizer for tests."""
+        mock_tokenizer = Mock()
+        mock_tokenizer.pad_token = "[PAD]"
+        mock_tokenizer.eos_token = "[EOS]"
+        mock_tokenizer.pad_token_id = 0
+        mock_tokenizer.encode.return_value = [1, 2, 3, 4, 5]
+        mock_tokenizer.encode_plus.return_value = {
+            "input_ids": [1, 2, 3, 4, 5],
+            "attention_mask": [1, 1, 1, 1, 1],
+        }
+        mock_safe_tokenizer.return_value = mock_tokenizer
+        return mock_tokenizer
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_fingerprint_extraction(self, mock_safe_tokenizer):
+        """Test dataset fingerprint extraction from header."""
+        self.setup_mock_tokenizer(mock_safe_tokenizer)
+
+        header_data = {
+            "dataset_fingerprint": "abc123",
+            "created_at": "2024-01-01",
+            "version": "1.0"
+        }
+
+        sample_data = {
+            "prompt": "test prompt",
+            "teacher_text": "test teacher"
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            # Write header first
+            json.dump({"__header__": header_data}, f)
+            f.write('\n')
+            # Write sample data
+            json.dump(sample_data, f)
+            f.write('\n')
+            temp_path = f.name
+
+        try:
+            dataset = KDDataset(temp_path, "test_tokenizer")
+
+            assert dataset.dataset_fingerprint == "abc123"
+            assert dataset.dataset_header == header_data
+            assert len(dataset.samples) == 1
+        finally:
+            Path(temp_path).unlink()
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_no_fingerprint(self, mock_safe_tokenizer):
+        """Test dataset without fingerprint."""
+        self.setup_mock_tokenizer(mock_safe_tokenizer)
+
+        sample_data = {
+            "prompt": "test prompt",
+            "teacher_text": "test teacher"
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            json.dump(sample_data, f)
+            f.write('\n')
+            temp_path = f.name
+
+        try:
+            dataset = KDDataset(temp_path, "test_tokenizer")
+
+            assert dataset.dataset_fingerprint is None
+            assert dataset.dataset_header is None
+            assert len(dataset.samples) == 1
+        finally:
+            Path(temp_path).unlink()
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_empty_file(self, mock_safe_tokenizer):
+        """Test dataset with empty file."""
+        self.setup_mock_tokenizer(mock_safe_tokenizer)
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            temp_path = f.name
+
+        try:
+            dataset = KDDataset(temp_path, "test_tokenizer")
+            assert len(dataset.samples) == 0
+        finally:
+            Path(temp_path).unlink()
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_malformed_json(self, mock_safe_tokenizer):
+        """Test dataset with malformed JSON."""
+        self.setup_mock_tokenizer(mock_safe_tokenizer)
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            f.write('{"incomplete": json}\n')
+            f.write('{"valid": "json"}\n')
+            temp_path = f.name
+
+        try:
+            # Should handle malformed JSON gracefully and load valid lines
+            dataset = KDDataset(temp_path, "test_tokenizer")
+            assert len(dataset.samples) == 1  # Only the valid line
+            assert dataset.samples[0]["valid"] == "json"
+        finally:
+            Path(temp_path).unlink()
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_tokenization_with_special_tokens(self, mock_safe_tokenizer):
+        """Test tokenization handling with special tokens."""
+        mock_tokenizer = self.setup_mock_tokenizer(mock_safe_tokenizer)
+        mock_tokenizer.encode.return_value = [
+            101, 2057, 102]  # [CLS] hello [SEP]
+
+        sample_data = {
+            "prompt": "hello world",
+            "teacher_text": "greeting response"
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            json.dump(sample_data, f)
+            f.write('\n')
+            temp_path = f.name
+
+        try:
+            dataset = KDDataset(temp_path, "test_tokenizer", max_seq_length=10)
+            item = dataset[0]
+
+            # Check tokenization was called
+            mock_tokenizer.encode.assert_called()
+            assert "input_ids" in item
+            assert "attention_mask" in item
+            assert "labels" in item
+        finally:
+            Path(temp_path).unlink()
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_truncation_edge_cases(self, mock_safe_tokenizer):
+        """Test truncation with edge cases."""
+        mock_tokenizer = self.setup_mock_tokenizer(mock_safe_tokenizer)
+        # Mock very long sequence
+        long_tokens = list(range(100))  # 100 tokens
+        mock_tokenizer.encode.return_value = long_tokens
+
+        sample_data = {
+            "prompt": "very long prompt " * 20,  # Long text
+            "teacher_text": "short response"
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            json.dump(sample_data, f)
+            f.write('\n')
+            temp_path = f.name
+
+        try:
+            dataset = KDDataset(temp_path, "test_tokenizer", max_seq_length=50)
+            item = dataset[0]
+
+            # Should be truncated to max_seq_length
+            assert len(item["input_ids"]) <= 50
+            assert len(item["attention_mask"]) <= 50
+            assert len(item["labels"]) <= 50
+        finally:
+            Path(temp_path).unlink()
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_supervision_target_processing(self, mock_safe_tokenizer):
+        """Test processing of various supervision targets."""
+        self.setup_mock_tokenizer(mock_safe_tokenizer)
+
+        complex_sample = {
+            "prompt": "test prompt",
+            "teacher_text": "test teacher",
+            "tool_name_ids": [100, 200, 300, 400],
+            "tool_name_mask": [1, 1, 0, 0],
+            "gold_json_text_ids": [500, 600],
+            "mask_valid_json_tokens": [1, 0],
+            "tool_result_fields": [700, 800, 900],
+            "integration_mask": [1, 0, 1, 0, 1],
+            "teacher_logits": [[0.1, 0.9], [0.2, 0.8], [0.3, 0.7]],
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            json.dump(complex_sample, f)
+            f.write('\n')
+            temp_path = f.name
+
+        try:
+            dataset = KDDataset(temp_path, "test_tokenizer")
+            item = dataset[0]
+
+            # Check all supervision targets are present
+            assert "tool_name_ids" in item
+            assert "tool_name_mask" in item
+            assert "gold_json_text_ids" in item
+            assert "mask_valid_json_tokens" in item
+            assert "tool_result_fields" in item
+            assert "integration_mask" in item
+            assert "teacher_logits" in item
+
+            # Check tensor shapes/types
+            assert isinstance(item["tool_name_ids"], torch.Tensor)
+            assert isinstance(item["tool_name_mask"], torch.Tensor)
+            assert isinstance(item["teacher_logits"], torch.Tensor)
+
+        finally:
+            Path(temp_path).unlink()
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_missing_supervision_targets(self, mock_safe_tokenizer):
+        """Test handling of missing supervision targets."""
+        self.setup_mock_tokenizer(mock_safe_tokenizer)
+
+        minimal_sample = {
+            "prompt": "test prompt",
+            "teacher_text": "test teacher"
+            # No supervision targets
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            json.dump(minimal_sample, f)
+            f.write('\n')
+            temp_path = f.name
+
+        try:
+            dataset = KDDataset(temp_path, "test_tokenizer")
+            item = dataset[0]
+
+            # Should not have supervision targets
+            assert "tool_name_ids" not in item
+            assert "tool_name_mask" not in item
+            assert "gold_json_text_ids" not in item
+            assert "teacher_logits" not in item
+
+            # But should have basic fields
+            assert "input_ids" in item
+            assert "attention_mask" in item
+            assert "labels" in item
+
+        finally:
+            Path(temp_path).unlink()
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_teacher_logits_tensor_conversion(self, mock_safe_tokenizer):
+        """Test teacher logits tensor conversion."""
+        self.setup_mock_tokenizer(mock_safe_tokenizer)
+
+        sample_with_logits = {
+            "prompt": "test prompt",
+            "teacher_text": "test teacher",
+            "teacher_logits": [[0.1, 0.2, 0.7], [0.3, 0.4, 0.3]]  # 2x3 logits
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            json.dump(sample_with_logits, f)
+            f.write('\n')
+            temp_path = f.name
+
+        try:
+            dataset = KDDataset(temp_path, "test_tokenizer",
+                                teacher_logits_available=True)
+            item = dataset[0]
+
+            assert "teacher_logits" in item
+            assert isinstance(item["teacher_logits"], torch.Tensor)
+            assert item["teacher_logits"].shape == (
+                2, 3)  # Should preserve original shape
+
+        finally:
+            Path(temp_path).unlink()
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_teacher_logits_not_available(self, mock_safe_tokenizer):
+        """Test when teacher_logits_available=False but logits present."""
+        self.setup_mock_tokenizer(mock_safe_tokenizer)
+
+        sample_with_logits = {
+            "prompt": "test prompt",
+            "teacher_text": "test teacher",
+            "teacher_logits": [[0.1, 0.9], [0.2, 0.8]]
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            json.dump(sample_with_logits, f)
+            f.write('\n')
+            temp_path = f.name
+
+        try:
+            dataset = KDDataset(temp_path, "test_tokenizer",
+                                teacher_logits_available=False)
+            item = dataset[0]
+
+            # Should not include teacher_logits when not available
+            assert "teacher_logits" not in item
+
+        finally:
+            Path(temp_path).unlink()
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_metadata_preservation(self, mock_safe_tokenizer):
+        """Test metadata preservation in dataset."""
+        self.setup_mock_tokenizer(mock_safe_tokenizer)
+
+        sample_with_metadata = {
+            "prompt": "test prompt",
+            "teacher_text": "test teacher",
+            "metadata": {
+                "source": "synthetic",
+                "quality_score": 0.95,
+                "tags": ["test", "validation"],
+                "nested": {"key": "value"}
+            }
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            json.dump(sample_with_metadata, f)
+            f.write('\n')
+            temp_path = f.name
+
+        try:
+            dataset = KDDataset(temp_path, "test_tokenizer")
+            item = dataset[0]
+
+            # Metadata should be preserved
+            assert "metadata" in item
+            assert item["metadata"]["source"] == "synthetic"
+            assert item["metadata"]["quality_score"] == 0.95
+            assert item["metadata"]["nested"]["key"] == "value"
+
+        finally:
+            Path(temp_path).unlink()
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_tokenization_error_handling(self, mock_safe_tokenizer):
+        """Test error handling during tokenization."""
+        mock_tokenizer = self.setup_mock_tokenizer(mock_safe_tokenizer)
+        mock_tokenizer.encode.side_effect = Exception("Tokenization failed")
+
+        sample_data = {
+            "prompt": "test prompt",
+            "teacher_text": "test teacher"
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            json.dump(sample_data, f)
+            f.write('\n')
+            temp_path = f.name
+
+        try:
+            dataset = KDDataset(temp_path, "test_tokenizer")
+
+            # Should handle tokenization error gracefully
+            with pytest.raises((Exception, RuntimeError)):
+                dataset[0]
+
+        finally:
+            Path(temp_path).unlink()
+
+    @patch("training.dataset.HF_TOKENIZER_AVAILABLE", True)
+    @patch("training.safe_model_loading.safe_from_pretrained_tokenizer")
+    def test_kd_dataset_large_dataset_handling(self, mock_safe_tokenizer):
+        """Test handling of larger datasets."""
+        self.setup_mock_tokenizer(mock_safe_tokenizer)
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            # Create 100 samples
+            for i in range(100):
+                sample = {
+                    "prompt": f"prompt {i}",
+                    "teacher_text": f"teacher {i}"
+                }
+                json.dump(sample, f)
+                f.write('\n')
+            temp_path = f.name
+
+        try:
+            dataset = KDDataset(temp_path, "test_tokenizer")
+
+            assert len(dataset) == 100
+
+            # Test random access
+            item = dataset[50]
+            assert "input_ids" in item
+            assert "attention_mask" in item
+            assert "labels" in item
+
+        finally:
+            Path(temp_path).unlink()
+
+    def test_collate_kd_batch_attention_mask_padding(self):
+        """Test attention mask padding in collate function."""
+        batch = [
+            {
+                "input_ids": torch.tensor([1, 2, 3]),
+                "attention_mask": torch.tensor([1, 1, 1]),
+                "labels": torch.tensor([1, 2, 3]),
+            },
+            {
+                "input_ids": torch.tensor([4, 5, 6, 7, 8]),
+                "attention_mask": torch.tensor([1, 1, 1, 1, 1]),
+                "labels": torch.tensor([4, 5, 6, 7, 8]),
+            }
+        ]
+
+        result = collate_kd_batch(batch)
+
+        # Should pad to max length (5)
+        assert result["input_ids"].shape == (2, 5)
+        assert result["attention_mask"].shape == (2, 5)
+        assert result["labels"].shape == (2, 5)
+
+        # Attention mask should be 1 for real tokens, 0 for padding
+        assert result["attention_mask"][0, 0] == 1
+        assert result["attention_mask"][0, 1] == 1
+        assert result["attention_mask"][0, 2] == 1
+        assert result["attention_mask"][0, 3] == 0  # Padding
+        assert result["attention_mask"][0, 4] == 0  # Padding
+
+    def test_collate_kd_batch_supervision_target_padding(self):
+        """Test supervision target padding."""
+        batch = [
+            {
+                "input_ids": torch.tensor([1, 2, 3]),
+                "attention_mask": torch.tensor([1, 1, 1]),
+                "labels": torch.tensor([1, 2, 3]),
+                "tool_name_ids": torch.tensor([100, 200]),
+                "tool_name_mask": torch.tensor([1, 1]),
+            },
+            {
+                "input_ids": torch.tensor([4, 5]),
+                "attention_mask": torch.tensor([1, 1]),
+                "labels": torch.tensor([4, 5]),
+                "tool_name_ids": torch.tensor([300, 400, 500]),
+                "tool_name_mask": torch.tensor([1, 1, 0]),
+            }
+        ]
+
+        result = collate_kd_batch(batch)
+
+        # Supervision targets should be padded to max length (3)
+        assert result["tool_name_ids"].shape == (2, 3)
+        assert result["tool_name_mask"].shape == (2, 3)
+
+        # First item should have padding
+        assert result["tool_name_ids"][0, 2] == 0  # Padding token
+        assert result["tool_name_mask"][0, 2] == 0  # Padding mask
+
+    def test_collate_kd_batch_teacher_logits_handling(self):
+        """Test teacher logits handling in collate function."""
+        batch = [
+            {
+                "input_ids": torch.tensor([1, 2]),
+                "attention_mask": torch.tensor([1, 1]),
+                "labels": torch.tensor([1, 2]),
+                "teacher_logits": torch.tensor([[0.1, 0.9], [0.2, 0.8]]),
+            },
+            {
+                "input_ids": torch.tensor([3, 4]),
+                "attention_mask": torch.tensor([1, 1]),
+                "labels": torch.tensor([3, 4]),
+                "teacher_logits": torch.tensor([[0.3, 0.7], [0.4, 0.6]]),
+            }
+        ]
+
+        result = collate_kd_batch(batch)
+
+        # Teacher logits should be stacked, not padded
+        assert result["teacher_logits"].shape == (
+            2, 2, 2)  # [batch, seq, vocab]
+
+    def test_collate_kd_batch_missing_fields(self):
+        """Test collate function with missing fields."""
+        batch = [
+            {
+                "input_ids": torch.tensor([1, 2]),
+                "attention_mask": torch.tensor([1, 1]),
+                "labels": torch.tensor([1, 2]),
+            },
+            {
+                "input_ids": torch.tensor([3, 4]),
+                "attention_mask": torch.tensor([1, 1]),
+                "labels": torch.tensor([3, 4]),
+                "teacher_logits": torch.tensor([[0.1, 0.9]]),
+            }
+        ]
+
+        result = collate_kd_batch(batch)
+
+        # Should handle missing teacher_logits in first item
+        assert "teacher_logits" in result
+        # First item should have None/empty for teacher_logits
+        assert result["teacher_logits"][0] is None or len(
+            result["teacher_logits"][0]) == 0

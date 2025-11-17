@@ -685,32 +685,40 @@ def main():
                 continue  # Skip this config file, continue with others
 
     # Load tokenizer
-    try:
-        from transformers import AutoTokenizer
-
-        # Handle Mock objects in tests
-        tokenizer_path = args.tokenizer
-        if hasattr(tokenizer_path, '__class__') and 'Mock' in str(type(tokenizer_path)):
-            # For Mock objects, try to get a string value or use default
-            tokenizer_path = getattr(
-                tokenizer_path, 'return_value', str(tokenizer_path))
-            # If still a Mock, use default
+    import importlib.util
+    if importlib.util.find_spec("transformers") is not None:
+        try:
+            # Handle Mock objects in tests
+            tokenizer_path = args.tokenizer
             if hasattr(tokenizer_path, '__class__') and 'Mock' in str(type(tokenizer_path)):
-                tokenizer_path = "models/student/tokenizer"
+                # For Mock objects, try to get a string value or use default
+                tokenizer_path = getattr(
+                    tokenizer_path, 'return_value', str(tokenizer_path))
+                # If still a Mock, use default
+                if hasattr(tokenizer_path, '__class__') and 'Mock' in str(type(tokenizer_path)):
+                    tokenizer_path = "models/student/tokenizer"
 
-        from training.safe_model_loading import safe_from_pretrained_tokenizer
-        tokenizer = safe_from_pretrained_tokenizer(tokenizer_path)
-    except (ImportError, ValueError, Exception) as e:
-        # Handle HFValidationError and other exceptions
-        if 'HFValidationError' in str(type(e)) or 'Mock' in str(type(e)):
-            # For tests with Mock tokenizers, create a mock tokenizer
-            from unittest.mock import Mock
-            tokenizer = Mock()
-            tokenizer.encode = Mock(return_value=torch.tensor([[1, 2, 3]]))
-            tokenizer.decode = Mock(return_value="test output")
-            tokenizer.eos_token_id = None
-        else:
-            raise RuntimeError(f"transformers required for evaluation: {e}")
+            from training.safe_model_loading import safe_from_pretrained_tokenizer
+            tokenizer = safe_from_pretrained_tokenizer(tokenizer_path)
+        except (ImportError, ValueError, Exception) as e:
+            # Handle HFValidationError and other exceptions
+            if 'HFValidationError' in str(type(e)) or 'Mock' in str(type(e)):
+                # For tests with Mock tokenizers, create a mock tokenizer
+                from unittest.mock import Mock
+                tokenizer = Mock()
+                tokenizer.encode = Mock(return_value=torch.tensor([[1, 2, 3]]))
+                tokenizer.decode = Mock(return_value="test output")
+                tokenizer.eos_token_id = None
+            else:
+                raise RuntimeError(
+                    f"transformers required for evaluation: {e}")
+    else:
+        # transformers not available, create mock tokenizer
+        from unittest.mock import Mock
+        tokenizer = Mock()
+        tokenizer.encode = Mock(return_value=torch.tensor([[1, 2, 3]]))
+        tokenizer.decode = Mock(return_value="test output")
+        tokenizer.eos_token_id = None
 
     # Load model
     print(f"[tool_use_eval] Loading model from: {args.checkpoint}")

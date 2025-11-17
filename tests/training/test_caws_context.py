@@ -331,6 +331,100 @@ class TestFormatCAWSContextForPrompt:
 
         assert "Invariants" in result
 
+    def test_format_caws_context_for_prompt_many_scope_items(self, tmp_path):
+        """Test formatting context with more than 5 scope items."""
+        caws_dir = tmp_path / ".caws"
+        caws_dir.mkdir()
+
+        spec_file = caws_dir / "working-spec.yaml"
+        spec = {
+            "id": "FEAT-001",
+            "title": "Test Feature",
+            "risk_tier": 2,
+            "mode": "feature",
+            "scope": {
+                "in": ["src/auth/", "src/billing/", "src/api/", "src/utils/", "src/models/", "src/config/", "tests/unit/"],
+                "out": ["node_modules/", "dist/", "build/", "logs/", "temp/"]
+            },
+            "acceptance": [],
+            "invariants": [],
+        }
+        with open(spec_file, "w") as f:
+            yaml.dump(spec, f)
+
+        context = extract_caws_context(str(tmp_path))
+        result = format_caws_context_for_prompt(context, compact=False)
+
+        # scope.in has 7 items, shows 5 + "and 2 more"
+        assert "(and 2 more)" in result
+        assert "Out of Scope" in result
+
+    def test_format_caws_context_for_prompt_many_acceptance_criteria(self, tmp_path):
+        """Test formatting context with more than 5 acceptance criteria."""
+        caws_dir = tmp_path / ".caws"
+        caws_dir.mkdir()
+
+        spec_file = caws_dir / "working-spec.yaml"
+        spec = {
+            "id": "FEAT-001",
+            "title": "Test Feature",
+            "risk_tier": 2,
+            "mode": "feature",
+            "scope": {"in": ["src/"], "out": []},
+            "acceptance": [
+                {"id": "A1", "given": "X1", "when": "Y1", "then": "Z1"},
+                {"id": "A2", "given": "X2", "when": "Y2", "then": "Z2"},
+                {"id": "A3", "given": "X3", "when": "Y3", "then": "Z3"},
+                {"id": "A4", "given": "X4", "when": "Y4", "then": "Z4"},
+                {"id": "A5", "given": "X5", "when": "Y5", "then": "Z5"},
+                {"id": "A6", "given": "X6", "when": "Y6", "then": "Z6"},
+                {"id": "A7", "given": "X7", "when": "Y7", "then": "Z7"},
+            ],
+            "invariants": [],
+        }
+        with open(spec_file, "w") as f:
+            yaml.dump(spec, f)
+
+        context = extract_caws_context(str(tmp_path))
+        result = format_caws_context_for_prompt(context, compact=False)
+
+        # acceptance has 7 items, shows 5 + "and 2 more"
+        assert "(and 2 more)" in result
+        assert "Acceptance Criteria" in result
+
+    def test_format_caws_context_for_prompt_many_invariants(self, tmp_path):
+        """Test formatting context with more than 5 invariants."""
+        caws_dir = tmp_path / ".caws"
+        caws_dir.mkdir()
+
+        spec_file = caws_dir / "working-spec.yaml"
+        spec = {
+            "id": "FEAT-001",
+            "title": "Test Feature",
+            "risk_tier": 2,
+            "mode": "feature",
+            "scope": {"in": ["src/"], "out": []},
+            "acceptance": [],
+            "invariants": [
+                "Invariant 1: System must remain stable",
+                "Invariant 2: Performance requirements met",
+                "Invariant 3: Security constraints satisfied",
+                "Invariant 4: Compatibility maintained",
+                "Invariant 5: Documentation updated",
+                "Invariant 6: Testing completed",
+                "Invariant 7: Code review passed",
+            ],
+        }
+        with open(spec_file, "w") as f:
+            yaml.dump(spec, f)
+
+        context = extract_caws_context(str(tmp_path))
+        result = format_caws_context_for_prompt(context, compact=False)
+
+        # invariants has 7 items, shows 5 + "and 2 more"
+        assert "(and 2 more)" in result
+        assert "Invariants" in result
+
 
 class TestExtractCAWSContextDict:
     """Test extract_caws_context_dict function."""
@@ -582,10 +676,3 @@ class TestCAWSContextIntegration:
         # Derive budget
         budget = derive_budget(spec, str(tmp_path))
         assert budget["baseline"]["max_files"] == 30
-
-
-
-
-
-
-

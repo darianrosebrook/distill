@@ -215,3 +215,6 @@ internal/
 # Large generated files
 reports/readiness/todos.json
 mutants/training/distill_kd.py
+
+
+mutants/

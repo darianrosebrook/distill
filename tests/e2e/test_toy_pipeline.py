@@ -16,11 +16,8 @@ import json
 from pathlib import Path
 
 # Import pytest-timeout for custom timeouts
-try:
-    import pytest_timeout
-    HAS_TIMEOUT = True
-except ImportError:
-    HAS_TIMEOUT = False
+import importlib.util
+HAS_TIMEOUT = importlib.util.find_spec("pytest_timeout") is not None
 
 
 @pytest.fixture
@@ -44,7 +41,8 @@ def test_toy_pipeline_e2e(temp_dir):
     # Step 1: Generate KD dataset
     print("\n[test_toy_pipeline] Step 1: Generating toy KD dataset...")
     result = subprocess.run(
-        [sys.executable, "-m", "data.make_toy_kd", "--out", str(dataset_path), "--n", "128"],
+        [sys.executable, "-m", "data.make_toy_kd",
+            "--out", str(dataset_path), "--n", "128"],
         capture_output=True,
         text=True,
         timeout=60,  # 1 minute for dataset generation
@@ -141,10 +139,12 @@ def test_toy_pipeline_e2e(temp_dir):
 
     # Allow conversion to fail if CoreML not available (skip test)
     if result.returncode != 0:
-        pytest.skip(f"CoreML conversion failed (may not be available): {result.stderr}")
+        pytest.skip(
+            f"CoreML conversion failed (may not be available): {result.stderr}")
 
     if not mlpackage_path.exists():
-        pytest.skip("CoreML conversion did not produce model (may not be available)")
+        pytest.skip(
+            "CoreML conversion did not produce model (may not be available)")
 
     print(f"✅ Conversion complete: {mlpackage_path}")
 
@@ -206,7 +206,8 @@ def test_toy_pipeline_e2e(temp_dir):
 
     # Allow verification to fail if CoreML not available
     if result.returncode != 0:
-        pytest.skip(f"Verification failed (CoreML may not be available): {result.stderr}")
+        pytest.skip(
+            f"Verification failed (CoreML may not be available): {result.stderr}")
 
     assert report_path.exists(), "Verification report not created"
 
@@ -222,7 +223,8 @@ def test_toy_pipeline_e2e(temp_dir):
     assert summary.get("nan_shapes", 1) == 0, "NaN detected in shapes"
     assert summary.get("zero_shapes", 1) == 0, "Zero detected in shapes"
     assert len(summary.get("shapes_ok", [])) >= 1, "No shapes verified"
-    assert summary.get("tool_span_micro_f1", 0.0) >= 0.20, "Tool span F1 < 0.20"
+    assert summary.get("tool_span_micro_f1",
+                       0.0) >= 0.20, "Tool span F1 < 0.20"
 
     print(f"✅ Verification complete: {report_path}")
     print(f"   Shapes OK: {summary.get('shapes_ok', [])}")
@@ -258,7 +260,8 @@ def test_toy_pipeline_with_code_mode(temp_dir):
     # Step 1: Generate KD dataset
     print("\n[test_toy_pipeline_code_mode] Step 1: Generating toy KD dataset...")
     result = subprocess.run(
-        [sys.executable, "-m", "data.make_toy_kd", "--out", str(dataset_path), "--n", "128"],
+        [sys.executable, "-m", "data.make_toy_kd",
+            "--out", str(dataset_path), "--n", "128"],
         capture_output=True,
         text=True,
         env=env,
@@ -269,7 +272,8 @@ def test_toy_pipeline_with_code_mode(temp_dir):
     print(f"✅ Dataset created: {dataset_path}")
 
     # Step 2: Train toy model with code-mode enabled
-    print("\n[test_toy_pipeline_code_mode] Step 2: Training toy model with code-mode...")
+    print(
+        "\n[test_toy_pipeline_code_mode] Step 2: Training toy model with code-mode...")
     result = subprocess.run(
         [
             sys.executable,
@@ -367,7 +371,8 @@ def test_toy_pipeline_with_latent_mode(temp_dir):
     # Step 1: Generate KD dataset
     print("\n[test_toy_pipeline_latent] Step 1: Generating toy KD dataset...")
     result = subprocess.run(
-        [sys.executable, "-m", "data.make_toy_kd", "--out", str(dataset_path), "--n", "128"],
+        [sys.executable, "-m", "data.make_toy_kd",
+            "--out", str(dataset_path), "--n", "128"],
         capture_output=True,
         text=True,
         env=env,
@@ -477,7 +482,8 @@ def test_toy_pipeline_with_both_features(temp_dir):
     # Step 1: Generate KD dataset
     print("\n[test_toy_pipeline_both] Step 1: Generating toy KD dataset...")
     result = subprocess.run(
-        [sys.executable, "-m", "data.make_toy_kd", "--out", str(dataset_path), "--n", "128"],
+        [sys.executable, "-m", "data.make_toy_kd",
+            "--out", str(dataset_path), "--n", "128"],
         capture_output=True,
         text=True,
         env=env,

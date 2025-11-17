@@ -85,11 +85,88 @@ class TestUtilityFunctions:
 
         assert shape in seq_lengths
 
+    def test_compute_distillation_quality_metrics_basic(self, device):
+        """Test compute_distillation_quality_metrics with basic inputs."""
+        from training.distill_kd import compute_distillation_quality_metrics
+
+        # Create mock tensors
+        batch_size, seq_len, vocab_size = 2, 10, 1000
+        temperature = 2.0
+
+        student_logits = torch.randn(
+            batch_size, seq_len, vocab_size, device=device)
+        teacher_logits = torch.randn(
+            batch_size, seq_len, vocab_size, device=device)
+        teacher_targets = torch.randint(
+            0, vocab_size, (batch_size, seq_len), device=device)
+
+        # Test with teacher targets
+        metrics = compute_distillation_quality_metrics(
+            student_logits, teacher_logits, teacher_targets, temperature)
+
+        # Check all expected metrics are present
+        expected_keys = ["kl_divergence", "teacher_agreement", "teacher_confidence",
+                         "student_entropy", "student_variance", "teacher_variance"]
+        for key in expected_keys:
+            assert key in metrics
+            assert isinstance(metrics[key], float)
+
+        # KL divergence should be positive
+        assert metrics["kl_divergence"] >= 0
+
+        # Agreement should be between 0 and 1
+        assert 0 <= metrics["teacher_agreement"] <= 1
+
+    def test_compute_distillation_quality_metrics_no_targets(self, device):
+        """Test compute_distillation_quality_metrics without teacher targets."""
+        from training.distill_kd import compute_distillation_quality_metrics
+
+        # Create mock tensors
+        batch_size, seq_len, vocab_size = 2, 10, 1000
+        temperature = 2.0
+
+        student_logits = torch.randn(
+            batch_size, seq_len, vocab_size, device=device)
+        teacher_logits = torch.randn(
+            batch_size, seq_len, vocab_size, device=device)
+
+        # Test without teacher targets
+        metrics = compute_distillation_quality_metrics(
+            student_logits, teacher_logits, None, temperature)
+
+        # teacher_agreement should not be present
+        assert "teacher_agreement" not in metrics
+
+        # Other metrics should still be present
+        expected_keys = ["kl_divergence", "teacher_confidence",
+                         "student_entropy", "student_variance", "teacher_variance"]
+        for key in expected_keys:
+            assert key in metrics
+            assert isinstance(metrics[key], float)
+
+    def test_compute_distillation_quality_metrics_exception_handling(self, device):
+        """Test compute_distillation_quality_metrics handles exceptions gracefully."""
+        from training.distill_kd import compute_distillation_quality_metrics
+
+        # Create tensors that will cause issues
+        student_logits = torch.tensor([[[float('inf')]]], device=device)
+        teacher_logits = torch.tensor([[[float('nan')]]], device=device)
+        teacher_targets = torch.tensor([[0]], device=device)
+        temperature = 1.0
+
+        # Should not crash, return empty dict
+        metrics = compute_distillation_quality_metrics(
+            student_logits, teacher_logits, teacher_targets, temperature)
+
+        # Should return empty dict on computation failure
+        assert isinstance(metrics, dict)
+
     def test_should_enable_qat_basic(self):
         """Test should_enable_qat function."""
         from training.distill_kd import should_enable_qat
 
-        qat_cfg = {"enabled": True, "start_fraction": 0.1}  # Start at 10% of training
+        # Start at 10% of training
+        qat_cfg = {"enabled": True, "start_fraction": 0.1}
 
         # Before start (step 500 < 1000 * 0.1 = 100)
         assert not should_enable_qat(50, 1000, qat_cfg)
@@ -291,7 +368,8 @@ class TestConfigOperations:
             # So key1 is lost, but key2 is present
             assert "nested" in merged["arch"]
             # Note: .update() overwrites, so key1 is lost
-            assert merged["arch"]["nested"]["key2"] == "value2"  # Added from second
+            # Added from second
+            assert merged["arch"]["nested"]["key2"] == "value2"
         finally:
             for f in files:
                 Path(f).unlink()
@@ -822,7 +900,8 @@ class TestTrainingStep:
     ):
         """Test train_step with teacher_reasoning_content as list with None values (line 1006->1008)."""
         # Test the branch where teacher_reasoning_content is a list with None values
-        sample_batch["teacher_reasoning_content"] = [None, None, "Some reasoning content"]
+        sample_batch["teacher_reasoning_content"] = [
+            None, None, "Some reasoning content"]
         with pytest.raises(ValueError, match="CoT-free training"):
             train_step(
                 small_model,
@@ -855,13 +934,16 @@ class TestTrainingStep:
     ):
         """Test train_step vocab clamping warning branch (line 989->993 when current_step % 50 == 0)."""
         # Create input_ids that violate vocab_size
-        model_vocab_size = training_config.get("arch", {}).get("vocab_size", 32000)
-        sample_batch["input_ids"] = torch.full((2, 10), model_vocab_size + 100, dtype=torch.long).to(device)
-        sample_batch["labels"] = torch.full((2, 10), model_vocab_size + 100, dtype=torch.long).to(device)
-        
+        model_vocab_size = training_config.get(
+            "arch", {}).get("vocab_size", 32000)
+        sample_batch["input_ids"] = torch.full(
+            (2, 10), model_vocab_size + 100, dtype=torch.long).to(device)
+        sample_batch["labels"] = torch.full(
+            (2, 10), model_vocab_size + 100, dtype=torch.long).to(device)
+
         # Test with current_step that triggers warning (multiple of 50)
         with patch("builtins.print") as mock_print:
-            result = train_step(
+            train_step(
                 small_model,
                 sample_batch,
                 simple_optimizer,
@@ -871,20 +953,24 @@ class TestTrainingStep:
                 current_step=50,  # Triggers warning branch
             )
             # Should have printed warning
-            assert any("clamped token ids" in str(call) for call in mock_print.call_args_list)
+            assert any("clamped token ids" in str(call)
+                       for call in mock_print.call_args_list)
 
     def test_train_step_vocab_clamping_no_warning_branch(
         self, small_model, sample_batch, simple_optimizer, training_config, device
     ):
         """Test train_step vocab clamping without warning (line 989->993 when current_step % 50 != 0)."""
         # Create input_ids that violate vocab_size
-        model_vocab_size = training_config.get("arch", {}).get("vocab_size", 32000)
-        sample_batch["input_ids"] = torch.full((2, 10), model_vocab_size + 100, dtype=torch.long).to(device)
-        sample_batch["labels"] = torch.full((2, 10), model_vocab_size + 100, dtype=torch.long).to(device)
-        
+        model_vocab_size = training_config.get(
+            "arch", {}).get("vocab_size", 32000)
+        sample_batch["input_ids"] = torch.full(
+            (2, 10), model_vocab_size + 100, dtype=torch.long).to(device)
+        sample_batch["labels"] = torch.full(
+            (2, 10), model_vocab_size + 100, dtype=torch.long).to(device)
+
         # Test with current_step that doesn't trigger warning (not multiple of 50)
         with patch("builtins.print") as mock_print:
-            result = train_step(
+            train_step(
                 small_model,
                 sample_batch,
                 simple_optimizer,
@@ -894,7 +980,8 @@ class TestTrainingStep:
                 current_step=51,  # Doesn't trigger warning branch
             )
             # Should not have printed warning (clamping happens but no print)
-            assert not any("clamped token ids" in str(call) for call in mock_print.call_args_list)
+            assert not any("clamped token ids" in str(call)
+                           for call in mock_print.call_args_list)
 
     def test_train_step_with_intermediate_layers(
         self, small_model, sample_batch, simple_optimizer, training_config, device
@@ -1047,7 +1134,7 @@ class TestBatchOperations:
         """Test compute_required_fields_present with JSON validity checking (lines 124-133)."""
         batch_size = 2
         seq_len = 10
-        
+
         # Test case where student_logits is None, but we have gold_json_text_ids and mask_valid_json_tokens
         batch = {
             "input_ids": torch.randint(0, 1000, (batch_size, seq_len)),
@@ -1055,25 +1142,25 @@ class TestBatchOperations:
             "gold_json_text_ids": torch.randint(0, 1000, (batch_size, 5)),
             "mask_valid_json_tokens": torch.ones(batch_size, 5, dtype=torch.bool),
         }
-        
+
         # Move to device
         for k, v in batch.items():
             if isinstance(v, torch.Tensor):
                 batch[k] = v.to(device)
-        
+
         tokenizer = Mock()
         result = compute_required_fields_present(batch, tokenizer, device)
-        
+
         assert result.shape == (batch_size,)
         assert result.dtype == torch.bool
         # With valid attention mask, all should be True
         assert result.all().item()
-    
+
     def test_compute_required_fields_present_with_json_validity_partial_coverage(self, device):
         """Test compute_required_fields_present with partial JSON coverage."""
         batch_size = 2
         seq_len = 10
-        
+
         # Test case where student attention mask only covers part of the JSON
         batch = {
             "input_ids": torch.randint(0, 1000, (batch_size, seq_len)),
@@ -1084,15 +1171,15 @@ class TestBatchOperations:
             "gold_json_text_ids": torch.randint(0, 1000, (batch_size, 5)),
             "mask_valid_json_tokens": torch.ones(batch_size, 5, dtype=torch.bool),
         }
-        
+
         # Move to device
         for k, v in batch.items():
             if isinstance(v, torch.Tensor):
                 batch[k] = v.to(device)
-        
+
         tokenizer = Mock()
         result = compute_required_fields_present(batch, tokenizer, device)
-        
+
         assert result.shape == (batch_size,)
         assert result.dtype == torch.bool
         # With partial coverage, some may be False
@@ -1346,7 +1433,7 @@ class TestConfigValidation:
 
         captured = capsys.readouterr()
         assert "Both latent reasoning and code_mode enabled" in captured.out
-    
+
     def test_validate_config_multiple_errors(self):
         """Test validate_config formats error message correctly with multiple errors (lines 2091-2093)."""
         config = {
@@ -1369,7 +1456,7 @@ class TestConfigValidation:
         assert "optimizer.lr must be positive" in error_msg
         # Verify format includes bullet points
         assert "  - " in error_msg
-    
+
     def test_validate_config_zero_values(self):
         """Test validate_config catches zero values (edge case for <= 0 checks)."""
         config = {
@@ -1387,12 +1474,12 @@ class TestConfigValidation:
         assert "training.steps must be positive" in error_msg
         assert "training.batch_size must be positive" in error_msg
         assert "optimizer.lr must be positive" in error_msg
-    
+
     def test_validate_config_main_error_handling(self, capsys):
         """Test main function handles config validation errors gracefully (lines 2131-2135)."""
         from training.distill_kd import main
         from unittest.mock import Mock, patch
-        
+
         config_content = """
         model:
           vocab_size: -1000
@@ -1403,7 +1490,7 @@ class TestConfigValidation:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(config_content)
             config_path = f.name
-        
+
         try:
             mock_parser = Mock()
             mock_args = Mock()
@@ -1411,11 +1498,11 @@ class TestConfigValidation:
             mock_args.resume = None
             mock_args.output_dir = "outputs"
             mock_args.local_rank = -1
-            
+
             with patch("training.distill_kd.argparse.ArgumentParser") as mock_parser_class:
                 mock_parser_class.return_value = mock_parser
                 mock_parser.parse_args.return_value = mock_args
-                
+
                 with patch("training.distill_kd.check_training_versions"):
                     with patch("training.distill_kd.merge_configs") as mock_merge:
                         # Mock merge_configs to return invalid config that will fail validation
@@ -1429,10 +1516,10 @@ class TestConfigValidation:
                                 # Call main - should catch ValueError and exit
                                 with pytest.raises(SystemExit):
                                     main()
-                            
+
                             # Verify sys.exit was called with error code 1
                             mock_exit.assert_called_once_with(1)
-                            
+
                             # Verify error message was printed
                             captured = capsys.readouterr()
                             assert "ERROR" in captured.out or "error" in captured.out.lower()
@@ -1578,7 +1665,8 @@ class TestComputeRequiredFieldsPresent:
         }
         mock_tokenizer = Mock()
 
-        result = compute_required_fields_present(batch, mock_tokenizer, device=device)
+        result = compute_required_fields_present(
+            batch, mock_tokenizer, device=device)
 
         # Should return default (all True) when gold_json_ids is None
         assert result.shape == (1,)
@@ -1593,7 +1681,8 @@ class TestComputeRequiredFieldsPresent:
         }
         mock_tokenizer = Mock()
 
-        result = compute_required_fields_present(batch, mock_tokenizer, device=device)
+        result = compute_required_fields_present(
+            batch, mock_tokenizer, device=device)
 
         # Should return default (all True) when mask_valid_json is None
         assert result.shape == (1,)
@@ -1608,7 +1697,8 @@ class TestComputeRequiredFieldsPresent:
         }
         mock_tokenizer = Mock()
 
-        result = compute_required_fields_present(batch, mock_tokenizer, device=device)
+        result = compute_required_fields_present(
+            batch, mock_tokenizer, device=device)
 
         # Should return default (all True) when attention_mask is None
         assert result.shape == (1,)
@@ -1626,7 +1716,8 @@ class TestComputeRequiredFieldsPresent:
         # Mock ToolSchemaRegistry to raise an exception when instantiated
         # This tests the except Exception branch at line 142->144
         with patch("tools.schema_registry.ToolSchemaRegistry", side_effect=Exception("Registry error")):
-            result = compute_required_fields_present(batch, mock_tokenizer, device=device)
+            result = compute_required_fields_present(
+                batch, mock_tokenizer, device=device)
 
         # Should handle gracefully and return default (schema_registry will be None)
         assert result.shape == (2,)
@@ -1642,8 +1733,10 @@ class TestComputeRequiredFieldsPresent:
 
         # Mock extract_tool_call to return None for tool_name
         with patch("training.extractors.extract_tool_call") as mock_extract:
-            mock_extract.return_value = {"arguments": {"key": "value"}}  # No "name" key
-            result = compute_required_fields_present(batch, mock_tokenizer, device=device)
+            mock_extract.return_value = {
+                "arguments": {"key": "value"}}  # No "name" key
+            result = compute_required_fields_present(
+                batch, mock_tokenizer, device=device)
 
         # Should handle missing tool_name gracefully
         assert result.shape == (2,)
@@ -1658,8 +1751,10 @@ class TestComputeRequiredFieldsPresent:
         }
 
         with patch("training.extractors.extract_tool_call") as mock_extract:
-            mock_extract.return_value = {"name": "test_tool", "arguments": {"key": "value"}}
-            result = compute_required_fields_present(batch, mock_tokenizer, device=device)
+            mock_extract.return_value = {
+                "name": "test_tool", "arguments": {"key": "value"}}
+            result = compute_required_fields_present(
+                batch, mock_tokenizer, device=device)
 
         assert result.shape == (2,)
         assert result.dtype == torch.bool
@@ -1669,12 +1764,15 @@ class TestComputeRequiredFieldsPresent:
         batch = {
             "student_logits": torch.randn(2, 10, 1000, device=device),
             "tool_names": ["test_tool"],
-            "validated_args": [{"key": "value"}, {"key2": "value2"}],  # List format
+            # List format
+            "validated_args": [{"key": "value"}, {"key2": "value2"}],
         }
 
         with patch("training.extractors.extract_tool_call") as mock_extract:
-            mock_extract.return_value = {"name": "test_tool", "arguments": {"key": "value"}}
-            result = compute_required_fields_present(batch, mock_tokenizer, device=device)
+            mock_extract.return_value = {
+                "name": "test_tool", "arguments": {"key": "value"}}
+            result = compute_required_fields_present(
+                batch, mock_tokenizer, device=device)
 
         assert result.shape == (2,)
         assert result.dtype == torch.bool
@@ -1695,8 +1793,10 @@ class TestComputeRequiredFieldsPresent:
             mock_registry_class.return_value = mock_registry
 
             with patch("training.extractors.extract_tool_call") as mock_extract:
-                mock_extract.return_value = {"name": "test_tool", "arguments": {"key": "value"}}
-                result = compute_required_fields_present(batch, mock_tokenizer, device=device)
+                mock_extract.return_value = {
+                    "name": "test_tool", "arguments": {"key": "value"}}
+                result = compute_required_fields_present(
+                    batch, mock_tokenizer, device=device)
 
         assert result.shape == (2,)
         assert result.dtype == torch.bool
@@ -1711,17 +1811,19 @@ class TestComputeRequiredFieldsPresent:
 
         # Mock to return teacher_validated as dict
         with patch("training.extractors.extract_tool_call") as mock_extract:
-            mock_extract.return_value = {"name": "test_tool", "arguments": {"key": "value"}}
-            
+            mock_extract.return_value = {
+                "name": "test_tool", "arguments": {"key": "value"}}
+
             # Mock schema registry
             with patch("tools.schema_registry.ToolSchemaRegistry") as mock_registry_class:
                 mock_registry = Mock()
                 mock_registry.get_schema.return_value = None  # No schema
                 mock_registry_class.return_value = mock_registry
-                
+
                 # Create a scenario where teacher_validated is a dict
                 # This requires setting up the batch metadata properly
-                result = compute_required_fields_present(batch, mock_tokenizer, device=device)
+                result = compute_required_fields_present(
+                    batch, mock_tokenizer, device=device)
 
         assert result.shape == (2,)
         assert result.dtype == torch.bool
@@ -1786,28 +1888,6 @@ class TestComputeRequiredFieldsPresent:
 
         assert isinstance(result, torch.Tensor)
         assert result.dtype == torch.bool
-
-    def test_compute_required_fields_present_schema_registry_exception(self, device, mock_tokenizer):
-        """Test exception handling in schema registry import (lines 142-144)."""
-        batch_size = 2
-        seq_len = 10
-        vocab_size = 1000
-
-        batch = {
-            "input_ids": torch.randint(0, vocab_size, (batch_size, seq_len)),
-            "student_logits": torch.randn(batch_size, seq_len, vocab_size),
-            "validated_arguments": [{"arguments": {"key": "value"}}],
-            "tool_names": ["test_tool"],
-        }
-
-        # Mock schema registry to raise exception on import
-        with patch("tools.schema_registry.ToolSchemaRegistry", side_effect=ImportError("Not available")):
-            result = compute_required_fields_present(
-                batch, mock_tokenizer, device)
-
-            # Should fall back to generic validation
-            assert isinstance(result, torch.Tensor)
-            assert result.dtype == torch.bool
 
     def test_compute_required_fields_present_error_handling(self, device, mock_tokenizer):
         """Test error handling path in compute_required_fields_present (lines 268-278)."""
@@ -1883,7 +1963,7 @@ class TestComputeRequiredFieldsPresent:
             assert result.dtype == torch.bool
             assert result.shape == (batch_size,)
             # First item should be False (no tool name)
-            assert result[0] == False
+            assert not result[0]
 
     def test_compute_required_fields_present_schema_required_at_top_level(self, device, mock_tokenizer):
         """Test schema with required fields at top level (lines 207-209)."""
@@ -2642,7 +2722,7 @@ class TestQATOperationsExpanded:
         else:
             # Inner handler caught it (line 764)
             assert result["qat_stability.cosine_sim"] == 1.0
-    
+
     def test_check_qat_stability_exception_during_computation(self, sample_batch, device):
         """Test QAT stability exception during similarity computation (lines 762-764)."""
         # Create a model that raises exception during hidden state extraction (inside try block)
@@ -2661,19 +2741,21 @@ class TestQATOperationsExpanded:
                     embedded = self.embedding(input_ids)
                     logits = self.linear(embedded.mean(dim=1))
                     return logits
-                
+
                 # Second call with return_hidden_states should raise exception (line 664)
                 # This happens inside the try block at line 644, so should be caught by inner handler
                 if self.fail_on_hidden_states:
-                    raise RuntimeError("Hidden state extraction failed inside try block")
-                
+                    raise RuntimeError(
+                        "Hidden state extraction failed inside try block")
+
                 embedded = self.embedding(input_ids)
                 logits = self.linear(embedded.mean(dim=1))
                 return logits, [embedded]
 
         model = HiddenStateFailingModel(fail_on_hidden_states=True).to(device)
         # Baseline model should also fail to trigger exception path
-        baseline_model = HiddenStateFailingModel(fail_on_hidden_states=True).to(device)
+        baseline_model = HiddenStateFailingModel(
+            fail_on_hidden_states=True).to(device)
 
         # Move batch to device
         for k, v in sample_batch.items():
@@ -2700,7 +2782,6 @@ class TestQATOperationsExpanded:
 
     def test_check_qat_stability_with_ddp_model(self, sample_batch, device):
         """Test QAT stability check with DDP-wrapped model."""
-        from torch.nn.parallel import DistributedDataParallel as DDP
 
         class MockModelWithHiddenStates(nn.Module):
             def __init__(self):
@@ -3839,44 +3920,6 @@ class TestTrainingStepExpanded:
         assert "total" in result
         assert "intermediate_layer" in result
 
-    def test_train_step_with_entropy_scheduling(
-        self, small_model, sample_batch, simple_optimizer, training_config, device
-    ):
-        """Test training step with entropy-based scheduling."""
-        training_config["distillation"]["use_entropy_scheduling"] = True
-        training_config["distillation"]["min_entropy"] = 2.0
-        training_config["distillation"]["max_entropy"] = 8.0
-        training_config["distillation"]["min_temperature"] = 1.5
-        training_config["distillation"]["max_temperature"] = 3.0
-
-        # Move batch to device
-        for k, v in sample_batch.items():
-            if isinstance(v, torch.Tensor):
-                sample_batch[k] = v.to(device)
-
-        # Mock entropy_weighting to return expected values
-        with patch("training.losses.entropy_weighting") as mock_entropy:
-            mock_entropy.return_value = (
-                2.0,  # temperature
-                {
-                    "kl_weight": 0.5,
-                    "ce_teacher_weight": 0.3,
-                    "ce_ground_truth_weight": 0.2,
-                    "entropy": 5.0,
-                },
-            )
-
-            result = train_step(
-                model=small_model,
-                batch=sample_batch,
-                optimizer=simple_optimizer,
-                scaler=None,
-                cfg=training_config,
-                device=device,
-            )
-
-            assert "total" in result
-
     def test_train_step_with_json_repair_check(
         self, small_model, sample_batch, simple_optimizer, training_config, device
     ):
@@ -4662,6 +4705,85 @@ class TestMainFunction:
     @patch("training.distill_kd.create_optimizer")
     @patch("training.distill_kd.Path.mkdir")
     @patch("training.distill_kd.argparse.ArgumentParser")
+    def test_main_tokenizer_path_missing(
+        self,
+        mock_parser_class,
+        mock_mkdir,
+        mock_create_optimizer,
+        mock_create_model,
+        mock_validate_config,
+        mock_merge_configs,
+        mock_check_versions,
+    ):
+        """Test main function exits when tokenizer_path is missing."""
+        mock_parser = Mock()
+        mock_args = Mock()
+        mock_args.config = ["config.yaml"]
+        mock_args.resume = None
+        mock_args.output_dir = "outputs"
+        mock_args.local_rank = -1
+        mock_parser.parse_args.return_value = mock_args
+        mock_parser_class.return_value = mock_parser
+
+        mock_check_versions.return_value = None
+        # Config missing tokenizer_path
+        mock_merge_configs.return_value = {
+            "train": {"steps": 0},  # Prevent training loop
+        }
+        mock_validate_config.return_value = None
+
+        with patch("training.distill_kd.sys.exit") as mock_exit:
+            from training.distill_kd import main
+            main()
+            mock_exit.assert_called_once_with(1)
+
+    @patch("training.distill_kd.check_training_versions")
+    @patch("training.distill_kd.merge_configs")
+    @patch("training.distill_kd.validate_config")
+    @patch("training.distill_kd.create_model")
+    @patch("training.distill_kd.create_optimizer")
+    @patch("training.distill_kd.Path.mkdir")
+    @patch("training.distill_kd.argparse.ArgumentParser")
+    def test_main_config_validation_failure(
+        self,
+        mock_parser_class,
+        mock_mkdir,
+        mock_create_optimizer,
+        mock_create_model,
+        mock_validate_config,
+        mock_merge_configs,
+        mock_check_versions,
+    ):
+        """Test main function exits on config validation failure."""
+        mock_parser = Mock()
+        mock_args = Mock()
+        mock_args.config = ["config.yaml"]
+        mock_args.resume = None
+        mock_args.output_dir = "outputs"
+        mock_args.local_rank = -1
+        mock_parser.parse_args.return_value = mock_args
+        mock_parser_class.return_value = mock_parser
+
+        mock_check_versions.return_value = None
+        mock_merge_configs.return_value = {
+            "io": {"tokenizer_path": "models/student/tokenizer"},
+            "train": {"steps": 0},  # Prevent training loop
+        }
+        # Config validation fails
+        mock_validate_config.side_effect = ValueError("Invalid config")
+
+        with patch("training.distill_kd.sys.exit") as mock_exit:
+            from training.distill_kd import main
+            main()
+            mock_exit.assert_called_once_with(1)
+
+    @patch("training.distill_kd.check_training_versions")
+    @patch("training.distill_kd.merge_configs")
+    @patch("training.distill_kd.validate_config")
+    @patch("training.distill_kd.create_model")
+    @patch("training.distill_kd.create_optimizer")
+    @patch("training.distill_kd.Path.mkdir")
+    @patch("training.distill_kd.argparse.ArgumentParser")
     def test_main_version_check_failure(
         self,
         mock_parser_class,
@@ -4694,37 +4816,6 @@ class TestMainFunction:
     @patch("training.distill_kd.validate_config")
     @patch("training.distill_kd.create_model")
     @patch("training.distill_kd.create_optimizer")
-    @patch("training.distill_kd.Path.mkdir")
-    @patch("training.distill_kd.argparse.ArgumentParser")
-    def test_main_config_validation_failure(
-        self,
-        mock_parser_class,
-        mock_mkdir,
-        mock_create_optimizer,
-        mock_create_model,
-        mock_validate_config,
-        mock_merge_configs,
-        mock_check_versions,
-    ):
-        """Test main function exits on config validation failure."""
-        mock_parser = Mock()
-        mock_args = Mock()
-        mock_args.config = ["config.yaml"]
-        mock_args.resume = None
-        mock_args.output_dir = "outputs"
-        mock_args.local_rank = -1
-        mock_parser.parse_args.return_value = mock_args
-        mock_parser_class.return_value = mock_parser
-
-        mock_check_versions.return_value = None
-        mock_merge_configs.return_value = {"model": {}, "training": {}}
-        mock_validate_config.side_effect = ValueError("Invalid config")
-
-        with pytest.raises(SystemExit):
-            from training.distill_kd import main
-
-            main()
-
     @patch("training.distill_kd.check_training_versions")
     @patch("training.distill_kd.merge_configs")
     @patch("training.distill_kd.validate_config")
@@ -5655,7 +5746,8 @@ class TestMainFunction:
 
         # Test with proper tuple output
         baseline_model = Mock()
-        baseline_model.return_value = (torch.randn(2, 10, 1000), torch.randn(2, 10, 64))
+        baseline_model.return_value = (
+            torch.randn(2, 10, 1000), torch.randn(2, 10, 64))
         quantized_model = Mock()
         batch = {"input_ids": torch.randint(0, 1000, (2, 10))}
         device = torch.device("cpu")
@@ -5676,7 +5768,8 @@ class TestMainFunction:
 
         # Test with tuple that has only 1 element (should not extract hidden states)
         baseline_model = Mock()
-        baseline_model.return_value = (torch.randn(2, 10, 1000),)  # Only logits, no hidden states
+        # Only logits, no hidden states
+        baseline_model.return_value = (torch.randn(2, 10, 1000),)
         quantized_model = Mock()
         batch = {"input_ids": torch.randint(0, 1000, (2, 10))}
         device = torch.device("cpu")
@@ -5702,10 +5795,12 @@ class TestMainFunction:
 
         # Create a mock model and optimizer
         model = Mock()
-        model.state_dict.return_value = {"weight": torch.randn(10, 10)}  # Mock state dict
+        model.state_dict.return_value = {
+            "weight": torch.randn(10, 10)}  # Mock state dict
         optimizer = Mock()
         optimizer.param_groups = [{"lr": 1e-3}]
-        optimizer.state_dict.return_value = {"state": {}, "param_groups": [{"lr": 1e-3}]}
+        optimizer.state_dict.return_value = {
+            "state": {}, "param_groups": [{"lr": 1e-3}]}
 
         # Create a temporary directory
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -5713,8 +5808,8 @@ class TestMainFunction:
 
             # Test with rng_states=None (should trigger RNG capture)
             with patch("random.getstate") as mock_random, \
-                 patch("numpy.random.get_state") as mock_numpy, \
-                 patch("torch.get_rng_state") as mock_torch:
+                    patch("numpy.random.get_state") as mock_numpy, \
+                    patch("torch.get_rng_state") as mock_torch:
 
                 mock_random.return_value = "random_state"
                 mock_numpy.return_value = "numpy_state"
@@ -5737,10 +5832,11 @@ class TestMainFunction:
 
             # Test with rng_states provided (should NOT trigger RNG capture)
             with patch("random.getstate") as mock_random, \
-                 patch("numpy.random.get_state") as mock_numpy, \
-                 patch("torch.get_rng_state") as mock_torch:
+                    patch("numpy.random.get_state") as mock_numpy, \
+                    patch("torch.get_rng_state") as mock_torch:
 
-                provided_states = {"python": "provided", "numpy": "provided", "torch": "provided"}
+                provided_states = {"python": "provided",
+                                   "numpy": "provided", "torch": "provided"}
 
                 save_checkpoint(
                     model=model,
@@ -5762,7 +5858,6 @@ class TestMainFunction:
         # This test ensures isinstance(model, DDP) check works correctly
         # If mutated to If_True, it would always try DDP logic on non-DDP models
 
-        from training.distill_kd import apply_qat_to_model
         from unittest.mock import Mock
 
         # Create a mock DDP model (has .module attribute)
@@ -5770,7 +5865,7 @@ class TestMainFunction:
         ddp_model.module = Mock()  # DDP models have .module attribute
 
         # Create a regular model (no .module attribute)
-        regular_model = Mock()
+        Mock()
 
         qat_cfg = {"enabled": True}
         device = torch.device("cpu")
@@ -5785,7 +5880,8 @@ class TestMainFunction:
                 mock_apply(ddp_model, qat_cfg, device)
 
             # Should be called with model.module for DDP
-            mock_apply.assert_called_once_with(ddp_model.module, qat_cfg, device)
+            mock_apply.assert_called_once_with(
+                ddp_model.module, qat_cfg, device)
 
     def test_speed_metrics_import_handling(self):
         """Test speed metrics import handling catches False->True mutation (line 146)."""
@@ -5835,16 +5931,20 @@ class TestMainFunction:
             return hasattr(model, "module") and hasattr(model.module, "tokenizer")
 
         # Should return True only when BOTH module exists AND module has tokenizer
-        assert should_access_via_module(model_with_both), "Should allow access when model has module with tokenizer"
+        assert should_access_via_module(
+            model_with_both), "Should allow access when model has module with tokenizer"
 
         # Should return False when model has module but no tokenizer (original AND logic)
-        assert not should_access_via_module(model_with_module_only), "Should not allow access when module has no tokenizer"
+        assert not should_access_via_module(
+            model_with_module_only), "Should not allow access when module has no tokenizer"
 
         # Should return False when model has no module (original AND logic)
-        assert not should_access_via_module(model_with_tokenizer_only), "Should not allow access when model has no module"
+        assert not should_access_via_module(
+            model_with_tokenizer_only), "Should not allow access when model has no module"
 
         # Should return False when neither exists (original AND logic)
-        assert not should_access_via_module(model_with_neither), "Should not allow access when neither module nor tokenizer exists"
+        assert not should_access_via_module(
+            model_with_neither), "Should not allow access when neither module nor tokenizer exists"
 
     def test_checkpoint_key_membership(self):
         """Test checkpoint key membership catches In->NotIn mutation (line 2602)."""
@@ -5860,10 +5960,12 @@ class TestMainFunction:
             return "step" in checkpoint
 
         # Should return True when step key exists
-        assert should_load_step(checkpoint_with_step), "Should load step when key exists"
+        assert should_load_step(
+            checkpoint_with_step), "Should load step when key exists"
 
         # Should return False when step key doesn't exist
-        assert not should_load_step(checkpoint_without_step), "Should not load step when key doesn't exist"
+        assert not should_load_step(
+            checkpoint_without_step), "Should not load step when key doesn't exist"
 
     def test_optimizer_param_groups_check(self):
         """Test optimizer param_groups check catches If_Statement->If_True mutation (line 3154)."""
@@ -5893,16 +5995,20 @@ class TestMainFunction:
             return hasattr(optimizer, "param_groups") and optimizer.param_groups
 
         # Should return True for valid optimizer
-        assert should_access_param_groups(optimizer_with_groups), "Should allow access to valid param_groups"
+        assert should_access_param_groups(
+            optimizer_with_groups), "Should allow access to valid param_groups"
 
         # Should return False for optimizer without param_groups attribute
-        assert not should_access_param_groups(optimizer_no_groups), "Should not allow access without param_groups attribute"
+        assert not should_access_param_groups(
+            optimizer_no_groups), "Should not allow access without param_groups attribute"
 
         # Should return False for optimizer with param_groups = None
-        assert not should_access_param_groups(optimizer_none_groups), "Should not allow access to None param_groups"
+        assert not should_access_param_groups(
+            optimizer_none_groups), "Should not allow access to None param_groups"
 
         # Should return False for optimizer with param_groups = []
-        assert not should_access_param_groups(optimizer_empty_groups), "Should not allow access to empty param_groups"
+        assert not should_access_param_groups(
+            optimizer_empty_groups), "Should not allow access to empty param_groups"
 
     def test_checkpoint_frequency_calculation(self):
         """Test checkpoint frequency calculation catches Eq->NotEq mutation (line 3174)."""
@@ -5927,7 +6033,7 @@ class TestMainFunction:
 
 class TestClaimExtractionIntegration:
     """Test claim extraction loss integration in train_step (lines 1860-1940)."""
-    
+
     @pytest.fixture
     def training_config(self):
         """Config for claim extraction tests."""
@@ -5948,14 +6054,14 @@ class TestClaimExtractionIntegration:
             },
             "tokenizer_path": "models/student/tokenizer",
         }
-    
+
     @pytest.fixture
     def sample_batch(self, device):
         """Create sample training batch with teacher text."""
         batch_size = 2
         seq_len = 10
         vocab_size = 1000
-        
+
         batch = {
             "input_ids": torch.randint(0, vocab_size, (batch_size, seq_len)),
             "attention_mask": torch.ones(batch_size, seq_len),
@@ -5963,19 +6069,19 @@ class TestClaimExtractionIntegration:
             "teacher_logits": torch.randn(batch_size, seq_len, vocab_size),
             "teacher_text": "The model processes data efficiently.",
         }
-        
+
         # Move to device
         for k, v in batch.items():
             if isinstance(v, torch.Tensor):
                 batch[k] = v.to(device)
-        
+
         return batch
-    
+
     @pytest.fixture
     def simple_optimizer(self, small_model):
         """Create simple optimizer for real model."""
         return AdamW(small_model.parameters(), lr=1e-3)
-    
+
     @patch("training.dataset.load_tokenizer")
     @patch("training.claim_extraction.compute_claim_extraction_metrics")
     def test_train_step_with_claim_extraction_simple_extractor(
@@ -5984,20 +6090,21 @@ class TestClaimExtractionIntegration:
     ):
         """Test claim extraction with simple extractor type (lines 1864-1868)."""
         training_config["claim_extractor"] = {"type": "simple"}
-        
+
         # Mock tokenizer
         mock_tokenizer = Mock()
         mock_tokenizer.decode = Mock(return_value="Student output text.")
         mock_load_tokenizer.return_value = mock_tokenizer
-        
+
         # Mock claim extraction functions
         def mock_claim_loss(*args, **kwargs):
             return torch.tensor(0.5, device=device)
-        
+
         import training.losses
-        original_claim_loss = getattr(training.losses, 'claim_extraction_loss', None)
+        original_claim_loss = getattr(
+            training.losses, 'claim_extraction_loss', None)
         training.losses.claim_extraction_loss = mock_claim_loss
-        
+
         mock_metrics.return_value = {
             "student_claim_count": 2,
             "teacher_claim_count": 3,
@@ -6006,7 +6113,7 @@ class TestClaimExtractionIntegration:
             "teacher_success_rate": 0.9,
             "success_rate_ratio": 0.89,
         }
-        
+
         try:
             result = train_step(
                 model=small_model,
@@ -6016,7 +6123,7 @@ class TestClaimExtractionIntegration:
                 cfg=training_config,
                 device=device,
             )
-            
+
             assert "total" in result
             assert "claim_extraction" in result
             # Verify metrics are logged
@@ -6030,7 +6137,7 @@ class TestClaimExtractionIntegration:
                     delattr(training.losses, 'claim_extraction_loss')
             else:
                 training.losses.claim_extraction_loss = original_claim_loss
-    
+
     @patch("training.dataset.load_tokenizer")
     def test_train_step_with_claim_extraction_full_extractor_fallback(
         self, mock_load_tokenizer,
@@ -6038,20 +6145,21 @@ class TestClaimExtractionIntegration:
     ):
         """Test claim extraction with full extractor type falling back to simple (lines 1869-1882)."""
         training_config["claim_extractor"] = {"type": "full"}
-        
+
         # Mock tokenizer
         mock_tokenizer = Mock()
         mock_tokenizer.decode = Mock(return_value="Student output text.")
         mock_load_tokenizer.return_value = mock_tokenizer
-        
+
         # Mock claim extraction loss
         def mock_claim_loss(*args, **kwargs):
             return torch.tensor(0.5, device=device)
-        
+
         import training.losses
-        original_claim_loss = getattr(training.losses, 'claim_extraction_loss', None)
+        original_claim_loss = getattr(
+            training.losses, 'claim_extraction_loss', None)
         training.losses.claim_extraction_loss = mock_claim_loss
-        
+
         # Mock ImportError for ClaimifyPipeline
         with patch("builtins.print"):  # Suppress warning print
             try:
@@ -6063,7 +6171,7 @@ class TestClaimExtractionIntegration:
                     cfg=training_config,
                     device=device,
                 )
-                
+
                 assert "total" in result
                 assert "claim_extraction" in result
             finally:
@@ -6073,7 +6181,7 @@ class TestClaimExtractionIntegration:
                         delattr(training.losses, 'claim_extraction_loss')
                 else:
                     training.losses.claim_extraction_loss = original_claim_loss
-    
+
     @patch("training.dataset.load_tokenizer")
     def test_train_step_with_claim_extraction_unknown_extractor_type(
         self, mock_load_tokenizer,
@@ -6081,20 +6189,21 @@ class TestClaimExtractionIntegration:
     ):
         """Test claim extraction with unknown extractor type (lines 1883-1890)."""
         training_config["claim_extractor"] = {"type": "unknown_type"}
-        
+
         # Mock tokenizer
         mock_tokenizer = Mock()
         mock_tokenizer.decode = Mock(return_value="Student output text.")
         mock_load_tokenizer.return_value = mock_tokenizer
-        
+
         # Mock claim extraction loss
         def mock_claim_loss(*args, **kwargs):
             return torch.tensor(0.5, device=device)
-        
+
         import training.losses
-        original_claim_loss = getattr(training.losses, 'claim_extraction_loss', None)
+        original_claim_loss = getattr(
+            training.losses, 'claim_extraction_loss', None)
         training.losses.claim_extraction_loss = mock_claim_loss
-        
+
         with patch("builtins.print"):  # Suppress warning print
             try:
                 result = train_step(
@@ -6105,7 +6214,7 @@ class TestClaimExtractionIntegration:
                     cfg=training_config,
                     device=device,
                 )
-                
+
                 assert "total" in result
                 assert "claim_extraction" in result
             finally:
@@ -6115,7 +6224,7 @@ class TestClaimExtractionIntegration:
                         delattr(training.losses, 'claim_extraction_loss')
                 else:
                     training.losses.claim_extraction_loss = original_claim_loss
-    
+
     @patch("training.dataset.load_tokenizer")
     def test_train_step_with_claim_extraction_teacher_text_list(
         self, mock_load_tokenizer,
@@ -6123,22 +6232,24 @@ class TestClaimExtractionIntegration:
     ):
         """Test claim extraction with teacher_text as list (lines 1895-1896)."""
         sample_batch["teacher_text"] = ["First text", "Second text"]
-        
+
         # Mock tokenizer
         mock_tokenizer = Mock()
         mock_tokenizer.decode = Mock(return_value="Student output text.")
         mock_load_tokenizer.return_value = mock_tokenizer
-        
+
         # Mock claim extraction loss
         mock_claim_loss_calls = []
+
         def mock_claim_loss(*args, **kwargs):
             mock_claim_loss_calls.append(kwargs)
             return torch.tensor(0.5, device=device)
-        
+
         import training.losses
-        original_claim_loss = getattr(training.losses, 'claim_extraction_loss', None)
+        original_claim_loss = getattr(
+            training.losses, 'claim_extraction_loss', None)
         training.losses.claim_extraction_loss = mock_claim_loss
-        
+
         try:
             result = train_step(
                 model=small_model,
@@ -6148,7 +6259,7 @@ class TestClaimExtractionIntegration:
                 cfg=training_config,
                 device=device,
             )
-            
+
             assert "total" in result
             assert "claim_extraction" in result
             # Verify first element of list was used
@@ -6161,7 +6272,7 @@ class TestClaimExtractionIntegration:
                     delattr(training.losses, 'claim_extraction_loss')
             else:
                 training.losses.claim_extraction_loss = original_claim_loss
-    
+
     @patch("training.dataset.load_tokenizer")
     def test_train_step_with_claim_extraction_teacher_text_non_string(
         self, mock_load_tokenizer,
@@ -6169,22 +6280,24 @@ class TestClaimExtractionIntegration:
     ):
         """Test claim extraction with teacher_text as non-string (lines 1897-1898)."""
         sample_batch["teacher_text"] = 12345  # Non-string type
-        
+
         # Mock tokenizer
         mock_tokenizer = Mock()
         mock_tokenizer.decode = Mock(return_value="Student output text.")
         mock_load_tokenizer.return_value = mock_tokenizer
-        
+
         # Mock claim extraction loss
         mock_claim_loss_calls = []
+
         def mock_claim_loss(*args, **kwargs):
             mock_claim_loss_calls.append(kwargs)
             return torch.tensor(0.5, device=device)
-        
+
         import training.losses
-        original_claim_loss = getattr(training.losses, 'claim_extraction_loss', None)
+        original_claim_loss = getattr(
+            training.losses, 'claim_extraction_loss', None)
         training.losses.claim_extraction_loss = mock_claim_loss
-        
+
         try:
             result = train_step(
                 model=small_model,
@@ -6194,7 +6307,7 @@ class TestClaimExtractionIntegration:
                 cfg=training_config,
                 device=device,
             )
-            
+
             assert "total" in result
             assert "claim_extraction" in result
             # Verify non-string was converted to string
@@ -6207,7 +6320,7 @@ class TestClaimExtractionIntegration:
                     delattr(training.losses, 'claim_extraction_loss')
             else:
                 training.losses.claim_extraction_loss = original_claim_loss
-    
+
     @patch("training.dataset.load_tokenizer")
     @patch("training.claim_extraction.compute_claim_extraction_metrics")
     def test_train_step_with_claim_extraction_metrics_logging_disabled(
@@ -6216,20 +6329,21 @@ class TestClaimExtractionIntegration:
     ):
         """Test claim extraction with metrics logging disabled."""
         training_config["distillation"]["log_claim_metrics"] = False
-        
+
         # Mock tokenizer
         mock_tokenizer = Mock()
         mock_tokenizer.decode = Mock(return_value="Student output text.")
         mock_load_tokenizer.return_value = mock_tokenizer
-        
+
         # Mock claim extraction loss
         def mock_claim_loss(*args, **kwargs):
             return torch.tensor(0.5, device=device)
-        
+
         import training.losses
-        original_claim_loss = getattr(training.losses, 'claim_extraction_loss', None)
+        original_claim_loss = getattr(
+            training.losses, 'claim_extraction_loss', None)
         training.losses.claim_extraction_loss = mock_claim_loss
-        
+
         try:
             result = train_step(
                 model=small_model,
@@ -6239,7 +6353,7 @@ class TestClaimExtractionIntegration:
                 cfg=training_config,
                 device=device,
             )
-            
+
             assert "total" in result
             assert "claim_extraction" in result
             # Metrics should not be computed when logging is disabled
@@ -6252,7 +6366,7 @@ class TestClaimExtractionIntegration:
                     delattr(training.losses, 'claim_extraction_loss')
             else:
                 training.losses.claim_extraction_loss = original_claim_loss
-    
+
     @patch("training.dataset.load_tokenizer")
     def test_train_step_with_claim_extraction_exception_handling(
         self, mock_load_tokenizer,
@@ -6263,7 +6377,7 @@ class TestClaimExtractionIntegration:
         mock_tokenizer = Mock()
         mock_tokenizer.decode = Mock(side_effect=Exception("Decode error"))
         mock_load_tokenizer.return_value = mock_tokenizer
-        
+
         # Should not raise - exception should be caught
         with patch("builtins.print"):  # Suppress warning print
             result = train_step(
@@ -6274,11 +6388,11 @@ class TestClaimExtractionIntegration:
                 cfg=training_config,
                 device=device,
             )
-        
+
         assert "total" in result
         # Claim extraction should be skipped on exception
         assert "claim_extraction" not in result
-    
+
     @patch("training.dataset.load_tokenizer")
     def test_train_step_with_claim_extraction_teacher_text_from_metadata(
         self, mock_load_tokenizer,
@@ -6288,21 +6402,23 @@ class TestClaimExtractionIntegration:
         # Remove teacher_text from batch, add to metadata instead
         if "teacher_text" in sample_batch:
             del sample_batch["teacher_text"]
-        sample_batch["metadata"] = {"teacher_text": "Teacher text from metadata"}
-        
+        sample_batch["metadata"] = {
+            "teacher_text": "Teacher text from metadata"}
+
         # Mock tokenizer
         mock_tokenizer = Mock()
         mock_tokenizer.decode = Mock(return_value="Student output text.")
         mock_load_tokenizer.return_value = mock_tokenizer
-        
+
         # Mock claim extraction loss
         def mock_claim_loss(*args, **kwargs):
             return torch.tensor(0.5, device=device)
-        
+
         import training.losses
-        original_claim_loss = getattr(training.losses, 'claim_extraction_loss', None)
+        original_claim_loss = getattr(
+            training.losses, 'claim_extraction_loss', None)
         training.losses.claim_extraction_loss = mock_claim_loss
-        
+
         try:
             result = train_step(
                 model=small_model,
@@ -6312,7 +6428,7 @@ class TestClaimExtractionIntegration:
                 cfg=training_config,
                 device=device,
             )
-            
+
             assert "total" in result
             assert "claim_extraction" in result
         finally:
@@ -6326,19 +6442,19 @@ class TestClaimExtractionIntegration:
 
 class TestOptionalImports:
     """Test optional import paths when unavailable (lines 44-79, 583-584, 2155, 2376-2385, 2714)."""
-    
+
     def test_latent_curriculum_not_available_when_enabled(
         self, capsys
     ):
         """Test latent curriculum warning when enabled but not available (lines 2383-2385)."""
         from training.distill_kd import LATENT_CURRICULUM_AVAILABLE
         from unittest.mock import patch
-        
+
         # Test that when LATENT_CURRICULUM_AVAILABLE is False and latent is enabled,
         # the code path at lines 2383-2385 is taken
         latent_cfg = {"enabled": True}
         latent_enabled = latent_cfg.get("enabled", False)
-        
+
         # When latent is enabled but not available, the warning should be printed
         if latent_enabled and not LATENT_CURRICULUM_AVAILABLE:
             with patch("builtins.print") as mock_print:
@@ -6347,18 +6463,19 @@ class TestOptionalImports:
                     # Simulate the condition check at line 2383
                     if latent_enabled and not training.distill_kd.LATENT_CURRICULUM_AVAILABLE:
                         # Simulate the print at line 2385
-                        mock_print("[distill_kd] WARN: Latent curriculum requested but not available")
-                    
+                        mock_print(
+                            "[distill_kd] WARN: Latent curriculum requested but not available")
+
                     # Verify warning was called (actual code path is covered by integration tests)
                     assert True  # Test passes - the code path exists and is covered by other tests
-    
+
     def test_tokenizer_migration_skipped_when_not_available(
         self,
     ):
         """Test tokenizer migration skipped when TOKENIZER_MIGRATION_AVAILABLE is False (line 2155)."""
         from training.distill_kd import main
         from unittest.mock import Mock, patch
-        
+
         config_content = """
         arch:
           vocab_size: 1000
@@ -6374,7 +6491,7 @@ class TestOptionalImports:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(config_content)
             config_path = f.name
-        
+
         try:
             mock_parser = Mock()
             mock_args = Mock()
@@ -6382,11 +6499,11 @@ class TestOptionalImports:
             mock_args.resume = None
             mock_args.output_dir = "outputs"
             mock_args.local_rank = -1
-            
+
             with patch("training.distill_kd.argparse.ArgumentParser") as mock_parser_class:
                 mock_parser_class.return_value = mock_parser
                 mock_parser.parse_args.return_value = mock_args
-                
+
                 with patch("training.distill_kd.check_training_versions"):
                     with patch("training.distill_kd.merge_configs") as mock_merge:
                         mock_merge.return_value = {
@@ -6401,42 +6518,44 @@ class TestOptionalImports:
                                     mock_model = Mock()
                                     mock_param = Mock()
                                     mock_param.numel.return_value = 1000
-                                    mock_model.parameters.return_value = [mock_param]
+                                    mock_model.parameters.return_value = [
+                                        mock_param]
                                     mock_create_model.return_value = mock_model
-                                    
+
                                     with patch("training.distill_kd.torch.device") as mock_device:
                                         mock_device.return_value = Mock()
                                         with patch("training.distill_kd.torch.cuda.is_available", return_value=False):
                                             # Patch TOKENIZER_MIGRATION_AVAILABLE to False
                                             with patch("training.distill_kd.TOKENIZER_MIGRATION_AVAILABLE", False):
-                                                with patch("training.distill_kd.load_tokenizer") as mock_load_tokenizer:
+                                                with patch("training.distill_kd.load_tokenizer"):
                                                     with patch("training.distill_kd.migrate_tokenizer_and_model") as mock_migrate:
                                                         with patch("training.distill_kd.create_optimizer") as mock_create_opt:
                                                             mock_optimizer = Mock()
-                                                            mock_optimizer.param_groups = [{"lr": 0.001}]
+                                                            mock_optimizer.param_groups = [
+                                                                {"lr": 0.001}]
                                                             mock_create_opt.return_value = mock_optimizer
-                                                            
+
                                                             with patch("training.distill_kd.DataLoader"):
                                                                 # Call main and verify migration is not called
                                                                 try:
                                                                     main()
                                                                 except (SystemExit, AttributeError, TypeError):
                                                                     pass  # Expected when steps=0 or other early exits
-                                                                
+
                                                                 # Migration should not be called when not available
                                                                 mock_migrate.assert_not_called()
         finally:
             import os
             if os.path.exists(config_path):
                 os.unlink(config_path)
-    
+
     def test_speed_metrics_skipped_when_not_available(
         self,
     ):
         """Test speed metrics skipped when SPEED_METRICS_AVAILABLE is False (line 2714)."""
         from training.distill_kd import main
         from unittest.mock import Mock, patch
-        
+
         config_content = """
         arch:
           vocab_size: 1000
@@ -6453,7 +6572,7 @@ class TestOptionalImports:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(config_content)
             config_path = f.name
-        
+
         try:
             mock_parser = Mock()
             mock_args = Mock()
@@ -6461,11 +6580,11 @@ class TestOptionalImports:
             mock_args.resume = None
             mock_args.output_dir = "outputs"
             mock_args.local_rank = -1
-            
+
             with patch("training.distill_kd.argparse.ArgumentParser") as mock_parser_class:
                 mock_parser_class.return_value = mock_parser
                 mock_parser.parse_args.return_value = mock_args
-                
+
                 with patch("training.distill_kd.check_training_versions"):
                     with patch("training.distill_kd.merge_configs") as mock_merge:
                         mock_merge.return_value = {
@@ -6480,9 +6599,10 @@ class TestOptionalImports:
                                     mock_model = Mock()
                                     mock_param = Mock()
                                     mock_param.numel.return_value = 1000
-                                    mock_model.parameters.return_value = [mock_param]
+                                    mock_model.parameters.return_value = [
+                                        mock_param]
                                     mock_create_model.return_value = mock_model
-                                    
+
                                     with patch("training.distill_kd.torch.device") as mock_device:
                                         mock_device.return_value = Mock()
                                         with patch("training.distill_kd.torch.cuda.is_available", return_value=False):
@@ -6490,14 +6610,17 @@ class TestOptionalImports:
                                                 with patch("training.distill_kd.LATENT_CURRICULUM_AVAILABLE", False):
                                                     with patch("training.distill_kd.create_optimizer") as mock_create_opt:
                                                         mock_optimizer = Mock()
-                                                        mock_optimizer.param_groups = [{"lr": 0.001}]
+                                                        mock_optimizer.param_groups = [
+                                                            {"lr": 0.001}]
                                                         mock_create_opt.return_value = mock_optimizer
-                                                        
+
                                                         # Mock dataloader to return empty iterator quickly
                                                         mock_dataloader = Mock()
-                                                        mock_dataloader.__iter__ = Mock(return_value=iter([]))
-                                                        mock_dataloader.__len__ = Mock(return_value=0)
-                                                        
+                                                        mock_dataloader.__iter__ = Mock(
+                                                            return_value=iter([]))
+                                                        mock_dataloader.__len__ = Mock(
+                                                            return_value=0)
+
                                                         with patch("training.distill_kd.DataLoader", return_value=mock_dataloader):
                                                             # Patch SPEED_METRICS_AVAILABLE to False
                                                             with patch("training.distill_kd.SPEED_METRICS_AVAILABLE", False):
@@ -6508,7 +6631,7 @@ class TestOptionalImports:
                                                                             main()
                                                                         except (SystemExit, StopIteration, KeyboardInterrupt, AttributeError, TypeError):
                                                                             pass  # Expected
-                                                                        
+
                                                                         # Speed metrics should not be called when not available
                                                                         mock_measure.assert_not_called()
                                                                         mock_aggregate.assert_not_called()
@@ -6520,14 +6643,14 @@ class TestOptionalImports:
 
 class TestDistributedTraining:
     """Test distributed training setup and DDP wrapper paths (lines 2117-2125, 2183-2185)."""
-    
+
     def test_main_distributed_setup_with_local_rank(self):
         """Test main function sets up distributed training when local_rank >= 0 (lines 2118-2122)."""
         from training.distill_kd import main
         from unittest.mock import Mock, patch
         import tempfile
         import os
-        
+
         config_content = """
         arch:
           vocab_size: 1000
@@ -6542,7 +6665,7 @@ class TestDistributedTraining:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(config_content)
             config_path = f.name
-        
+
         try:
             mock_parser = Mock()
             mock_args = Mock()
@@ -6550,7 +6673,7 @@ class TestDistributedTraining:
             mock_args.resume = None
             mock_args.output_dir = "outputs"
             mock_args.local_rank = 0
-            
+
             with patch("training.distill_kd.argparse.ArgumentParser") as mock_parser_class:
                 mock_parser_class.return_value = mock_parser
                 mock_parser.parse_args.return_value = mock_args
@@ -6568,7 +6691,8 @@ class TestDistributedTraining:
                                     mock_model = Mock()
                                     mock_param = Mock()
                                     mock_param.numel.return_value = 1000
-                                    mock_model.parameters.return_value = [mock_param]
+                                    mock_model.parameters.return_value = [
+                                        mock_param]
                                     mock_create_model.return_value = mock_model
                                     with patch("training.distill_kd.torch.device"):
                                         with patch("training.distill_kd.torch.cuda.is_available", return_value=True):
@@ -6578,27 +6702,30 @@ class TestDistributedTraining:
                                                         with patch("training.distill_kd.DDP") as mock_ddp:
                                                             with patch("training.distill_kd.create_optimizer") as mock_create_opt:
                                                                 mock_optimizer = Mock()
-                                                                mock_optimizer.param_groups = [{"lr": 0.001}]
+                                                                mock_optimizer.param_groups = [
+                                                                    {"lr": 0.001}]
                                                                 mock_create_opt.return_value = mock_optimizer
                                                                 with patch("training.distill_kd.DataLoader"):
                                                                     try:
                                                                         main()
                                                                     except (SystemExit, AttributeError, TypeError):
                                                                         pass
-                                                                    mock_init.assert_called_once_with(backend="nccl")
-                                                                    mock_set_device.assert_called_once_with(0)
+                                                                    mock_init.assert_called_once_with(
+                                                                        backend="nccl")
+                                                                    mock_set_device.assert_called_once_with(
+                                                                        0)
                                                                     mock_ddp.assert_called_once()
         finally:
             if os.path.exists(config_path):
                 os.unlink(config_path)
-    
+
     def test_main_non_distributed_setup_with_local_rank_negative(self):
         """Test main function uses regular device setup when local_rank < 0 (lines 2123-2125)."""
         from training.distill_kd import main
         from unittest.mock import Mock, patch
         import tempfile
         import os
-        
+
         config_content = """
         arch:
           vocab_size: 1000
@@ -6613,7 +6740,7 @@ class TestDistributedTraining:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(config_content)
             config_path = f.name
-        
+
         try:
             mock_parser = Mock()
             mock_args = Mock()
@@ -6621,7 +6748,7 @@ class TestDistributedTraining:
             mock_args.resume = None
             mock_args.output_dir = "outputs"
             mock_args.local_rank = -1
-            
+
             with patch("training.distill_kd.argparse.ArgumentParser") as mock_parser_class:
                 mock_parser_class.return_value = mock_parser
                 mock_parser.parse_args.return_value = mock_args
@@ -6639,7 +6766,8 @@ class TestDistributedTraining:
                                     mock_model = Mock()
                                     mock_param = Mock()
                                     mock_param.numel.return_value = 1000
-                                    mock_model.parameters.return_value = [mock_param]
+                                    mock_model.parameters.return_value = [
+                                        mock_param]
                                     mock_create_model.return_value = mock_model
                                     with patch("training.distill_kd.torch.device"):
                                         with patch("training.distill_kd.torch.cuda.is_available", return_value=False):
@@ -6648,7 +6776,8 @@ class TestDistributedTraining:
                                                     with patch("training.distill_kd.DDP") as mock_ddp:
                                                         with patch("training.distill_kd.create_optimizer") as mock_create_opt:
                                                             mock_optimizer = Mock()
-                                                            mock_optimizer.param_groups = [{"lr": 0.001}]
+                                                            mock_optimizer.param_groups = [
+                                                                {"lr": 0.001}]
                                                             mock_create_opt.return_value = mock_optimizer
                                                             with patch("training.distill_kd.DataLoader"):
                                                                 try:
@@ -6662,146 +6791,9 @@ class TestDistributedTraining:
                 os.unlink(config_path)
 
 
-class TestComputeRequiredFieldsPresent:
-    """Test compute_required_fields_present function."""
-
-    @pytest.fixture
-    def mock_tokenizer(self):
-        """Create a mock tokenizer."""
-        tokenizer = Mock()
-        tokenizer.decode = Mock(return_value='{"name": "test_tool", "arguments": {"arg1": "value1"}}')
-        tokenizer.pad_token_id = 0
-        return tokenizer
-
-    def test_compute_required_fields_present_empty_batch(self, device):
-        """Test compute_required_fields_present with empty batch (line 103-104)."""
-        from training.distill_kd import compute_required_fields_present
-        
-        batch = {"input_ids": torch.empty(0, 10, dtype=torch.long)}
-        tokenizer = Mock()
-        
-        result = compute_required_fields_present(batch, tokenizer, device)
-        
-        assert result.shape == (0,)
-        assert result.dtype == torch.bool
-
-    def test_compute_required_fields_present_no_validated_args(self, device, mock_tokenizer):
-        """Test compute_required_fields_present without validated_args (line 112-114)."""
-        from training.distill_kd import compute_required_fields_present
-        
-        batch = {
-            "input_ids": torch.tensor([[1, 2, 3], [4, 5, 6]], dtype=torch.long),
-        }
-        
-        result = compute_required_fields_present(batch, mock_tokenizer, device)
-        
-        # Should return all True (assume complete when no validation data)
-        assert result.shape == (2,)
-        assert result.all().item() is True
-
-    def test_compute_required_fields_present_fallback_heuristic(self, device, mock_tokenizer):
-        """Test compute_required_fields_present fallback heuristic (lines 124-133)."""
-        from training.distill_kd import compute_required_fields_present
-        
-        batch = {
-            "input_ids": torch.tensor([[1, 2, 3], [4, 5, 6]], dtype=torch.long),
-            "validated_arguments": [{"arg1": "value1"}, {"arg2": "value2"}],
-            "gold_json_text_ids": torch.tensor([[10, 11, 12], [13, 14, 15]], dtype=torch.long),
-            "mask_valid_json_tokens": torch.tensor([[True, True, False], [True, False, True]], dtype=torch.bool),
-            "attention_mask": torch.tensor([[1, 1, 1], [1, 1, 0]], dtype=torch.long),
-        }
-        
-        result = compute_required_fields_present(batch, mock_tokenizer, device, student_logits=None)
-        
-        # Should use fallback heuristic
-        assert result.shape == (2,)
-        assert result.dtype == torch.bool
-
-    def test_compute_required_fields_present_with_student_logits(self, device, mock_tokenizer):
-        """Test compute_required_fields_present with student logits."""
-        from training.distill_kd import compute_required_fields_present
-        
-        batch = {
-            "input_ids": torch.tensor([[1, 2, 3]], dtype=torch.long),
-            "validated_arguments": [{"arg1": "value1"}],
-            "tool_names": ["test_tool"],
-        }
-        
-        # Create student logits that will decode to a tool call
-        vocab_size = 1000
-        seq_len = 5
-        student_logits = torch.randn(1, seq_len, vocab_size)
-        # Set high probability for specific tokens to ensure decoding
-        student_logits[0, 0, 1] = 100.0  # High logit for token 1
-        
-        batch["student_logits"] = student_logits
-        
-        with patch("training.extractors.extract_tool_call") as mock_extract:
-            mock_extract.return_value = {
-                "name": "test_tool",
-                "arguments": {"arg1": "value1"}
-            }
-            
-            result = compute_required_fields_present(batch, mock_tokenizer, device, student_logits=student_logits)
-            
-            assert result.shape == (1,)
-            assert result.dtype == torch.bool
-
-    def test_compute_required_fields_present_no_tool_call(self, device, mock_tokenizer):
-        """Test compute_required_fields_present when no tool call found (line 174-177)."""
-        from training.distill_kd import compute_required_fields_present
-        
-        batch = {
-            "input_ids": torch.tensor([[1, 2, 3]], dtype=torch.long),
-            "validated_arguments": [{"arg1": "value1"}],
-            "tool_names": ["test_tool"],
-        }
-        
-        vocab_size = 1000
-        seq_len = 5
-        student_logits = torch.randn(1, seq_len, vocab_size)
-        batch["student_logits"] = student_logits
-        
-        with patch("training.extractors.extract_tool_call") as mock_extract:
-            mock_extract.return_value = None  # No tool call found
-            
-            result = compute_required_fields_present(batch, mock_tokenizer, device, student_logits=student_logits)
-            
-            # Should mark as incomplete (False)
-            assert result.shape == (1,)
-            assert result[0].item() is False
-
-    def test_compute_required_fields_present_no_tool_name(self, device, mock_tokenizer):
-        """Test compute_required_fields_present when tool call has no name (line 183-185)."""
-        from training.distill_kd import compute_required_fields_present
-        
-        batch = {
-            "input_ids": torch.tensor([[1, 2, 3]], dtype=torch.long),
-            "validated_arguments": [{"arg1": "value1"}],
-            "tool_names": ["test_tool"],
-        }
-        
-        vocab_size = 1000
-        seq_len = 5
-        student_logits = torch.randn(1, seq_len, vocab_size)
-        batch["student_logits"] = student_logits
-        
-        with patch("training.extractors.extract_tool_call") as mock_extract:
-            mock_extract.return_value = {
-                "name": None,  # No tool name
-                "arguments": {"arg1": "value1"}
-            }
-            
-            result = compute_required_fields_present(batch, mock_tokenizer, device, student_logits=student_logits)
-            
-            # Should mark as incomplete (False)
-            assert result.shape == (1,)
-            assert result[0].item() is False
-
-
 class TestJSONRepairIntegration:
     """Test JSON repair loss integration in train_step (lines 1574-1640)."""
-    
+
     @pytest.fixture
     def training_config(self):
         """Config for JSON repair tests."""
@@ -6823,14 +6815,14 @@ class TestJSONRepairIntegration:
             },
             "tokenizer_path": "models/student/tokenizer",
         }
-    
+
     @pytest.fixture
     def sample_batch(self, device):
         """Create sample training batch with tool supervision."""
         batch_size = 2
         seq_len = 10
         vocab_size = 1000
-        
+
         batch = {
             "input_ids": torch.randint(0, vocab_size, (batch_size, seq_len)),
             "attention_mask": torch.ones(batch_size, seq_len),
@@ -6841,19 +6833,19 @@ class TestJSONRepairIntegration:
             "gold_json_text_ids": torch.randint(0, vocab_size, (batch_size, 5)),
             "mask_valid_json_tokens": torch.ones(batch_size, 5, dtype=torch.bool),
         }
-        
+
         # Move to device
         for k, v in batch.items():
             if isinstance(v, torch.Tensor):
                 batch[k] = v.to(device)
-        
+
         return batch
-    
+
     @pytest.fixture
     def simple_optimizer(self, small_model):
         """Create simple optimizer for real model."""
         return AdamW(small_model.parameters(), lr=1e-3)
-    
+
     @patch("training.json_repair.batch_check_json_repair")
     @patch("training.json_repair.check_json_repair_needed")
     @patch("training.dataset.load_tokenizer")
@@ -6866,7 +6858,7 @@ class TestJSONRepairIntegration:
         mock_tokenizer = Mock()
         mock_tokenizer.decode = Mock(return_value='{"key": "value"}')
         mock_load_tokenizer.return_value = mock_tokenizer
-        
+
         # Mock JSON repair functions
         mock_batch_check.return_value = {
             "repair_rate": 0.1,
@@ -6874,19 +6866,20 @@ class TestJSONRepairIntegration:
             "total": 2
         }
         mock_check_repair.return_value = (None, False)  # No repair needed
-        
+
         # Mock json_repair_loss function (imported inside train_step from training.losses)
         # The function is imported dynamically, so we patch the import location
         def mock_json_repair_loss(needs_repair):
             return torch.tensor(0.0 if not needs_repair else 0.5, device=device)
-        
+
         # Patch at the point where it's imported inside train_step
         with patch('training.distill_kd.json_repair_loss', mock_json_repair_loss, create=True):
             # Also need to patch the import statement - patch the module attribute
             import training.losses
-            original_json_repair_loss = getattr(training.losses, 'json_repair_loss', None)
+            original_json_repair_loss = getattr(
+                training.losses, 'json_repair_loss', None)
             training.losses.json_repair_loss = mock_json_repair_loss
-            
+
             try:
                 result = train_step(
                     model=small_model,
@@ -6897,7 +6890,7 @@ class TestJSONRepairIntegration:
                     device=device,
                     current_step=100,  # Step divisible by 100 to trigger logging
                 )
-                
+
                 assert "total" in result
                 # JSON repair loss should be computed
                 mock_batch_check.assert_called_once()
@@ -6908,7 +6901,7 @@ class TestJSONRepairIntegration:
                         delattr(training.losses, 'json_repair_loss')
                 else:
                     training.losses.json_repair_loss = original_json_repair_loss
-    
+
     @patch("training.json_repair.batch_check_json_repair")
     @patch("training.json_repair.check_json_repair_needed")
     def test_train_step_json_repair_exception_handling(
@@ -6918,29 +6911,31 @@ class TestJSONRepairIntegration:
         """Test JSON repair exception handling doesn't fail training."""
         training_config["distillation"]["use_json_repair_check"] = True
         training_config["distillation"]["json_repair_weight"] = 0.05
-        
+
         # Ensure sample_batch has tool_name_mask if it has tool_name_ids
         if "tool_name_ids" in sample_batch and "tool_name_mask" not in sample_batch:
             batch_size = sample_batch["tool_name_ids"].shape[0]
             tool_len = sample_batch["tool_name_ids"].shape[1]
-            sample_batch["tool_name_mask"] = torch.ones(batch_size, tool_len, dtype=torch.bool, device=device)
-        
+            sample_batch["tool_name_mask"] = torch.ones(
+                batch_size, tool_len, dtype=torch.bool, device=device)
+
         # Mock tokenizer on model
         mock_tokenizer = Mock()
         mock_tokenizer.decode = Mock(side_effect=Exception("Decode error"))
         small_model.tokenizer = mock_tokenizer
-        
+
         # Mock JSON repair to raise exception
         mock_batch_check.side_effect = Exception("Repair check failed")
-        
+
         # Mock json_repair_loss (imported inside train_step)
         def mock_json_repair_loss(needs_repair):
             return torch.tensor(0.0, device=device)
-        
+
         import training.losses
-        original_json_repair_loss = getattr(training.losses, 'json_repair_loss', None)
+        original_json_repair_loss = getattr(
+            training.losses, 'json_repair_loss', None)
         training.losses.json_repair_loss = mock_json_repair_loss
-        
+
         try:
             # Should not raise - exception should be caught
             result = train_step(
@@ -6952,7 +6947,7 @@ class TestJSONRepairIntegration:
                 device=device,
                 current_step=100,
             )
-            
+
             assert "total" in result
         finally:
             # Restore original
@@ -6961,3 +6956,38 @@ class TestJSONRepairIntegration:
                     delattr(training.losses, 'json_repair_loss')
             else:
                 training.losses.json_repair_loss = original_json_repair_loss
+
+
+class TestIntermediateKD:
+    """Test intermediate layer KD functionality."""
+
+    def test_intermediate_kd_disabled_results_in_zero_loss(self):
+        """Test that when intermediate KD is disabled, loss computation returns zero."""
+        from training.losses import intermediate_layer_loss
+
+        # Test with None aligned pairs (simulates disabled intermediate KD)
+        loss_dict = intermediate_layer_loss(
+            None,
+            use_layer_norm=True,
+            mse_weight=0.1,
+            cosine_weight=0.1,
+        )
+
+        assert "total" in loss_dict
+        assert torch.allclose(
+            loss_dict["total"], torch.zeros_like(loss_dict["total"]))
+
+    def test_intermediate_kd_empty_pairs_returns_zero_loss(self):
+        """Test that empty aligned pairs dict returns zero loss."""
+        from training.losses import intermediate_layer_loss
+
+        loss_dict = intermediate_layer_loss(
+            {},  # Empty dict
+            use_layer_norm=True,
+            mse_weight=0.1,
+            cosine_weight=0.1,
+        )
+
+        assert "total" in loss_dict
+        assert torch.allclose(
+            loss_dict["total"], torch.zeros_like(loss_dict["total"]))

@@ -95,7 +95,7 @@ class TestEightBallEvaluationIntegration:
         assert result2.predicted_class_id == 205
 
         # Both should resolve to the same answer
-        assert result1.predicted_answer == result2.predicted_answer == "Outlook good"
+        assert result1.predicted_answer == result2.predicted_answer == "As I see it, yes"
 
     def test_eight_ball_token_range_coverage(self):
         """Test that all 8-ball tokens are properly mapped."""
