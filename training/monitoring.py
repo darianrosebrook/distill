@@ -616,7 +616,7 @@ class SystemHealthChecks:
             return HealthStatus(
                 timestamp=time.time(),
                 component="gpu_memory",
-                status="warning",
+                status="error",
                 message=f"GPU memory check failed: {e}",
                 details={"error": str(e)},
             )
@@ -636,6 +636,7 @@ class TrainingMonitor:
 
         # Initialize components
         self.metrics = MetricsCollector()
+        self.metrics_collector = self.metrics  # Alias for test compatibility
         self.health_checker = HealthChecker(self.metrics)
 
         # Register standard health checks
@@ -647,6 +648,10 @@ class TrainingMonitor:
         self.training_start_time = None
         self.last_health_check = 0
         self.health_check_interval = 300  # 5 minutes
+        self.is_monitoring = False
+        self.monitoring_thread: Optional[threading.Thread] = None
+        self._monitoring_stop_event = threading.Event()
+        self.alert_conditions: List[Dict[str, Any]] = []
 
     def start_training(self, config: Dict[str, Any]) -> None:
         """Start training monitoring.
@@ -775,6 +780,221 @@ class TrainingMonitor:
             "training_active": self.training_start_time is not None,
             "last_health_check": self.last_health_check,
         }
+
+    def start_monitoring(self, interval: float = 60.0) -> None:
+        """Start background monitoring thread.
+
+        Args:
+            interval: Monitoring interval in seconds
+        """
+        if self.is_monitoring:
+            return
+
+        self.is_monitoring = True
+        self._monitoring_stop_event.clear()
+
+        def monitoring_loop():
+            while not self._monitoring_stop_event.wait(interval):
+                if not self.is_monitoring:
+                    break
+                self._run_health_checks()
+
+        self.monitoring_thread = threading.Thread(target=monitoring_loop, daemon=True)
+        self.monitoring_thread.start()
+
+    def stop_monitoring(self) -> None:
+        """Stop background monitoring thread."""
+        self.is_monitoring = False
+        self._monitoring_stop_event.set()
+        if self.monitoring_thread:
+            self.monitoring_thread.join(timeout=5.0)
+            self.monitoring_thread = None
+
+    def log_metric(self, name: str, value: float, tags: Optional[Dict[str, str]] = None) -> None:
+        """Log a metric.
+
+        Args:
+            name: Metric name
+            value: Metric value
+            tags: Optional tags dictionary
+        """
+        if tags:
+            self.metrics.record_metric(name, value, **tags)
+        else:
+            self.metrics.record_metric(name, value)
+
+    def log_training_step(
+        self,
+        step: int,
+        loss: float,
+        learning_rate: float,
+        epoch: int,
+        tokens_processed: Optional[int] = None,
+    ) -> None:
+        """Log training step metrics.
+
+        Args:
+            step: Training step number
+            loss: Training loss
+            learning_rate: Current learning rate
+            epoch: Current epoch
+            tokens_processed: Optional tokens processed count
+        """
+        self.metrics.record_metric("training_loss", loss, step=step, epoch=epoch)
+        self.metrics.record_metric("learning_rate", learning_rate, step=step, epoch=epoch)
+        if tokens_processed is not None:
+            self.metrics.record_metric("tokens_processed", tokens_processed, step=step, epoch=epoch)
+
+    def log_validation_metrics(
+        self,
+        epoch: int,
+        val_loss: float,
+        val_accuracy: Optional[float] = None,
+        val_f1: Optional[float] = None,
+    ) -> None:
+        """Log validation metrics.
+
+        Args:
+            epoch: Epoch number
+            val_loss: Validation loss
+            val_accuracy: Optional validation accuracy
+            val_f1: Optional validation F1 score
+        """
+        self.metrics.record_metric("validation_loss", val_loss, epoch=epoch)
+        if val_accuracy is not None:
+            self.metrics.record_metric("validation_accuracy", val_accuracy, epoch=epoch)
+        if val_f1 is not None:
+            self.metrics.record_metric("validation_f1", val_f1, epoch=epoch)
+
+    def check_system_health(self) -> List[HealthStatus]:
+        """Check system health.
+
+        Returns:
+            List of health status results
+        """
+        return self.health_checker.run_all_checks()
+
+    def get_monitoring_stats(self) -> Dict[str, Any]:
+        """Get monitoring statistics.
+
+        Returns:
+            Dictionary with monitoring statistics
+        """
+        return {
+            "metrics_collected": len(self.metrics.metrics),
+            "health_checks_run": len(self.health_checker.status_history),
+            "is_monitoring": self.is_monitoring,
+            "training_active": self.training_start_time is not None,
+        }
+
+    def save_metrics(self, output_path: Optional[Path] = None) -> Path:
+        """Save metrics to file.
+
+        Args:
+            output_path: Optional output path (Path or str)
+
+        Returns:
+            Path where metrics were saved
+        """
+        if not output_path:
+            output_path = self.log_dir / f"metrics_{int(time.time())}.json"
+        elif isinstance(output_path, str):
+            output_path = Path(output_path)
+        self.metrics.save_to_file(output_path)
+        return output_path
+
+    def load_metrics(self, input_path: Path) -> None:
+        """Load metrics from file.
+
+        Args:
+            input_path: Path to metrics file (Path or str)
+        """
+        if isinstance(input_path, str):
+            input_path = Path(input_path)
+        with open(input_path, "r") as f:
+            data = json.load(f)
+            for metric_data in data.get("metrics", []):
+                point = MetricPoint(
+                    timestamp=metric_data["timestamp"],
+                    name=metric_data["name"],
+                    value=metric_data["value"],
+                    tags=metric_data.get("tags", {}),
+                )
+                self.metrics.add_metric(point)
+
+    def alert_on_condition(
+        self,
+        metric_name: str,
+        condition: Callable[[float], bool],
+        message: str,
+    ) -> bool:
+        """Alert when a metric meets a condition.
+
+        Args:
+            metric_name: Name of metric to check
+            condition: Function that returns True when alert should trigger
+            message: Alert message
+
+        Returns:
+            True if alert was triggered, False otherwise
+        """
+        latest = self.metrics.get_latest_metric(metric_name)
+        if latest and condition(latest.value):
+            print(f"🚨 ALERT: {message} (metric: {metric_name} = {latest.value})")
+            self.metrics.record_metric("alert", 1, metric=metric_name, message=message)
+            return True
+        return False
+
+    def add_alert_condition(
+        self,
+        name: str,
+        condition_func: Callable[[], bool],
+        message: str,
+        severity: str = "warning",
+        callback: Optional[Callable[[str, str], None]] = None,
+    ) -> None:
+        """Add an alert condition that will be checked periodically.
+
+        Args:
+            name: Alert condition name
+            condition_func: Function that returns True when alert should trigger
+            message: Alert message
+            severity: Alert severity level
+            callback: Optional callback function(message, severity)
+        """
+        self.alert_conditions.append({
+            "name": name,
+            "condition": condition_func,
+            "message": message,
+            "severity": severity,
+            "callback": callback,
+        })
+
+    def check_alerts(self) -> List[Dict[str, Any]]:
+        """Check all registered alert conditions.
+
+        Returns:
+            List of triggered alerts
+        """
+        triggered = []
+        for alert in self.alert_conditions:
+            try:
+                if alert["condition"]():
+                    message = alert["message"]
+                    severity = alert["severity"]
+                    triggered.append({"name": alert["name"], "message": message, "severity": severity})
+                    
+                    # Call callback if provided
+                    if alert["callback"]:
+                        alert["callback"](message, severity)
+                    
+                    # Record alert metric
+                    self.metrics.record_metric("alert", 1, name=alert["name"], severity=severity, message=message)
+            except Exception as e:
+                # Alert condition check failed - log but don't crash
+                print(f"⚠️  Alert condition '{alert['name']}' check failed: {e}")
+        
+        return triggered
 
 
 # Global training monitor instance
