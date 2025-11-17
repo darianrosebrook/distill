@@ -141,8 +141,8 @@ def create_mock_tokenizer_subscriptable(
         """Encode text with full dict support."""
         tokens = encode_return_value.copy() if isinstance(encode_return_value, list) else [1, 2, 3]
         result = {
-            "input_ids": torch.tensor(tokens, dtype=torch.int64),  # 1D tensor
-            "attention_mask": torch.tensor([1] * len(tokens), dtype=torch.int64),  # 1D tensor
+            "input_ids": torch.tensor([tokens], dtype=torch.int64),  # [1, seq_len] shape
+            "attention_mask": torch.tensor([[1] * len(tokens)], dtype=torch.int64),  # [1, seq_len] shape
         }
         
         # Create a dict-like mock that supports subscripting
@@ -170,6 +170,17 @@ def create_mock_tokenizer_subscriptable(
         return result
     
     tokenizer.encode = encode_impl
+    
+    # Make tokenizer itself callable (when used as tokenizer(...) instead of tokenizer.encode_plus(...))
+    # This is needed for direct tokenizer() calls
+    tokenizer.side_effect = lambda text, **kwargs: encode_plus_impl(text, **kwargs)
+    tokenizer.return_value = None  # Ignore default Mock return value
+    
+    # Override __call__ to properly delegate
+    original_call = tokenizer.__call__
+    def custom_call(text, **kwargs):
+        return encode_plus_impl(text, **kwargs)
+    tokenizer.__call__ = custom_call
     
     return tokenizer
 

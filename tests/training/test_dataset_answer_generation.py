@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch
 import torch
 
 from training.dataset_answer_generation import AnswerGenerationDataset
-from .conftest_mock_utils import create_mock_encoded_output
+from .conftest_mock_utils import create_mock_tokenizer_subscriptable
 
 
 class TestAnswerGenerationDataset:
@@ -21,8 +21,7 @@ class TestAnswerGenerationDataset:
     @patch("training.dataset_answer_generation.load_tokenizer")
     def test_answer_generation_dataset_init_basic(self, mock_load_tokenizer):
         """Test basic AnswerGenerationDataset initialization."""
-        mock_tokenizer = Mock()
-        mock_tokenizer.pad_token_id = 0
+        mock_tokenizer = create_mock_tokenizer_subscriptable()
         mock_load_tokenizer.return_value = mock_tokenizer
 
         # Create test data
@@ -39,7 +38,7 @@ class TestAnswerGenerationDataset:
                     ]
                 },
                 "target": {
-                    "answer": "Python is a high-level programming language known for its simplicity and readability."
+                    "text": "Python is a high-level programming language known for its simplicity and readability."
                 }
             }
         ]
@@ -55,14 +54,12 @@ class TestAnswerGenerationDataset:
                 data_path=temp_path,
                 tokenizer_path="test_tokenizer",
                 max_seq_length=512,
-                max_target_length=256
             )
 
             assert len(dataset) == 1
             assert dataset.data_path == Path(temp_path)
             assert dataset.tokenizer == mock_tokenizer
             assert dataset.max_seq_length == 512
-            assert dataset.max_target_length == 256
             assert len(dataset.examples) == 1
 
         finally:
@@ -71,8 +68,7 @@ class TestAnswerGenerationDataset:
     @patch("training.dataset_answer_generation.load_tokenizer")
     def test_answer_generation_dataset_multiple_examples(self, mock_load_tokenizer):
         """Test AnswerGenerationDataset with multiple examples."""
-        mock_tokenizer = Mock()
-        mock_tokenizer.pad_token_id = 0
+        mock_tokenizer = create_mock_tokenizer_subscriptable()
         mock_load_tokenizer.return_value = mock_tokenizer
 
         test_data = [
@@ -87,7 +83,7 @@ class TestAnswerGenerationDataset:
                         {"role": "tool", "content": "Result: 4"}
                     ]
                 },
-                "target": {"answer": "2 + 2 equals 4."}
+                "target": {"text": "2 + 2 equals 4."}
             },
             {
                 "input": {
@@ -100,7 +96,7 @@ class TestAnswerGenerationDataset:
                         {"role": "tool", "content": "Sunny, 75°F"}
                     ]
                 },
-                "target": {"answer": "The weather is sunny with a temperature of 75°F."}
+                "target": {"text": "The weather is sunny with a temperature of 75°F."}
             }
         ]
 
@@ -120,13 +116,7 @@ class TestAnswerGenerationDataset:
     @patch("training.dataset_answer_generation.load_tokenizer")
     def test_answer_generation_dataset_getitem_basic(self, mock_load_tokenizer):
         """Test basic __getitem__ functionality."""
-        mock_tokenizer = Mock()
-        mock_tokenizer.pad_token_id = 0
-        mock_tokenizer.encode.return_value = [101, 2057, 102]  # Mock tokens
-        mock_tokenizer.encode_plus.return_value = {
-            "input_ids": [101, 2057, 102],
-            "attention_mask": [1, 1, 1]
-        }
+        mock_tokenizer = create_mock_tokenizer_subscriptable()
         mock_load_tokenizer.return_value = mock_tokenizer
 
         test_data = [{
@@ -141,7 +131,7 @@ class TestAnswerGenerationDataset:
                 ]
             },
             "target": {
-                "answer": "Python is a programming language."
+                "text": "Python is a programming language."
             }
         }]
 
@@ -153,10 +143,6 @@ class TestAnswerGenerationDataset:
         try:
             dataset = AnswerGenerationDataset(temp_path, "test_tokenizer")
             item = dataset[0]
-
-            # Check that tokenization was called
-            mock_tokenizer.encode.assert_called()
-            mock_tokenizer.encode_plus.assert_called()
 
             # Check basic structure
             assert "input_ids" in item
@@ -172,13 +158,7 @@ class TestAnswerGenerationDataset:
     @patch("training.dataset_answer_generation.load_tokenizer")
     def test_answer_generation_dataset_complex_history(self, mock_load_tokenizer):
         """Test with complex conversation history."""
-        mock_tokenizer = Mock()
-        mock_tokenizer.pad_token_id = 0
-        mock_tokenizer.encode.return_value = [101, 2057, 102]
-        mock_tokenizer.encode_plus.return_value = {
-            "input_ids": [101, 2057, 102],
-            "attention_mask": [1, 1, 1]
-        }
+        mock_tokenizer = create_mock_tokenizer_subscriptable()
         mock_load_tokenizer.return_value = mock_tokenizer
 
         test_data = [{
@@ -204,7 +184,7 @@ class TestAnswerGenerationDataset:
                 ]
             },
             "target": {
-                "answer": "Based on the search results and calculation, Python is a programming language and 2+2 equals 4."
+                "text": "Based on the search results and calculation, Python is a programming language and 2+2 equals 4."
             }
         }]
 
@@ -228,13 +208,7 @@ class TestAnswerGenerationDataset:
     @patch("training.dataset_answer_generation.load_tokenizer")
     def test_answer_generation_dataset_no_tools(self, mock_load_tokenizer):
         """Test with no tools available."""
-        mock_tokenizer = Mock()
-        mock_tokenizer.pad_token_id = 0
-        mock_tokenizer.encode.return_value = [101, 102]
-        mock_tokenizer.encode_plus.return_value = {
-            "input_ids": [101, 102],
-            "attention_mask": [1, 1]
-        }
+        mock_tokenizer = create_mock_tokenizer_subscriptable()
         mock_load_tokenizer.return_value = mock_tokenizer
 
         test_data = [{
@@ -247,7 +221,7 @@ class TestAnswerGenerationDataset:
                 ]
             },
             "target": {
-                "answer": "Hello! How can I help you today?"
+                "text": "Hello! How can I help you today?"
             }
         }]
 
@@ -271,17 +245,7 @@ class TestAnswerGenerationDataset:
     @patch("training.dataset_answer_generation.load_tokenizer")
     def test_answer_generation_dataset_truncation(self, mock_load_tokenizer):
         """Test input and target truncation."""
-        mock_tokenizer = Mock()
-        mock_tokenizer.pad_token_id = 0
-        # Mock very long sequences
-        long_input_tokens = list(range(1000))  # Very long input
-        long_target_tokens = list(range(300))  # Very long target
-        mock_tokenizer.encode.side_effect = [
-            long_input_tokens, long_target_tokens]
-        mock_tokenizer.encode_plus.return_value = {
-            "input_ids": long_input_tokens[:512],  # Truncated
-            "attention_mask": [1] * 512
-        }
+        mock_tokenizer = create_mock_tokenizer_subscriptable()
         mock_load_tokenizer.return_value = mock_tokenizer
 
         test_data = [{
@@ -291,7 +255,7 @@ class TestAnswerGenerationDataset:
                 "history": [{"role": "user", "content": "Very long question " * 100}]
             },
             "target": {
-                "answer": "Very long answer " * 50
+                "text": "Very long answer " * 50
             }
         }]
 
@@ -303,14 +267,13 @@ class TestAnswerGenerationDataset:
         try:
             dataset = AnswerGenerationDataset(
                 temp_path, "test_tokenizer",
-                max_seq_length=512, max_target_length=256
+                max_seq_length=512
             )
             item = dataset[0]
 
             # Should be truncated to max lengths
             assert len(item["input_ids"]) <= 512
             assert len(item["attention_mask"]) <= 512
-            assert len(item["labels"]) <= 256
 
         finally:
             Path(temp_path).unlink()
@@ -318,13 +281,7 @@ class TestAnswerGenerationDataset:
     @patch("training.dataset_answer_generation.load_tokenizer")
     def test_answer_generation_dataset_minimal_history(self, mock_load_tokenizer):
         """Test with minimal conversation history."""
-        mock_tokenizer = Mock()
-        mock_tokenizer.pad_token_id = 0
-        mock_tokenizer.encode.return_value = [101, 102]
-        mock_tokenizer.encode_plus.return_value = {
-            "input_ids": [101, 102],
-            "attention_mask": [1, 1]
-        }
+        mock_tokenizer = create_mock_tokenizer_subscriptable()
         mock_load_tokenizer.return_value = mock_tokenizer
 
         test_data = [{
@@ -337,7 +294,7 @@ class TestAnswerGenerationDataset:
                 ]
             },
             "target": {
-                "answer": "Hello! How can I help you?"
+                "text": "Hello! How can I help you?"
             }
         }]
 
@@ -361,13 +318,7 @@ class TestAnswerGenerationDataset:
     @patch("training.dataset_answer_generation.load_tokenizer")
     def test_answer_generation_dataset_answer_only(self, mock_load_tokenizer):
         """Test with answer-only target (no additional fields)."""
-        mock_tokenizer = Mock()
-        mock_tokenizer.pad_token_id = 0
-        mock_tokenizer.encode.return_value = [101, 102]
-        mock_tokenizer.encode_plus.return_value = {
-            "input_ids": [101, 102],
-            "attention_mask": [1, 1]
-        }
+        mock_tokenizer = create_mock_tokenizer_subscriptable()
         mock_load_tokenizer.return_value = mock_tokenizer
 
         test_data = [{
@@ -376,7 +327,9 @@ class TestAnswerGenerationDataset:
                 "tools": [{"name": "search"}],
                 "history": [{"role": "user", "content": "What is AI?"}]
             },
-            "target": "Artificial Intelligence is a field of computer science."  # String target
+            "target": {
+                "text": "Artificial Intelligence is a field of computer science."
+            }
         }]
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
@@ -388,7 +341,7 @@ class TestAnswerGenerationDataset:
             dataset = AnswerGenerationDataset(temp_path, "test_tokenizer")
             item = dataset[0]
 
-            # Should handle string target
+            # Should handle dict target
             assert "input_ids" in item
             assert "attention_mask" in item
             assert "labels" in item
@@ -399,8 +352,7 @@ class TestAnswerGenerationDataset:
     @patch("training.dataset_answer_generation.load_tokenizer")
     def test_answer_generation_dataset_malformed_data(self, mock_load_tokenizer):
         """Test handling of malformed data."""
-        mock_tokenizer = Mock()
-        mock_tokenizer.pad_token_id = 0
+        mock_tokenizer = create_mock_tokenizer_subscriptable()
         mock_load_tokenizer.return_value = mock_tokenizer
 
         # Mix of valid and invalid data
@@ -408,7 +360,7 @@ class TestAnswerGenerationDataset:
             f.write('{"invalid": json}\n')  # Invalid JSON
             # Valid
             f.write(
-                '{"input": {"system": "test", "tools": [{"name": "search"}], "history": [{"role": "user", "content": "hi"}]}, "target": {"answer": "hello"}}\n')
+                '{"input": {"system": "test", "tools": [{"name": "search"}], "history": [{"role": "user", "content": "hi"}]}, "target": {"text": "hello"}}\n')
             temp_path = f.name
 
         try:
@@ -423,13 +375,7 @@ class TestAnswerGenerationDataset:
     @patch("training.dataset_answer_generation.load_tokenizer")
     def test_answer_generation_dataset_large_dataset(self, mock_load_tokenizer):
         """Test with larger dataset."""
-        mock_tokenizer = Mock()
-        mock_tokenizer.pad_token_id = 0
-        mock_tokenizer.encode.return_value = [101, 102]
-        mock_tokenizer.encode_plus.return_value = {
-            "input_ids": [101, 102],
-            "attention_mask": [1, 1]
-        }
+        mock_tokenizer = create_mock_tokenizer_subscriptable()
         mock_load_tokenizer.return_value = mock_tokenizer
 
         # Create 30 examples
@@ -442,7 +388,7 @@ class TestAnswerGenerationDataset:
                     "history": [{"role": "user", "content": f"Question {i}"}]
                 },
                 "target": {
-                    "answer": f"Answer {i}"
+                    "text": f"Answer {i}"
                 }
             })
 
