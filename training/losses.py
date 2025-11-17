@@ -222,10 +222,51 @@ def halt_head_loss(
     return F.cross_entropy(halt_logits, halt_targets)
 
 
+def _compute_aligned_pairs(
+    student_hidden_states: Optional[List[torch.Tensor]],
+    teacher_hidden_states: Optional[List[torch.Tensor]],
+    layer_mapping: Dict[int, int],
+    projection_layers: Optional[List[nn.Module]],
+) -> Dict[Tuple[int, int], Tuple[torch.Tensor, torch.Tensor]]:
+    """
+    Compute aligned pairs from student/teacher hidden states and layer mapping.
+
+    Args:
+        student_hidden_states: List of student hidden states
+        teacher_hidden_states: List of teacher hidden states
+        layer_mapping: Dict mapping student layer indices to teacher layer indices
+        projection_layers: List of projection layers for dimension alignment
+
+    Returns:
+        Dict mapping (student_idx, teacher_idx) -> (projected_student, teacher)
+    """
+    aligned_pairs = {}
+
+    if not student_hidden_states or not teacher_hidden_states or not layer_mapping:
+        return aligned_pairs
+
+    for s_idx, t_idx in layer_mapping.items():
+        if s_idx < len(student_hidden_states) and t_idx < len(teacher_hidden_states):
+            h_s = student_hidden_states[s_idx]
+            h_t = teacher_hidden_states[t_idx].detach()
+
+            # Apply projection if needed
+            if projection_layers and s_idx < len(projection_layers) and projection_layers[s_idx] is not None:
+                h_s = projection_layers[s_idx](h_s)
+
+            aligned_pairs[(s_idx, t_idx)] = (h_s, h_t)
+
+    return aligned_pairs
+
+
 def intermediate_layer_loss(
+    student_hidden_states: Optional[List[torch.Tensor]] = None,
+    teacher_hidden_states: Optional[List[torch.Tensor]] = None,
+    layer_mapping: Optional[Dict[int, int]] = None,
+    projection_layers: Optional[List[nn.Module]] = None,
     aligned_pairs: Optional[
         Dict[Tuple[int, int], Tuple[torch.Tensor, torch.Tensor]]
-    ],
+    ] = None,
     *,
     use_layer_norm: bool = True,
     mse_weight: float = 0.1,
@@ -234,11 +275,22 @@ def intermediate_layer_loss(
     """
     Compute combined MSE + cosine loss over aligned (student, teacher) pairs.
 
-    aligned_pairs: dict mapping (si, ti) -> (h_s_proj, h_t_detached), each [B, T, D].
+    Can be called either with:
+    1. aligned_pairs dict directly (legacy): dict mapping (si, ti) -> (h_s_proj, h_t_detached), each [B, T, D]
+    2. Or with student/teacher hidden states + layer mapping (new): will compute aligned_pairs internally
 
     Returns:
         Dict with 'total' loss and per-layer breakdowns for monitoring.
     """
+    # If aligned_pairs not provided, compute from hidden states
+    if aligned_pairs is None:
+        aligned_pairs = _compute_aligned_pairs(
+            student_hidden_states=student_hidden_states,
+            teacher_hidden_states=teacher_hidden_states,
+            layer_mapping=layer_mapping or {},
+            projection_layers=projection_layers,
+        )
+
     out: Dict[str, torch.Tensor] = {}
     if not aligned_pairs:
         zero = torch.zeros(

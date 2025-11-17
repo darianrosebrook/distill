@@ -1267,9 +1267,6 @@ def train_step(
                 max_entropy=kd_cfg.get("max_entropy", 8.0),
                 min_temp=kd_cfg.get("min_temperature", 1.5),
                 max_temp=kd_cfg.get("max_temperature", 3.0),
-                base_kl_weight=kd_cfg.get("kl_weight", 0.4),
-                base_ce_teacher_weight=kd_cfg.get("ce_teacher_weight", 0.2),
-                base_ce_gt_weight=kd_cfg.get("ce_ground_truth_weight", 0.2),
             )
 
             kl_weight = entropy_weights["kl_weight"]
