@@ -226,6 +226,7 @@ class HealthChecker:
         """
         self.metrics_collector = metrics_collector
         self.checks: Dict[str, Callable[[], HealthStatus]] = {}
+        self.status_history: List[HealthStatus] = []
         self.last_check_time = 0
         self.check_interval = 60  # Check every 60 seconds
 
@@ -237,6 +238,15 @@ class HealthChecker:
             check_func: Function that returns HealthStatus
         """
         self.checks[name] = check_func
+
+    def add_check(self, name: str, check_func: Callable[[], HealthStatus]) -> None:
+        """Add a health check function (alias for register_check).
+
+        Args:
+            name: Check name
+            check_func: Function that returns HealthStatus
+        """
+        self.register_check(name, check_func)
 
     def run_checks(self) -> List[HealthStatus]:
         """Run all registered health checks.
@@ -250,6 +260,8 @@ class HealthChecker:
             try:
                 status = check_func()
                 results.append(status)
+                # Track in history
+                self.status_history.append(status)
 
                 # Record as metric
                 if self.metrics_collector:
@@ -270,8 +282,76 @@ class HealthChecker:
                     details={"error": str(e)},
                 )
                 results.append(error_status)
+                self.status_history.append(error_status)
 
+        self.last_check_time = time.time()
         return results
+
+    def run_check(self, name: str) -> HealthStatus:
+        """Run a single health check by name.
+
+        Args:
+            name: Name of the check to run
+
+        Returns:
+            HealthStatus result
+
+        Raises:
+            KeyError: If check name not found
+        """
+        if name not in self.checks:
+            raise KeyError(f"Health check '{name}' not found")
+
+        check_func = self.checks[name]
+        try:
+            status = check_func()
+            self.status_history.append(status)
+
+            # Record as metric
+            if self.metrics_collector:
+                self.metrics_collector.record_metric(
+                    "health_check",
+                    1 if status.status == "healthy" else 0,
+                    check=name,
+                    status=status.status,
+                )
+
+            self.last_check_time = time.time()
+            return status
+
+        except Exception as e:
+            error_status = HealthStatus(
+                timestamp=time.time(),
+                component=name,
+                status="error",
+                message=f"Health check failed: {e}",
+                details={"error": str(e)},
+            )
+            self.status_history.append(error_status)
+            return error_status
+
+    def run_all_checks(self) -> List[HealthStatus]:
+        """Run all registered health checks (alias for run_checks).
+
+        Returns:
+            List of health status results
+        """
+        return self.run_checks()
+
+    def get_component_status(self, component: str) -> Optional[HealthStatus]:
+        """Get the latest health status for a specific component.
+
+        Args:
+            component: Component name to get status for
+
+        Returns:
+            Latest HealthStatus for component, or None if not found
+        """
+        # Search history in reverse to find most recent
+        for status in reversed(self.status_history):
+            if status.component == component:
+                return status
+        return None
 
     def get_overall_health(self) -> str:
         """Get overall system health status.
@@ -291,6 +371,146 @@ class HealthChecker:
 
 class SystemHealthChecks:
     """Standard system health checks."""
+
+    def __init__(self, metrics_collector: Optional[MetricsCollector] = None):
+        """Initialize system health checks.
+
+        Args:
+            metrics_collector: Optional metrics collector for health metrics
+        """
+        self.health_checker = HealthChecker(metrics_collector)
+        # Register all system checks
+        self.health_checker.add_check("cpu", self._check_cpu_usage)
+        self.health_checker.add_check("memory", self._check_memory_usage)
+        self.health_checker.add_check("gpu", self._check_gpu_usage)
+        self.health_checker.add_check("disk", self._check_disk_usage)
+        self.health_checker.add_check("network", self._check_network_connectivity)
+
+    def _check_cpu_usage(self) -> HealthStatus:
+        """Check CPU usage."""
+        cpu_percent = psutil.cpu_percent(interval=0.1)
+
+        if cpu_percent > 90:
+            status = "error"
+            message = f"CPU usage critical: {cpu_percent:.1f}%"
+        elif cpu_percent > 80:
+            status = "warning"
+            message = f"CPU usage high: {cpu_percent:.1f}%"
+        else:
+            status = "healthy"
+            message = f"CPU usage normal: {cpu_percent:.1f}%"
+
+        return HealthStatus(
+            timestamp=time.time(),
+            component="cpu",
+            status=status,
+            message=message,
+            details={"usage_percent": cpu_percent},
+        )
+
+    def _check_memory_usage(self) -> HealthStatus:
+        """Check system memory usage."""
+        return self.check_memory_usage()
+
+    def _check_gpu_usage(self) -> HealthStatus:
+        """Check GPU usage."""
+        if not torch.cuda.is_available():
+            return HealthStatus(
+                timestamp=time.time(),
+                component="gpu",
+                status="healthy",
+                message="GPU not available",
+                details={"gpu_available": False},
+            )
+
+        try:
+            # Try to get GPU utilization and memory info
+            utilization = 0
+            try:
+                # torch.cuda.utilization() may not be available on all systems
+                if hasattr(torch.cuda, 'utilization'):
+                    utilization = torch.cuda.utilization()
+            except:
+                pass
+
+            mem_info = torch.cuda.mem_get_info(0)
+            used_gb = (mem_info[1] - mem_info[0]) / 1024**3
+            total_gb = mem_info[1] / 1024**3
+            usage_percent = (used_gb / total_gb * 100) if total_gb > 0 else 0
+
+            # Use utilization if available and > 0, otherwise use memory usage
+            display_percent = utilization if utilization > 0 else usage_percent
+            
+            # Format as integer if whole number, otherwise 1 decimal place
+            if display_percent == int(display_percent):
+                percent_str = f"{int(display_percent)}%"
+            else:
+                percent_str = f"{display_percent:.1f}%"
+            
+            if display_percent > 95:
+                status = "error"
+                message = f"GPU usage critical: {percent_str}"
+            elif display_percent > 85:
+                status = "warning"
+                message = f"GPU usage high: {percent_str}"
+            else:
+                status = "healthy"
+                message = f"GPU usage normal: {percent_str}"
+
+            return HealthStatus(
+                timestamp=time.time(),
+                component="gpu",
+                status=status,
+                message=message,
+                details={
+                    "usage_percent": usage_percent,
+                    "utilization": utilization,
+                    "used_gb": used_gb,
+                    "total_gb": total_gb,
+                },
+            )
+        except Exception as e:
+            return HealthStatus(
+                timestamp=time.time(),
+                component="gpu",
+                status="warning",
+                message=f"GPU check failed: {e}",
+                details={"error": str(e)},
+            )
+
+    def _check_disk_usage(self) -> HealthStatus:
+        """Check disk usage."""
+        return self.check_disk_usage()
+
+    def _check_network_connectivity(self) -> HealthStatus:
+        """Check network connectivity."""
+        try:
+            import socket
+            # Try to connect to a well-known host
+            socket.create_connection(("8.8.8.8", 53), timeout=3)
+            return HealthStatus(
+                timestamp=time.time(),
+                component="network",
+                status="healthy",
+                message="Network connectivity OK",
+                details={"connected": True},
+            )
+        except Exception:
+            return HealthStatus(
+                timestamp=time.time(),
+                component="network",
+                status="warning",
+                message="Network connectivity check failed",
+                details={"connected": False},
+            )
+
+    def run_system_checks(self) -> List[HealthStatus]:
+        """Run all system health checks.
+
+        Returns:
+            List of health status results
+        """
+        return self.health_checker.run_all_checks()
 
     @staticmethod
     def check_memory_usage() -> HealthStatus:
