@@ -12,8 +12,22 @@ Handles:
 from typing import Dict, Any, Optional, Tuple
 import torch
 import torch.nn as nn
+import sys
 
 from models.student.tokenizer.constants import BOT_TOKEN_ID, EOT_TOKEN_ID, BOT_TOKEN, EOT_TOKEN
+
+# Make constants available in module namespace for test patching
+# These will be used by functions to allow patching in tests
+_module = sys.modules[__name__]
+_module.BOT_TOKEN_ID = BOT_TOKEN_ID
+_module.EOT_TOKEN_ID = EOT_TOKEN_ID
+_module.BOT_TOKEN = BOT_TOKEN
+_module.EOT_TOKEN = EOT_TOKEN
+
+# Re-export for test patching compatibility
+__all__ = ["verify_token_ids", "resize_model_embeddings", "initialize_special_token_embeddings", 
+           "create_special_token_loss_mask", "migrate_tokenizer_and_model",
+           "BOT_TOKEN_ID", "EOT_TOKEN_ID", "BOT_TOKEN", "EOT_TOKEN"]
 
 
 def verify_token_ids(tokenizer) -> Dict[str, Any]:
@@ -30,6 +44,12 @@ def verify_token_ids(tokenizer) -> Dict[str, Any]:
         - ids_match: bool
         - errors: List[str]
     """
+    # Use module-level constants to allow test patching
+    BOT_TOKEN_ID = _module.BOT_TOKEN_ID
+    EOT_TOKEN_ID = _module.EOT_TOKEN_ID
+    BOT_TOKEN = _module.BOT_TOKEN
+    EOT_TOKEN = _module.EOT_TOKEN
+    
     errors = []
 
     # Get token IDs from tokenizer
@@ -103,10 +123,21 @@ def resize_model_embeddings(
         new_vocab_size = tokenizer_vocab_size
 
     # Get current model vocab size
+    # Check for embed or embedding attribute
     if hasattr(model, "embed"):
         original_vocab_size = model.embed.num_embeddings
+        embed_attr = "embed"
+    elif hasattr(model, "embedding"):
+        original_vocab_size = model.embedding.num_embeddings
+        embed_attr = "embedding"
     elif hasattr(model, "module") and hasattr(model.module, "embed"):
         original_vocab_size = model.module.embed.num_embeddings
+        embed_attr = "embed"
+        model = model.module  # Use module for subsequent operations
+    elif hasattr(model, "module") and hasattr(model.module, "embedding"):
+        original_vocab_size = model.module.embedding.num_embeddings
+        embed_attr = "embedding"
+        model = model.module  # Use module for subsequent operations
     else:
         raise ValueError("Cannot determine model vocabulary size")
 
@@ -119,8 +150,8 @@ def resize_model_embeddings(
         return model, metadata
 
     # Resize embedding layer
-    if hasattr(model, "embed"):
-        old_embed = model.embed
+    if hasattr(model, embed_attr):
+        old_embed = getattr(model, embed_attr)
         new_embed = nn.Embedding(new_vocab_size, old_embed.embedding_dim)
         # Copy existing embeddings
         new_embed.weight.data[:original_vocab_size] = old_embed.weight.data
@@ -130,7 +161,7 @@ def resize_model_embeddings(
             mean=0.0,
             std=0.02,
         )
-        model.embed = new_embed
+        setattr(model, embed_attr, new_embed)
         metadata["embedding_resized"] = True
         metadata["tokens_added"] = list(range(original_vocab_size, new_vocab_size))
 
@@ -175,7 +206,7 @@ def initialize_special_token_embeddings(
         Dict with initialization metadata
     """
     if special_token_ids is None:
-        special_token_ids = [BOT_TOKEN_ID, EOT_TOKEN_ID]
+        special_token_ids = [_module.BOT_TOKEN_ID, _module.EOT_TOKEN_ID]
 
     metadata = {
         "special_tokens_initialized": [],
@@ -228,7 +259,7 @@ def create_special_token_loss_mask(
         loss_mask: [B, T] boolean tensor (True = supervise, False = mask)
     """
     if special_token_ids is None:
-        special_token_ids = [BOT_TOKEN_ID, EOT_TOKEN_ID]
+        special_token_ids = [_module.BOT_TOKEN_ID, _module.EOT_TOKEN_ID]
 
     # Create mask: True for tokens to supervise, False for special tokens
     loss_mask = torch.ones_like(labels, dtype=torch.bool)

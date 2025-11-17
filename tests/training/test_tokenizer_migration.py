@@ -21,7 +21,7 @@ class TestVerifyTokenIDs:
     def mock_tokenizer(self):
         """Create a mock tokenizer."""
         tokenizer = Mock()
-        tokenizer.convert_tokens_to_ids = Mock(side_effect=lambda x: {"<|bot|>": 1, "<|eot|>": 2}.get(x, -1))
+        tokenizer.convert_tokens_to_ids = Mock(side_effect=lambda x: {"<bot>": 1, "<eot>": 2}.get(x, -1))
         return tokenizer
 
     def test_verify_token_ids_matching(self, mock_tokenizer):
@@ -66,12 +66,17 @@ class TestResizeModelEmbeddings:
     @pytest.fixture
     def mock_model(self):
         """Create a mock model with embeddings."""
+        import torch
         model = Mock(spec=nn.Module)
-        model.embedding = Mock(spec=nn.Embedding)
+        # Create a real embedding for proper weight handling
+        model.embedding = nn.Embedding(1000, 512)
         model.embedding.num_embeddings = 1000
         model.embedding.embedding_dim = 512
         model.lm_head = Mock(spec=nn.Linear)
+        model.lm_head.in_features = 512
         model.lm_head.out_features = 1000
+        # Create weight tensor for lm_head
+        model.lm_head.weight = torch.nn.Parameter(torch.randn(1000, 512))
         return model
 
     @pytest.fixture
@@ -99,13 +104,19 @@ class TestResizeModelEmbeddings:
 
     def test_resize_model_embeddings_tokenizer_len(self):
         """Test resizing with tokenizer that uses __len__."""
+        import torch
         model = Mock(spec=nn.Module)
-        model.embedding = Mock(spec=nn.Embedding)
+        # Create a real embedding for proper weight handling
+        model.embedding = nn.Embedding(1000, 512)
         model.embedding.num_embeddings = 1000
+        model.embedding.embedding_dim = 512
 
         tokenizer = Mock()
         del tokenizer.vocab_size
+        # Configure mock to support len() - use __len__ return value
         tokenizer.__len__ = Mock(return_value=2000)
+        # For Python to support len(), we need to configure the mock properly
+        type(tokenizer).__len__ = Mock(return_value=2000)
 
         resized_model, metadata = resize_model_embeddings(model, tokenizer)
 
