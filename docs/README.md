@@ -1,85 +1,61 @@
-# Documentation Index
+# Architecture & Documentation Index
 
-This directory contains comprehensive documentation for the kimi-student project.
+This directory contains architectural documentation, system design, and core integration guides for the kimi-student project.
 
-## Core Documentation
+## System Architecture
 
-### Getting Started & Testing
+### Core Concepts
 
-- **[TOY_TEST_STRATEGY.md](TOY_TEST_STRATEGY.md)** - Comprehensive lightweight testing approach
-- **[DISTILLATION_GUIDE.md](DISTILLATION_GUIDE.md)** - Complete guide to knowledge distillation workflow
-- **[CAWS_AGENT_GUIDE.md](CAWS_AGENT_GUIDE.md)** - CAWS agent workflow guide for AI-assisted development
+- **[ARBITER_THEORY.md](ARBITER_THEORY.md)** - Arbiter stack architecture, requirements, and theoretical foundations
+- **[LATENT_REASONING.md](LATENT_REASONING.md)** - Latent reasoning capabilities and implementation patterns
 
-### Dataset Generation & Management
+### Model Documentation
+
+- **[8_BALL_MODEL_CARD.md](8_BALL_MODEL_CARD.md)** - 8-Ball model specifications, capabilities, and characteristics
+- **[DATASET_CARD_CONTEXTUAL.md](DATASET_CARD_CONTEXTUAL.md)** - Dataset schema, usage guidelines, and generation policies
+
+## Integration & Workflows
+
+### Knowledge Distillation
+
+- **[DISTILLATION_GUIDE.md](DISTILLATION_GUIDE.md)** - Knowledge distillation workflow and integration
+- **[PRODUCTION_DISTILLATION_WORKFLOW.md](PRODUCTION_DISTILLATION_WORKFLOW.md)** - Production distillation pipeline
+
+### Dataset Management
 
 - **[CONTEXTUAL_DATASET_GENERATION.md](CONTEXTUAL_DATASET_GENERATION.md)** - Contextual dataset generation workflow
-- **[DATASET_CARD_CONTEXTUAL.md](DATASET_CARD_CONTEXTUAL.md)** - Dataset schema, policies, and usage guidelines
-- **[SCALE_TESTS.md](SCALE_TESTS.md)** - Scale testing guide (N=1k, N=10k)
+- **[TRAINING_INTEGRATION_EXAMPLES.md](TRAINING_INTEGRATION_EXAMPLES.md)** - Training integration patterns and examples
 
-### Evaluation & Quality Assurance
+## Development & Testing
 
-- **[eval/HARNESS.md](../eval/HARNESS.md)** - Evaluation harness documentation
-- **[ACCEPTANCE_GATES.md](ACCEPTANCE_GATES.md)** - Quality gates and acceptance criteria
+### Testing Strategy
 
-### Architecture & Theory
+- **[TOY_TEST_STRATEGY.md](TOY_TEST_STRATEGY.md)** - Lightweight testing approach and test doubles
+- **[MUTATION_TESTING.md](MUTATION_TESTING.md)** - Mutation testing framework and strategies
+- **[SCALE_TESTS.md](SCALE_TESTS.md)** - Scale testing methodology (N=1k, N=10k)
 
-- **[ARBITER_THEORY.md](ARBITER_THEORY.md)** - Arbiter stack requirements and architecture
-- **[LATENT_REASONING.md](LATENT_REASONING.md)** - Latent reasoning capabilities and implementation
-- **[arbiter/README.md](../arbiter/README.md)** - Arbiter stack implementation details
+### Development Workflow
 
-### Deployment & Operations
+- **[LOCAL_DEVELOPMENT_WORKFLOW.md](LOCAL_DEVELOPMENT_WORKFLOW.md)** - Local development setup and workflow
+- **[CAWS_AGENT_GUIDE.md](CAWS_AGENT_GUIDE.md)** - CAWS agent integration for AI-assisted development
 
-- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Deployment and operational guides
+## Operations
+
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Deployment architecture and operational procedures
+- **[SECURITY_MEDIUM_AUDIT.md](SECURITY_MEDIUM_AUDIT.md)** - Security considerations and audit findings
 
 ## External Resources
 
-See [external/](external/) for public-facing documentation:
-
-- **Setup & Configuration**: Kimi K2 API setup, configuration checklists, and completion status
-- **Resources & References**: Additional resources, updates, and cost estimates for Kimi K2 integration
-- **User Guides**: Model selection, feature specifications (CAWS), and task runner documentation
+See [external/](external/) for public-facing documentation including Kimi K2 setup and integration guides.
 
 ## Internal Documentation
 
-See [internal/](internal/) for implementation details and development resources:
+See [internal/](internal/) for additional implementation resources and architectural deep dives.
 
-- **Implementation Plans**: Status tracking, priority planning, and completion reports
-- **Training & Dependencies**: Readiness checklists, dependency analysis, and training guides
-- **API & Integration**: Hardening guides, verification reports, and integration status
-- **Research & Analysis**: Research summaries, gap analysis, and architectural deep dives
-- **Verification & Testing**: Test reports, priority verification, and completion audits
+## Related Documentation
 
-## Archive
-
-Historical documentation and completed work:
-
-### Status Reports & Verification
-
-- **[archive/status-reports/](archive/status-reports/)** - Production readiness, training readiness, and verification reports
-- **[archive/](archive/)** - Implementation status, completion reports, and critical audits
-
-### Planning & Analysis
-
-- **[archive/planning/](archive/planning/)** - Evaluation alignment analysis and next focus areas
-- **[archive/](archive/)** - Gap analysis, distillation roadmaps, and implementation reviews
-
-### Historical Implementation
-
-- **[archive/](archive/)** - Code mode fixes, CoreML optimizations, API test results, and milestone summaries
-- **Training & Testing**: Toy training tests, test coverage analysis, and optimization guides
-
-## Testing & Quality Assurance
-
-- **[TOY_TEST_STRATEGY.md](TOY_TEST_STRATEGY.md)** - Comprehensive toy testing strategy and test doubles
-- **[../tests/TOY_TEST_COVERAGE_ANALYSIS.md](../tests/TOY_TEST_COVERAGE_ANALYSIS.md)** - Detailed toy test coverage analysis
-- **[../tests/TOY_MODEL_CLAIMS_INTEGRATION.md](../tests/TOY_MODEL_CLAIMS_INTEGRATION.md)** - Claims framework integration testing
-- **[../tests/README.md](../tests/README.md)** - Test suite organization and running instructions
-
-## Quick Links
-
+- **Test Suite**: [../tests/README.md](../tests/README.md) - Test organization and execution
+- **Project Status**: [../docs-status/README.md](../docs-status/README.md) - Project management documentation (git-ignored)
 - **Main README**: [../README.md](../README.md)
 - **Changelog**: [../CHANGELOG.md](../CHANGELOG.md)
 - **Commit Conventions**: [../COMMIT_CONVENTIONS.md](../COMMIT_CONVENTIONS.md)
-- **Makefile**: [../Makefile](../Makefile) - Build targets and automation
-- **PyPI Project**: [../pyproject.toml](../pyproject.toml) - Package configuration
-- **GitHub Actions**: [../.github/](../.github/) - CI/CD workflows and automation

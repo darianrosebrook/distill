@@ -19,30 +19,30 @@ def create_mock_tokenizer(
 ):
     """
     Create a properly configured mock tokenizer with dict-like behavior.
-    
+
     This tokenizer properly supports:
     - Dict-like access via __getitem__
     - len() operation
     - encode() and encode_plus() methods
     - Token properties (pad_token, eos_token)
-    
+
     Args:
         pad_token: Padding token string
         eos_token: End-of-sequence token string
         vocab_size: Size of vocabulary for vocab_size property
         encode_return_value: Return value for encode() (default: [1, 2, 3, 4, 5])
-    
+
     Returns:
         Mock tokenizer object with full dict-like interface
     """
     if encode_return_value is None:
         encode_return_value = [1, 2, 3, 4, 5]
-    
+
     tokenizer = Mock()
     tokenizer.pad_token = pad_token
     tokenizer.eos_token = eos_token
     tokenizer.vocab_size = vocab_size
-    
+
     # Make tokenizer callable and return dict-like object from encode_plus
     def encode_plus_impl(text, **kwargs):
         """Encode text and return dict-like object."""
@@ -60,10 +60,11 @@ def create_mock_tokenizer(
         for k, v in result.items():
             setattr(result_mock, k, v)
         return result_mock
-    
+
     tokenizer.encode_plus = encode_plus_impl
-    tokenizer.encode = Mock(return_value=encode_return_value.copy() if isinstance(encode_return_value, list) else [1, 2, 3])
-    
+    tokenizer.encode = Mock(return_value=encode_return_value.copy(
+    ) if isinstance(encode_return_value, list) else [1, 2, 3])
+
     return tokenizer
 
 
@@ -75,17 +76,17 @@ def create_mock_tokenizer_with_len(
 ):
     """
     Create mock tokenizer with len() support.
-    
+
     Extends create_mock_tokenizer with:
     - __len__() method support
     - Proper list-like behavior for tokenized outputs
-    
+
     Args:
         pad_token: Padding token string
         eos_token: End-of-sequence token string
         vocab_size: Size of vocabulary
         encode_return_value: Return value for encode()
-    
+
     Returns:
         Mock tokenizer with len() support
     """
@@ -95,10 +96,10 @@ def create_mock_tokenizer_with_len(
         vocab_size=vocab_size,
         encode_return_value=encode_return_value,
     )
-    
+
     # Add __len__ support
     tokenizer.__len__ = Mock(return_value=vocab_size)
-    
+
     return tokenizer
 
 
@@ -110,78 +111,87 @@ def create_mock_tokenizer_subscriptable(
 ):
     """
     Create mock tokenizer with full subscriptable/dict support.
-    
+
     Extends create_mock_tokenizer with:
     - Full dict-like subscriptable behavior
     - len() support
     - Tensor output support
     - Proper list wrapping for tensor operations
-    
+
     Args:
         pad_token: Padding token string
         eos_token: End-of-sequence token string
         vocab_size: Size of vocabulary
         encode_return_value: Return value for encode()
-    
+
     Returns:
         Fully subscriptable mock tokenizer
     """
     if encode_return_value is None:
-        encode_return_value = [1, 2, 3, 4, 5, 6]  # 6 tokens so that after [:-1] we get 5
-    
+        # 6 tokens so that after [:-1] we get 5
+        encode_return_value = [1, 2, 3, 4, 5, 6]
+
     tokenizer = create_mock_tokenizer_with_len(
         pad_token=pad_token,
         eos_token=eos_token,
         vocab_size=vocab_size,
         encode_return_value=encode_return_value,
     )
-    
+
     # Make encode_plus return a subscriptable dict-like object
     def encode_plus_impl(text, **kwargs):
         """Encode text with full dict support."""
-        tokens = encode_return_value.copy() if isinstance(encode_return_value, list) else [1, 2, 3]
+        tokens = encode_return_value.copy() if isinstance(
+            encode_return_value, list) else [1, 2, 3]
         result = {
-            "input_ids": torch.tensor([tokens], dtype=torch.int64),  # [1, seq_len] shape
-            "attention_mask": torch.tensor([[1] * len(tokens)], dtype=torch.int64),  # [1, seq_len] shape
+            # [1, seq_len] shape
+            "input_ids": torch.tensor([tokens], dtype=torch.int64),
+            # [1, seq_len] shape
+            "attention_mask": torch.tensor([[1] * len(tokens)], dtype=torch.int64),
         }
-        
+
         # Create a dict-like mock that supports subscripting
         result_dict = MagicMock()
         result_dict.__getitem__ = lambda self, key: result[key]
-        result_dict.__setitem__ = lambda self, key, val: result.update({key: val})
+        result_dict.__setitem__ = lambda self, key, val: result.update({
+                                                                       key: val})
         result_dict.keys = lambda self=None: result.keys()
         result_dict.values = lambda self=None: result.values()
         result_dict.items = lambda self=None: result.items()
-        result_dict.get = lambda self=None, key=None, default=None: result.get(key, default) if key is not None else None
-        
+        result_dict.get = lambda self=None, key=None, default=None: result.get(
+            key, default) if key is not None else None
+
         # Set direct attributes too
         for k, v in result.items():
             setattr(result_dict, k, v)
-        
+
         return result_dict
-    
+
     tokenizer.encode_plus = encode_plus_impl
-    
+
     # Make encode return a 1D tensor
     def encode_impl(text, **kwargs):
         """Encode text to 1D tensor."""
-        tokens = encode_return_value.copy() if isinstance(encode_return_value, list) else [1, 2, 3]
+        tokens = encode_return_value.copy() if isinstance(
+            encode_return_value, list) else [1, 2, 3]
         result = torch.tensor(tokens, dtype=torch.int64)
         return result
-    
+
     tokenizer.encode = encode_impl
-    
+
     # Make tokenizer itself callable (when used as tokenizer(...) instead of tokenizer.encode_plus(...))
     # This is needed for direct tokenizer() calls
-    tokenizer.side_effect = lambda text, **kwargs: encode_plus_impl(text, **kwargs)
+    tokenizer.side_effect = lambda text, **kwargs: encode_plus_impl(
+        text, **kwargs)
     tokenizer.return_value = None  # Ignore default Mock return value
-    
+
     # Override __call__ to properly delegate
     original_call = tokenizer.__call__
+
     def custom_call(text, **kwargs):
         return encode_plus_impl(text, **kwargs)
     tokenizer.__call__ = custom_call
-    
+
     # Add convert_tokens_to_ids method for token ID conversion
     # Default mapping for common tokens
     default_token_map = {
@@ -191,7 +201,7 @@ def create_mock_tokenizer_subscriptable(
         "}": 103,
         "]": 104,
     }
-    
+
     def convert_tokens_to_ids_impl(token):
         """Convert token string to token ID."""
         # Return from default map if available
@@ -199,9 +209,9 @@ def create_mock_tokenizer_subscriptable(
             return default_token_map[token]
         # Otherwise return a default token ID (within vocab size)
         return hash(token) % vocab_size if vocab_size > 0 else 100
-    
+
     tokenizer.convert_tokens_to_ids = convert_tokens_to_ids_impl
-    
+
     return tokenizer
 
 
@@ -212,12 +222,12 @@ def create_mock_encoded_output(
 ):
     """
     Create properly formatted mock encoded output.
-    
+
     Args:
         input_ids: List or tensor of input IDs (default: [1, 2, 3])
         attention_mask: List or tensor of attention mask (default: all 1s)
         token_type_ids: List or tensor of token type IDs (optional)
-    
+
     Returns:
         Dict-like mock object with subscriptable behavior
     """
@@ -225,24 +235,27 @@ def create_mock_encoded_output(
         input_ids = [1, 2, 3]
     if attention_mask is None:
         attention_mask = [1] * len(input_ids)
-    
+
     # Convert to tensors if needed
     if not isinstance(input_ids, torch.Tensor):
-        input_ids = torch.tensor([input_ids], dtype=torch.int64) if isinstance(input_ids[0], int) else torch.tensor(input_ids, dtype=torch.int64)
-    
+        input_ids = torch.tensor([input_ids], dtype=torch.int64) if isinstance(
+            input_ids[0], int) else torch.tensor(input_ids, dtype=torch.int64)
+
     if not isinstance(attention_mask, torch.Tensor):
-        attention_mask = torch.tensor([attention_mask], dtype=torch.int64) if isinstance(attention_mask[0], int) else torch.tensor(attention_mask, dtype=torch.int64)
-    
+        attention_mask = torch.tensor([attention_mask], dtype=torch.int64) if isinstance(
+            attention_mask[0], int) else torch.tensor(attention_mask, dtype=torch.int64)
+
     result_dict = {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
     }
-    
+
     if token_type_ids is not None:
         if not isinstance(token_type_ids, torch.Tensor):
-            token_type_ids = torch.tensor([token_type_ids], dtype=torch.int64) if isinstance(token_type_ids[0], int) else torch.tensor(token_type_ids, dtype=torch.int64)
+            token_type_ids = torch.tensor([token_type_ids], dtype=torch.int64) if isinstance(
+                token_type_ids[0], int) else torch.tensor(token_type_ids, dtype=torch.int64)
         result_dict["token_type_ids"] = token_type_ids
-    
+
     # Create subscriptable mock
     result_mock = MagicMock()
     result_mock.__getitem__ = lambda key: result_dict[key]
@@ -250,20 +263,20 @@ def create_mock_encoded_output(
     result_mock.values = lambda: result_dict.values()
     result_mock.items = lambda: result_dict.items()
     result_mock.get = lambda key, default=None: result_dict.get(key, default)
-    
+
     for k, v in result_dict.items():
         setattr(result_mock, k, v)
-    
+
     return result_mock
 
 
 def create_mock_path(path_string="/tmp/test"):
     """
     Create properly configured mock Path object.
-    
+
     Args:
         path_string: String representation of path
-    
+
     Returns:
         Mock Path that converts to string properly
     """
@@ -286,4 +299,3 @@ __all__ = [
     "create_mock_encoded_output",
     "create_mock_path",
 ]
-

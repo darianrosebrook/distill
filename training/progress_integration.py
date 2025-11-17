@@ -45,7 +45,14 @@ class TrainingProgressContext:
             is_main_process: Whether this is main process (for distributed training)
         """
         self.config = config
-        self.output_dir = Path(output_dir)
+        # Ensure output_dir is a Path object - handle both strings and Path objects
+        if isinstance(output_dir, (str, bytes)):
+            self.output_dir = Path(output_dir)
+        elif isinstance(output_dir, Path):
+            self.output_dir = output_dir
+        else:
+            # Try to convert to string first, then to Path
+            self.output_dir = Path(str(output_dir))
         self.total_steps = total_steps
         self.session_id = session_id
         self.is_main_process = is_main_process

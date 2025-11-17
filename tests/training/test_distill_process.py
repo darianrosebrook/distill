@@ -691,15 +691,30 @@ class TestMainFunction:
         # Mock training step
         mock_train_step.return_value = {"total": 1.5}
 
-        # Mock Path
+        # Mock Path - must handle Path(mock_object) conversion
         mock_path_instance = Mock()
         mock_path_instance.mkdir = Mock()
+        mock_path_instance.__str__ = Mock(return_value="/tmp/test_output")
+        mock_path_instance.__fspath__ = Mock(return_value="/tmp/test_output")
+        mock_path_instance.parent = Mock()
+        
         def path_div_side_effect(other):
             result = Mock()
-            result.__str__ = Mock(return_value=str(other))
+            result.__str__ = Mock(return_value=f"/tmp/test_output/{str(other)}")
+            result.__fspath__ = Mock(return_value=f"/tmp/test_output/{str(other)}")
+            result.parent = Mock()
             return result
+        
         mock_path_instance.__truediv__ = Mock(side_effect=path_div_side_effect)
-        mock_path_class.return_value = mock_path_instance
+        
+        # Handle Path() constructor - if called with a string/path, return mock; if called with Mock, return mock
+        def path_constructor_side_effect(path_arg):
+            if isinstance(path_arg, Mock):
+                # Convert mock to string representation
+                return mock_path_instance
+            return mock_path_instance
+        
+        mock_path_class.side_effect = path_constructor_side_effect
 
         # Mock device
         mock_device_instance = Mock()
@@ -1271,16 +1286,31 @@ class TestMainFunctionExpanded:
 
         mock_train_step.return_value = {"total": 1.5}
 
-        # Mock Path for output directory
+        # Mock Path for output directory - must handle Path(mock_object) conversion
         mock_path_instance = Mock()
         mock_path_instance.mkdir = Mock()
+        mock_path_instance.__str__ = Mock(return_value="/tmp/test_output")
+        mock_path_instance.__fspath__ = Mock(return_value="/tmp/test_output")
+        mock_path_instance.parent = Mock()
+        
         # Make __truediv__ return a new path for checkpoint files
         def path_div_side_effect(other):
             result = Mock()
-            result.__str__ = Mock(return_value=str(other))
+            result.__str__ = Mock(return_value=f"/tmp/test_output/{str(other)}")
+            result.__fspath__ = Mock(return_value=f"/tmp/test_output/{str(other)}")
+            result.parent = Mock()
             return result
+        
         mock_path_instance.__truediv__ = Mock(side_effect=path_div_side_effect)
-        mock_path_class.return_value = mock_path_instance
+        
+        # Handle Path() constructor - if called with a string/path, return mock; if called with Mock, return mock
+        def path_constructor_side_effect(path_arg):
+            if isinstance(path_arg, Mock):
+                # Convert mock to string representation
+                return mock_path_instance
+            return mock_path_instance
+        
+        mock_path_class.side_effect = path_constructor_side_effect
         
         # Mock optimizer state_dict
         mock_optimizer = Mock()

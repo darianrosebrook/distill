@@ -536,7 +536,8 @@ def early_tool_call_loss(
             # Use min(N, T) to handle cases where sequence is shorter than N
             actual_n = min(N, T)
             first_n_logits = logits[:, :actual_n, :]  # [B, actual_n, V]
-            log_probs = F.log_softmax(first_n_logits, dim=-1)  # [B, actual_n, V]
+            log_probs = F.log_softmax(
+                first_n_logits, dim=-1)  # [B, actual_n, V]
 
             # Extract log-probs for JSON tokens
             json_log_probs_list = []

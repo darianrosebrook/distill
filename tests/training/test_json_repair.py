@@ -5,7 +5,8 @@ Tests JSON validation, extraction, repair, and batch processing.
 """
 # @author: @darianrosebrook
 
-from unittest.mock import patch
+import sys
+from unittest.mock import patch, MagicMock
 from training.json_repair import (
     validate_json,
     extract_json_from_text,
@@ -167,28 +168,52 @@ class TestRepairJSON:
     def test_repair_json_simple_repair(self):
         """Test repairing JSON with simple issues."""
         invalid_json = '{"name": "test", "value": 42,}'
-        success, result, was_repaired = repair_json(invalid_json, use_jsonrepair=False)
+        success, result, was_repaired = repair_json(
+            invalid_json, use_jsonrepair=False)
         assert success
         assert result is not None
         assert was_repaired
 
-    @patch("training.json_repair.JSONREPAIR_AVAILABLE", True)
-    @patch("training.json_repair.jsonrepair")
-    def test_repair_json_with_jsonrepair(self, mock_jsonrepair):
+    def test_repair_json_with_jsonrepair(self):
         """Test repairing JSON using jsonrepair library."""
         invalid_json = '{"name": "test", invalid}'
+
+        # Mock jsonrepair module - need to inject it into the module namespace
+        mock_jsonrepair = MagicMock()
         mock_jsonrepair.repair_json.return_value = '{"name": "test", "invalid": null}'
 
-        success, result, was_repaired = repair_json(invalid_json, use_jsonrepair=True)
-        assert success
-        assert result is not None
-        assert was_repaired
-        mock_jsonrepair.repair_json.assert_called_once()
+        # Import the module to patch it
+        import training.json_repair as json_repair_module
+
+        # Set the attributes directly on the module
+        original_available = getattr(
+            json_repair_module, 'JSONREPAIR_AVAILABLE', False)
+        original_jsonrepair = getattr(json_repair_module, 'jsonrepair', None)
+
+        try:
+            # Set jsonrepair in module namespace
+            json_repair_module.JSONREPAIR_AVAILABLE = True
+            json_repair_module.jsonrepair = mock_jsonrepair
+
+            success, result, was_repaired = repair_json(
+                invalid_json, use_jsonrepair=True)
+            assert success
+            assert result is not None
+            assert was_repaired
+            mock_jsonrepair.repair_json.assert_called_once()
+        finally:
+            # Restore original state
+            json_repair_module.JSONREPAIR_AVAILABLE = original_available
+            if original_jsonrepair is not None:
+                json_repair_module.jsonrepair = original_jsonrepair
+            elif hasattr(json_repair_module, 'jsonrepair'):
+                delattr(json_repair_module, 'jsonrepair')
 
     def test_repair_json_unrepairable(self):
         """Test repairing unrepairable JSON."""
         invalid_json = "This is not JSON at all"
-        success, result, was_repaired = repair_json(invalid_json, use_jsonrepair=False)
+        success, result, was_repaired = repair_json(
+            invalid_json, use_jsonrepair=False)
         assert not success
         assert result is None
         assert was_repaired
@@ -196,7 +221,8 @@ class TestRepairJSON:
     def test_repair_json_without_jsonrepair(self):
         """Test repairing JSON without jsonrepair library."""
         invalid_json = '{"name": "test", "value": 42,}'
-        success, result, was_repaired = repair_json(invalid_json, use_jsonrepair=False)
+        success, result, was_repaired = repair_json(
+            invalid_json, use_jsonrepair=False)
         # Should still attempt simple repair
         assert isinstance(success, bool)
         assert isinstance(was_repaired, bool)
@@ -235,7 +261,8 @@ class TestCheckJSONRepairNeeded:
     def test_check_json_repair_needed_repairable_json(self):
         """Test checking text with repairable JSON."""
         text = 'Here is repairable JSON: {"name": "test", "value": 42,}'
-        has_json, needs_repair = check_json_repair_needed(text, use_jsonrepair=False)
+        has_json, needs_repair = check_json_repair_needed(
+            text, use_jsonrepair=False)
         assert has_json
         # May or may not need repair depending on simple repair success
         assert isinstance(needs_repair, bool)
@@ -340,11 +367,13 @@ class TestJSONRepairIntegration:
         invalid_json = '{"name": "test", "value": 42,}'
 
         # Check if repair needed
-        has_json, needs_repair = check_json_repair_needed(invalid_json, use_jsonrepair=False)
+        has_json, needs_repair = check_json_repair_needed(
+            invalid_json, use_jsonrepair=False)
         assert has_json
 
         # Repair
-        success, result, was_repaired = repair_json(invalid_json, use_jsonrepair=False)
+        success, result, was_repaired = repair_json(
+            invalid_json, use_jsonrepair=False)
         if success:
             assert result is not None
             assert was_repaired
@@ -363,15 +392,9 @@ class TestJSONRepairIntegration:
 
         # Repair invalid ones
         for text in texts:
-            has_json, needs_repair = check_json_repair_needed(text, use_jsonrepair=False)
+            has_json, needs_repair = check_json_repair_needed(
+                text, use_jsonrepair=False)
             if has_json and needs_repair:
                 success, result, _ = repair_json(text, use_jsonrepair=False)
                 # Should handle gracefully
                 assert isinstance(success, bool)
-
-
-
-
-
-
-

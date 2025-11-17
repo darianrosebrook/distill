@@ -289,6 +289,11 @@ class TestTeacherCache:
 class TestTeacherCacheIntegration:
     """Test integration of teacher cache components."""
 
+    @pytest.fixture
+    def cache_dir(self, tmp_path):
+        """Create a temporary cache directory."""
+        return tmp_path / "cache"
+
     def test_complete_cache_workflow(self, cache_dir):
         """Test complete cache workflow."""
         cache = TeacherCache(cache_dir, teacher_version="v1.0.0")

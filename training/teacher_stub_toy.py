@@ -59,7 +59,13 @@ def teacher_logits(token_ids: torch.Tensor, vocab_size: int = 512) -> torch.Tens
 
     # Apply softmax-like normalization (but keep logits, not probabilities)
     # This creates a reasonable distribution without being too peaked
-    logits = logits - logits.max(dim=-1, keepdim=True)[0]
+    # Ensure hot tokens remain positive after normalization
+    max_logits = logits.max(dim=-1, keepdim=True)[0]
+    logits = logits - max_logits
+    # Ensure hot tokens are still positive (add back a small amount)
+    for hot_token in hot_tokens:
+        if hot_token < vocab_size:
+            logits[..., hot_token] = torch.clamp(logits[..., hot_token] + 1.0, min=0.1)
     logits = logits * 2.0  # Temperature-like scaling
 
     return logits

@@ -202,9 +202,8 @@ apps/tools/caws/
 # Cursor plans
 .cursor/plans/
 
-# Documentation Archive
-docs/archive/
-docs_status
+# Documentation Archive and Project Management
+docs-status/
 external/
 internal/
 

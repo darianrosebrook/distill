@@ -53,34 +53,50 @@ def validate_json(text: str) -> bool:
     return False
 
 
-def extract_json_from_text(text: str) -> Optional[str]:
+def extract_json_from_text(text: str, require_valid: bool = False) -> Optional[str]:
     """
     Extract JSON string from text.
 
     Args:
         text: Text that may contain JSON
+        require_valid: If True, only return valid JSON. If False, return JSON-like patterns even if invalid.
 
     Returns:
         JSON string if found, None otherwise
     """
-    # Look for JSON objects
+    # Look for JSON objects - try to find JSON-like patterns
+    # First try balanced braces (valid JSON)
     json_pattern = r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}"
     matches = re.findall(json_pattern, text)
 
-    for match in matches:
-        try:
-            # Validate it's valid JSON
-            json.loads(match)
-            return match
-        except json.JSONDecodeError:
-            continue
+    # If we require valid JSON, validate each match
+    if require_valid:
+        for match in matches:
+            try:
+                json.loads(match)
+                return match
+            except json.JSONDecodeError:
+                continue
+    else:
+        # Return the first JSON-like pattern found (even if invalid)
+        if matches:
+            return matches[0]
+        
+        # If no balanced matches, look for incomplete JSON patterns (starts with {)
+        incomplete_pattern = r"\{[^}]*"
+        incomplete_matches = re.findall(incomplete_pattern, text)
+        if incomplete_matches:
+            # Return the longest incomplete match
+            return max(incomplete_matches, key=len)
 
     # Try parsing entire text
     try:
         json.loads(text.strip())
         return text.strip()
     except json.JSONDecodeError:
-        pass
+        # If require_valid is False, return the text if it looks like JSON
+        if not require_valid and text.strip().startswith('{') and text.strip().endswith('}'):
+            return text.strip()
 
     return None
 
