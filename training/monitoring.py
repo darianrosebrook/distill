@@ -576,7 +576,7 @@ class SystemHealthChecks:
                 timestamp=time.time(),
                 component="gpu_memory",
                 status="healthy",
-                message="No GPU available",
+                message="GPU not available",
                 details={"gpu_available": False},
             )
 
@@ -616,7 +616,7 @@ class SystemHealthChecks:
             return HealthStatus(
                 timestamp=time.time(),
                 component="gpu_memory",
-                status="error",
+                status="warning",
                 message=f"GPU memory check failed: {e}",
                 details={"error": str(e)},
             )
@@ -652,6 +652,7 @@ class TrainingMonitor:
         self.monitoring_thread: Optional[threading.Thread] = None
         self._monitoring_stop_event = threading.Event()
         self.alert_conditions: List[Dict[str, Any]] = []
+        self.total_steps = 0
 
     def start_training(self, config: Dict[str, Any]) -> None:
         """Start training monitoring.
@@ -688,6 +689,9 @@ class TrainingMonitor:
             tokens_processed: Total tokens processed
             gpu_memory_mb: GPU memory usage in MB
         """
+        # Update total steps
+        self.total_steps = max(self.total_steps, step + 1)
+        
         # Record metrics
         self.metrics.record_metric("loss", loss, step=step)
         self.metrics.record_metric("learning_rate", lr, step=step)
@@ -778,6 +782,8 @@ class TrainingMonitor:
             "health": self.health_checker.get_overall_health(),
             "metrics_count": len(self.metrics.metrics),
             "training_active": self.training_start_time is not None,
+            "training_started": self.training_start_time is not None,
+            "total_steps": self.total_steps,
             "last_health_check": self.last_health_check,
         }
 
@@ -1011,7 +1017,7 @@ def initialize_monitoring(log_dir: Optional[Path] = None) -> TrainingMonitor:
         Configured training monitor
     """
     global training_monitor
-    training_monitor = TrainingMonitor(log_dir)
+    training_monitor = TrainingMonitor(log_dir=log_dir)
     return training_monitor
 
 

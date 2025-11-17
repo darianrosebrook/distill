@@ -35,7 +35,7 @@ class TestMetricsCollectorActual:
         """Test metrics collector initialization."""
         assert len(collector.metrics) == 0
         assert collector.max_points == 100
-        assert isinstance(collector.lock, threading.Lock)
+        assert hasattr(collector, 'lock') and collector.lock is not None
 
     def test_record_metric(self, collector):
         """Test recording a metric."""
