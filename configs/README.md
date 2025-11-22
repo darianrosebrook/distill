@@ -38,6 +38,33 @@ This directory contains YAML configuration files for:
 ### Quantization
 - `quant_qat_int8.yaml` - Quantization-aware training config
 
+### Checkpoint Management
+
+Training configurations support automatic checkpoint cleanup to prevent disk space issues:
+
+```yaml
+training:
+  steps: 1500
+  save_every: 100
+  checkpoint_cleanup:
+    max_checkpoints: 3  # Keep most recent N checkpoints (plus milestones)
+    min_free_space_gb: 50.0  # Reduce retention if free space drops below this
+```
+
+**Configuration Options**:
+
+- `max_checkpoints` (int, default: 3): Maximum number of recent checkpoints to keep in addition to milestone checkpoints
+- `min_free_space_gb` (float, default: 50.0): Threshold for automatic retention reduction when disk space is low
+
+**How It Works**:
+
+- Milestone checkpoints (10%, 25%, 50%, 75%, 90%, 100% of training steps) are always preserved
+- The most recent N checkpoints are kept (where N = `max_checkpoints`)
+- Old checkpoints beyond this retention policy are automatically deleted after each save
+- If free disk space drops below `min_free_space_gb`, retention is automatically reduced
+
+See [`training/README.md`](../training/README.md#checkpoint-management) for detailed documentation.
+
 ## Evaluation Configs
 
 - `eval_suites.yaml` - Evaluation suite definitions
@@ -67,6 +94,10 @@ Later configs override earlier ones.
 
 - [`training/README.md`](../training/README.md) - Training documentation
 - [`models/README.md`](../models/README.md) - Model architecture documentation
+
+
+
+
 
 
 

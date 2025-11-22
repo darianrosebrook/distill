@@ -112,6 +112,7 @@ class KDDataset(Dataset):
             first_line = True
             valid_samples = 0
             skipped_samples = 0
+            empty_teacher_text_count = 0  # Track empty teacher_text separately for warning suppression
 
             for line_num, line in enumerate(f):
                 if not line.strip():
@@ -171,9 +172,13 @@ class KDDataset(Dataset):
                         continue
 
                     if len(data["teacher_text"].strip()) == 0:
-                        print(
-                            f"[KDDataset] WARN: Skipping line {line_num + 1}: teacher_text is empty"
-                        )
+                        # Count empty teacher_text silently (will be reported in summary)
+                        # Only warn for first few to indicate the issue exists
+                        empty_teacher_text_count += 1
+                        if empty_teacher_text_count <= 3:
+                            print(
+                                f"[KDDataset] WARN: Skipping line {line_num + 1}: teacher_text is empty"
+                            )
                         skipped_samples += 1
                         continue
 
@@ -185,7 +190,8 @@ class KDDataset(Dataset):
                         )
 
                     # Optional field validation
-                    if "teacher_logits" in data:
+                    # Only warn about teacher_logits if we expect them to be available
+                    if "teacher_logits" in data and self.teacher_logits_available:
                         logits = data["teacher_logits"]
                         if not isinstance(logits, list) or not all(isinstance(x, (int, float)) for x in logits):
                             print(

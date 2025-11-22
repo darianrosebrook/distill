@@ -17,6 +17,7 @@ from typing import List, Dict, Any, Tuple, Optional
 from collections import defaultdict
 from tools.schema_registry import ToolSchemaRegistry
 from scripts.util_sanitize import redact_pii, allowlist_urls, scan_safety
+from training.caws_context import extract_caws_context, extract_caws_context_dict
 
 # Dataset version for schema evolution tracking
 DATASET_VERSION = "1.1.0"
@@ -113,7 +114,8 @@ def build_stratified_cells(
     # Control: max(1, 10% of total), Adversarial: min(3, total),
     # Multilingual: max(1, 7.5% of total), Long-context: 2-3 samples for N≥20
     want_long_context = (
-        0 if disable_long_context or total < 20 else min(3, max(2, total // 10))
+        0 if disable_long_context or total < 20 else min(
+            3, max(2, total // 10))
     )  # 2-3 for N≥20
     want_adversarial = 0 if disable_adversarial else min(3, total)
     slots_for_diversity = (
@@ -132,14 +134,16 @@ def build_stratified_cells(
         for scenario in SCENARIOS
         for complexity in COMPLEXITY
     )
-    scale_factor = min(1.0, max_for_minimums / total_minimums) if total_minimums > 0 else 1.0
+    scale_factor = min(1.0, max_for_minimums /
+                       total_minimums) if total_minimums > 0 else 1.0
 
     scaled_min_coverage = {}
     for scenario in SCENARIOS:
         scaled_min_coverage[scenario] = {}
         for complexity in COMPLEXITY:
             min_count = MIN_COVERAGE[scenario].get(complexity, 0)
-            scaled_min_coverage[scenario][complexity] = max(0, int(min_count * scale_factor))
+            scaled_min_coverage[scenario][complexity] = max(
+                0, int(min_count * scale_factor))
 
     # First pass: fill scaled minimums for (scenario × complexity), but bounded
     for scenario in SCENARIOS:
@@ -167,7 +171,8 @@ def build_stratified_cells(
     # Reserve slots for control/adversarial/multilingual/long-context based on what's needed
     # Control: max(1, 10% of total), Adversarial: want_adversarial, Multilingual: max(1, 7.5% of total), Long-context: want_long_context
     slots_needed = (
-        max(1, int(total * 0.1)) + want_adversarial + max(1, int(total * 0.075)) + want_long_context
+        max(1, int(total * 0.1)) + want_adversarial +
+        max(1, int(total * 0.075)) + want_long_context
     )
     available_for_structure = max(0, total - slots_needed)
 
@@ -317,7 +322,8 @@ def ensure_long_with_tokenizer(
         current_tokens = len(tokenizer.encode(text, add_special_tokens=False))
         while current_tokens < target_tokens and len(text) < max_chars:
             text += "\n" + make_long_context("audit trail", chars=4000)
-            current_tokens = len(tokenizer.encode(text, add_special_tokens=False))
+            current_tokens = len(tokenizer.encode(
+                text, add_special_tokens=False))
         return text
     except Exception:
         # If tokenization fails, fall back to byte path
@@ -370,7 +376,8 @@ def compute_tokenizer_fingerprint(tokenizer_path: Optional[str]) -> Optional[Dic
         tokenizer_json_path = None
         if os.path.isdir(tokenizer_path):
             # Local directory
-            tokenizer_json_path = os.path.join(tokenizer_path, "tokenizer.json")
+            tokenizer_json_path = os.path.join(
+                tokenizer_path, "tokenizer.json")
             if not os.path.exists(tokenizer_json_path):
                 # Try to use the path itself as identifier
                 return {
@@ -473,7 +480,8 @@ def synthesize_prompt(
         )
     elif adversarial and adversarial["type"] == "malformed_json":
         # Adversarial: malformed JSON (will be handled in teacher text)
-        calls.append({"name": "read_file", "arguments": {"path": random.choice(FIXTURE_FILES)}})
+        calls.append({"name": "read_file", "arguments": {
+                     "path": random.choice(FIXTURE_FILES)}})
     elif adversarial and adversarial["type"] == "ambiguity":
         # Adversarial: ambiguous file name
         calls.append(
@@ -523,7 +531,8 @@ def synthesize_prompt(
             }
         )
     elif s == "multi_step":
-        calls.append({"name": "read_file", "arguments": {"path": random.choice(FIXTURE_FILES)}})
+        calls.append({"name": "read_file", "arguments": {
+                     "path": random.choice(FIXTURE_FILES)}})
         calls.append(
             {
                 "name": "web.search",
@@ -583,7 +592,8 @@ def synthesize_prompt(
         )
     else:
         base_user_parts.append(f"{header}\n")
-        base_user_parts.append(f"Task: {task}\nUse reading first, then search, then integrate.\n")
+        base_user_parts.append(
+            f"Task: {task}\nUse reading first, then search, then integrate.\n")
 
     user = "".join(base_user_parts)
 
@@ -591,7 +601,8 @@ def synthesize_prompt(
     if long_context:
         if tokenizer:
             # Token-aware: ensure we meet 8000 token threshold
-            user = ensure_long_with_tokenizer(user, target_tokens=8000, tokenizer=tokenizer)
+            user = ensure_long_with_tokenizer(
+                user, target_tokens=8000, tokenizer=tokenizer)
         else:
             # Byte-based fallback: use 25000 chars to exceed 24000 byte threshold
             filler = make_long_context("audit trail", chars=25000)
@@ -617,7 +628,8 @@ def synthesize_prompt(
                         "result": {"ok": True, "summary": "First call succeeded"},
                     }
                 )
-                attempts.append({"call": calls[1], "ok": False, "error": "404 Not Found"})
+                attempts.append(
+                    {"call": calls[1], "ok": False, "error": "404 Not Found"})
                 # Add a successful retry
                 retry_call = dict(calls[1])
                 retry_call["arguments"]["url"] = "https://example.org/article/coreml-ane"
@@ -659,8 +671,10 @@ def synthesize_prompt(
         tool_results = []
     elif adversarial and adversarial["type"] == "range_violation":
         # Use normalized JSON
-        corrected_call = {"name": "web.search", "arguments": {"q": "test", "top_k": 3}}
-        tool_json = json.dumps(corrected_call, separators=(",", ":"), ensure_ascii=False)
+        corrected_call = {"name": "web.search",
+                          "arguments": {"q": "test", "top_k": 3}}
+        tool_json = json.dumps(corrected_call, separators=(
+            ",", ":"), ensure_ascii=False)
         tool_result = {
             "ok": True,
             "summary": "Corrected search with top_k=3 returned valid results",
@@ -697,7 +711,8 @@ def synthesize_prompt(
             "name": "read_file",
             "arguments": {"path": "repo:///examples/configs/student_9b_gqa.yaml"},
         }
-        tool_json = json.dumps(corrected_call, separators=(",", ":"), ensure_ascii=False)
+        tool_json = json.dumps(corrected_call, separators=(
+            ",", ":"), ensure_ascii=False)
         tool_result = {
             "ok": True,
             "summary": "After reading the file, I found the configuration parameters",
@@ -748,7 +763,8 @@ def synthesize_prompt(
             tool_jsons = []
             tool_results = []
             for call in calls:
-                tool_json = json.dumps(call, separators=(",", ":"), ensure_ascii=False)
+                tool_json = json.dumps(call, separators=(
+                    ",", ":"), ensure_ascii=False)
                 tool_jsons.append(tool_json)
                 # Create tool result with fields for grounding (or empty/decoy for negative control)
                 if negative_control:
@@ -816,7 +832,8 @@ def synthesize_prompt(
                 else:
                     # Always include the summary from tool_result to ensure grounding
                     summary = (
-                        str(tool_results[0].get("summary", "")).strip() if tool_results else ""
+                        str(tool_results[0].get("summary", "")
+                            ).strip() if tool_results else ""
                     )
                     if summary:
                         teacher_parts.append(f"Integration: {summary}.")
@@ -829,7 +846,8 @@ def synthesize_prompt(
                                         f" {k.replace('_', ' ').title()}: {value}."
                                     )
                                 elif isinstance(value, list) and len(value) > 0:
-                                    teacher_parts.append(f" Found {len(value)} {k}.")
+                                    teacher_parts.append(
+                                        f" Found {len(value)} {k}.")
                                 break
                     else:
                         teacher_parts.append(
@@ -876,7 +894,8 @@ def synthesize_prompt(
         integration_spans_bytes = []
         integration_spans_exceeded_cap = False
         # Clean up any accidental Integration: markers
-        teacher = teacher.replace("\nIntegration:", "").replace("Integration:", "")
+        teacher = teacher.replace(
+            "\nIntegration:", "").replace("Integration:", "")
 
     # Sanitize and scan safety (after normalization)
     teacher = redact_pii(teacher)
@@ -931,10 +950,12 @@ def synthesize_prompt(
                     name_rel = inner.index(name_pair)
                     name_abs_start = tool_start + name_rel + len('"name":"')
                     name_abs_end = name_abs_start + len(call["name"])
-                    tool_name_spans_bytes.append([name_abs_start, name_abs_end])
+                    tool_name_spans_bytes.append(
+                        [name_abs_start, name_abs_end])
 
                 # JSON pointer for semantic anchoring
-                json_pointers.append(f"/calls/{i}/arguments" if len(calls) > 1 else "/arguments")
+                json_pointers.append(
+                    f"/calls/{i}/arguments" if len(calls) > 1 else "/arguments")
 
         # For backward compatibility, also set single spans if only one call
         if len(calls) == 1 and json_args_spans_bytes:
@@ -992,9 +1013,11 @@ def generate_sample_id(seed: Optional[int] = None, index: int = 0, shard_index: 
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Generate contextual prompts with stratified coverage")
+    ap = argparse.ArgumentParser(
+        description="Generate contextual prompts with stratified coverage")
     ap.add_argument("--out", required=True, help="Output JSONL file path")
-    ap.add_argument("--total", type=int, default=60, help="Total number of samples")
+    ap.add_argument("--total", type=int, default=60,
+                    help="Total number of samples")
     ap.add_argument(
         "--seed",
         type=int,
@@ -1045,6 +1068,31 @@ def main():
         default=0.0,
         help="Probability of generating negative control samples (empty/decoy tool results, default: 0.0)",
     )
+    ap.add_argument(
+        "--include-caws-scenarios",
+        action="store_true",
+        help="Include CAWS-compliant tool-use examples",
+    )
+    ap.add_argument(
+        "--caws-tool-integration",
+        action="store_true",
+        help="Include CAWS MCP tool examples",
+    )
+    ap.add_argument(
+        "--budget-aware-generation",
+        action="store_true",
+        help="Include budget-respecting examples",
+    )
+    ap.add_argument(
+        "--caws-rate",
+        type=float,
+        default=0.5,
+        help="Fraction of long-context samples that include CAWS context (default: 0.5)",
+    )
+    ap.add_argument(
+        "--caws-spec-id",
+        help="CAWS spec ID to use for context extraction",
+    )
     args = ap.parse_args()
 
     # Set seed for determinism
@@ -1057,11 +1105,27 @@ def main():
         try:
             from training.safe_model_loading import safe_from_pretrained_tokenizer
 
-            tokenizer = safe_from_pretrained_tokenizer(args.tokenizer, use_fast=True)
+            tokenizer = safe_from_pretrained_tokenizer(
+                args.tokenizer, use_fast=True)
         except Exception:
             print(
                 f"[generate_contextual_prompts] WARN: Failed to load tokenizer {args.tokenizer}, using byte-based thresholds"
             )
+
+    # Extract CAWS context if requested
+    caws_context = None
+    caws_context_dict = None
+    if args.include_caws_scenarios or args.caws_tool_integration or args.budget_aware_generation:
+        try:
+            caws_context = extract_caws_context(".", spec_id=args.caws_spec_id)
+            if caws_context:
+                caws_context_dict = extract_caws_context_dict(
+                    ".", spec_id=args.caws_spec_id)
+                print(
+                    f"[generate_contextual_prompts] CAWS context loaded: {caws_context.spec_id}")
+        except Exception as e:
+            print(
+                f"[generate_contextual_prompts] WARN: Failed to extract CAWS context: {e}")
 
     reg = ToolSchemaRegistry()
     cells = build_stratified_cells(
@@ -1070,7 +1134,8 @@ def main():
         disable_adversarial=args.disable_adversarial,
         negative_control_prob=args.negative_control_prob,
     )
-    os.makedirs(os.path.dirname(args.out) if os.path.dirname(args.out) else ".", exist_ok=True)
+    os.makedirs(os.path.dirname(args.out) if os.path.dirname(
+        args.out) else ".", exist_ok=True)
 
     # Track generation plan with adversarial taxonomy
     adversarial_counts = defaultdict(int)
@@ -1116,15 +1181,71 @@ def main():
             ],
         }
 
+        # Determine task_type and caws_level
+        task_type = "tool_use"
+        if cell.get("long_context"):
+            task_type = "long_context"
+        elif args.include_caws_scenarios or args.caws_tool_integration:
+            if random.random() < 0.3:  # 30% chance for CAWS tool type
+                task_type = "caws_tool"
+
+        # Determine caws_level
+        caws_level = 0
+        is_long_context = cell.get("long_context", False)
+        should_include_caws = (
+            (args.include_caws_scenarios or args.caws_tool_integration or args.budget_aware_generation)
+            and caws_context_dict
+            and (
+                (is_long_context and random.random() < args.caws_rate)
+                or (task_type == "caws_tool")
+            )
+        )
+
+        if should_include_caws:
+            # For CAWS tool examples, use level 2; for long-context with CAWS, use level 1
+            if task_type == "caws_tool":
+                caws_level = 2
+            else:
+                caws_level = 1
+
         item = {
+            "id": f"contextual-{i+1:06d}",
+            "role": "worker",
+            "task_type": task_type,
+            "caws_level": caws_level,
+            "source": "synthetic",
             "prompt": prompt,
             "teacher_text": history[0]["content"],
             "metadata": meta,
         }
+
+        # Add CAWS context if applicable
+        if should_include_caws and caws_context_dict:
+            item["caws_context"] = {
+                "working_spec": {
+                    "id": caws_context_dict.get("spec_id", "unknown"),
+                    "title": caws_context_dict.get("title", "Unknown"),
+                    "risk_tier": caws_context_dict.get("risk_tier", 2),
+                    "budget": caws_context_dict.get("budget", {}),
+                    "scope": caws_context_dict.get("scope", {}),
+                }
+            }
+            if caws_level >= 2:
+                item["evidence_manifest"] = {
+                    "claims": [],
+                    "verification_status": "pending",
+                    "evidence_references": [],
+                }
+                item["provenance_chain"] = {
+                    "steps": [],
+                    "audit_trail": "",
+                }
+
         items.append(item)
 
     # Compute fingerprints for dataset header
-    tokenizer_fp = compute_tokenizer_fingerprint(args.tokenizer) if args.tokenizer else None
+    tokenizer_fp = compute_tokenizer_fingerprint(
+        args.tokenizer) if args.tokenizer else None
     registry_sha256 = compute_registry_fingerprint(reg)
 
     # Create dataset header (first line)
@@ -1143,10 +1264,12 @@ def main():
     # Write to file with header first, then items
     with open(args.out, "w", encoding="utf-8") as f:
         # Write header as first line
-        f.write(json.dumps(dataset_header, ensure_ascii=False, separators=(",", ":")) + "\n")
+        f.write(json.dumps(dataset_header, ensure_ascii=False,
+                separators=(",", ":")) + "\n")
         # Write items
         for item in items:
-            f.write(json.dumps(item, ensure_ascii=False, separators=(",", ":")) + "\n")
+            f.write(json.dumps(item, ensure_ascii=False,
+                    separators=(",", ":")) + "\n")
 
     # Compute SHA256 for integrity
     with open(args.out, "rb") as f:
@@ -1154,8 +1277,10 @@ def main():
 
     generation_plan["sha256"] = file_hash
 
-    print(f"[generate_contextual_prompts] Generated {len(cells)} samples to {args.out}")
-    print(f"[generate_contextual_prompts] Generation plan: {json.dumps(generation_plan, indent=2)}")
+    print(
+        f"[generate_contextual_prompts] Generated {len(cells)} samples to {args.out}")
+    print(
+        f"[generate_contextual_prompts] Generation plan: {json.dumps(generation_plan, indent=2)}")
     print(f"[generate_contextual_prompts] SHA256: {file_hash}")
 
 

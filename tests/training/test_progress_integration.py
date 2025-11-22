@@ -168,7 +168,7 @@ class TestCheckpointRecording:
             progress.record_checkpoint(
                 step=100,
                 checkpoint_path=checkpoint_path,
-                dataset_position=3200,
+                samples_seen=3200,
                 is_best=False,
             )
 
@@ -201,7 +201,7 @@ class TestCheckpointRecording:
             progress.record_checkpoint(
                 step=100,
                 checkpoint_path=checkpoint_path,
-                dataset_position=3200,
+                samples_seen=3200,
                 is_best=False,
             )
 
@@ -212,7 +212,7 @@ class TestCheckpointRecording:
             progress.record_checkpoint(
                 step=100,
                 checkpoint_path=checkpoint_path,
-                dataset_position=3200,
+                samples_seen=3200,
                 is_best=True,
             )
 
@@ -380,21 +380,65 @@ class TestGetRecoveryCheckpoint:
             progress.record_checkpoint(
                 step=100,
                 checkpoint_path=checkpoint_path,
-                dataset_position=3200,
+                samples_seen=3200,
+                dataset_fingerprint="abc123",
+                dataset_len=10000,
             )
 
         # Retrieve checkpoint
         result = get_recovery_checkpoint(temp_output_dir)
 
         assert result is not None
-        checkpoint_path, dataset_position = result
+        checkpoint_path, recovery_metadata = result
         assert str(checkpoint_path).endswith("checkpoint_100.pt")
-        assert dataset_position == 3200
+        assert recovery_metadata["samples_seen"] == 3200
+        assert recovery_metadata["dataset_fingerprint"] == "abc123"
+        assert recovery_metadata["dataset_len"] == 10000
 
     def test_get_recovery_checkpoint_no_progress(self, temp_output_dir):
         """Test getting recovery checkpoint with no progress."""
         result = get_recovery_checkpoint(temp_output_dir)
         assert result is None
+
+    def test_recovery_metadata_structure(self, temp_output_dir, sample_config):
+        """Test that recovery metadata contains expected fields."""
+        # Create progress and checkpoint
+        with TrainingProgressContext(
+            config=sample_config,
+            output_dir=temp_output_dir,
+            total_steps=1000,
+            is_main_process=True,
+        ) as progress:
+            progress.update_metrics(
+                step=100,
+                loss=2.5,
+                loss_components={},
+                learning_rate=1e-4,
+                samples_processed=3200,
+                tokens_processed=102400,
+            )
+
+            checkpoint_path = temp_output_dir / "checkpoint_100.pt"
+            progress.record_checkpoint(
+                step=100,
+                checkpoint_path=checkpoint_path,
+                samples_seen=3200,
+                dataset_fingerprint="test_fingerprint_123",
+                dataset_len=10000,
+            )
+
+        # Retrieve checkpoint
+        result = get_recovery_checkpoint(temp_output_dir)
+        assert result is not None
+        checkpoint_path, recovery_metadata = result
+        
+        # Verify metadata structure
+        assert "samples_seen" in recovery_metadata
+        assert "dataset_fingerprint" in recovery_metadata
+        assert "dataset_len" in recovery_metadata
+        assert recovery_metadata["samples_seen"] == 3200
+        assert recovery_metadata["dataset_fingerprint"] == "test_fingerprint_123"
+        assert recovery_metadata["dataset_len"] == 10000
 
 
 class TestContextManagerConvenience:
@@ -421,4 +465,13 @@ class TestContextManagerConvenience:
             )
 
             assert progress.tracker.session.steps_completed == 1
+
+
+
+
+
+
+
+
+
 

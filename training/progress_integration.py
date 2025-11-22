@@ -161,8 +161,10 @@ class TrainingProgressContext:
         self,
         step: int,
         checkpoint_path: Path,
-        dataset_position: int,
+        samples_seen: int,
         is_best: bool = False,
+        dataset_fingerprint: Optional[str] = None,
+        dataset_len: Optional[int] = None,
     ) -> None:
         """
         Record checkpoint metadata.
@@ -170,8 +172,10 @@ class TrainingProgressContext:
         Args:
             step: Training step number
             checkpoint_path: Path to checkpoint file
-            dataset_position: Current position in dataset
+            samples_seen: Total samples processed so far (for telemetry/metrics only)
             is_best: Whether this is best checkpoint so far
+            dataset_fingerprint: Dataset fingerprint for validation (optional)
+            dataset_len: Dataset length when checkpoint saved (optional)
         """
         if not self.tracker or not self.is_main_process:
             return
@@ -185,8 +189,10 @@ class TrainingProgressContext:
         self.tracker.record_checkpoint(
             step=step,
             checkpoint_path=Path(checkpoint_path),
-            dataset_position=dataset_position,
+            samples_seen=samples_seen,
             recovery_tags=recovery_tags,
+            dataset_fingerprint=dataset_fingerprint,
+            dataset_len=dataset_len,
         )
 
         self.checkpoint_counter += 1
@@ -255,16 +261,20 @@ def setup_progress_tracking(
 def get_recovery_checkpoint(
     output_dir: Path,
     session_id: Optional[str] = None,
-) -> Optional[Tuple[Path, int]]:
+) -> Optional[Tuple[Path, Dict[str, Any]]]:
     """
-    Get recovery checkpoint path and dataset position.
+    Get recovery checkpoint path and metadata.
 
     Args:
         output_dir: Checkpoint output directory
         session_id: Optional session ID
 
     Returns:
-        Tuple of (checkpoint_path, dataset_position) or None
+        Tuple of (checkpoint_path, recovery_metadata) or None
+        recovery_metadata contains:
+            - samples_seen: Total samples processed (for telemetry only)
+            - dataset_fingerprint: Dataset fingerprint from checkpoint (if available)
+            - dataset_len: Dataset length from checkpoint (if available)
     """
     progress_dir = output_dir / "progress"
     if not progress_dir.exists():
@@ -285,9 +295,15 @@ def get_recovery_checkpoint(
                 checkpoint_key = str(last_checkpoint_step)
                 if checkpoint_key in session_data["checkpoints"]:
                     checkpoint_meta = session_data["checkpoints"][checkpoint_key]
+                    recovery_metadata = {
+                        # Backward compat
+                        "samples_seen": checkpoint_meta.get("samples_seen", checkpoint_meta.get("dataset_position", 0)),
+                        "dataset_fingerprint": checkpoint_meta.get("dataset_fingerprint"),
+                        "dataset_len": checkpoint_meta.get("dataset_len"),
+                    }
                     return (
                         Path(checkpoint_meta["checkpoint_path"]),
-                        checkpoint_meta["dataset_position"],
+                        recovery_metadata,
                     )
 
         return None

@@ -1,2 +1,0 @@
-{"id":"v1","prompt":"Fix memory leak in process_data().","a":{"text":"Adds proper cleanup and memory tests.","clauses":["EVIDENCE_COMPLETENESS","GATE_INTEGRITY"]},"b":{"text":"Changes variable names only.","clauses":["BUDGET_ADHERENCE"]},"winner":"a"}
-

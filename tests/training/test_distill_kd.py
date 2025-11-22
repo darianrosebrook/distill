@@ -1252,6 +1252,65 @@ class TestCheckpointOperations:
         assert loaded["loss"] == 0.5
         assert loaded["config"] == config
 
+    def test_save_checkpoint_includes_device_config(self, tmp_path, small_model):
+        """Test checkpoint includes device config metadata."""
+        output_dir = tmp_path / "checkpoints"
+        output_dir.mkdir(exist_ok=True)
+
+        optimizer = AdamW(small_model.parameters(), lr=1e-3)
+        config = {"test": "config"}
+
+        save_checkpoint(
+            model=small_model,
+            optimizer=optimizer,
+            step=100,
+            loss=0.5,
+            output_dir=output_dir,
+            config=config,
+        )
+
+        # Load checkpoint
+        from training.safe_checkpoint_loading import safe_load_checkpoint
+        checkpoint_path = output_dir / "checkpoint_step_100.pt"
+        checkpoint = safe_load_checkpoint(checkpoint_path)
+
+        # Verify device config is present
+        assert "meta" in checkpoint
+        assert "device_config" in checkpoint["meta"]
+        device_config = checkpoint["meta"]["device_config"]
+
+        assert "model_parallel" in device_config
+        assert "cpu_offload" in device_config
+        assert "primary_device" in device_config
+        assert "all_devices" in device_config
+
+    def test_save_checkpoint_includes_model_arch_hash(self, tmp_path, small_model):
+        """Test checkpoint includes model architecture hash."""
+        output_dir = tmp_path / "checkpoints"
+        output_dir.mkdir(exist_ok=True)
+
+        optimizer = AdamW(small_model.parameters(), lr=1e-3)
+        config = {"test": "config"}
+
+        save_checkpoint(
+            model=small_model,
+            optimizer=optimizer,
+            step=100,
+            loss=0.5,
+            output_dir=output_dir,
+            config=config,
+        )
+
+        # Load checkpoint
+        from training.safe_checkpoint_loading import safe_load_checkpoint
+        checkpoint_path = output_dir / "checkpoint_step_100.pt"
+        checkpoint = safe_load_checkpoint(checkpoint_path)
+
+        # Verify model arch hash is present
+        assert "meta" in checkpoint
+        assert "model_arch_hash" in checkpoint["meta"]
+        assert checkpoint["meta"]["model_arch_hash"] is not None
+
     def test_save_checkpoint_with_metadata(self, tmp_path, small_model):
         """Test checkpoint saving with additional metadata."""
         output_dir = tmp_path / "checkpoints"

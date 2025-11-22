@@ -279,6 +279,7 @@ Small deterministic slice enforcing fixture coverage and CAWS gates before merge
 **Two Toy Models for Different Testing Scenarios:**
 
 1. **Toy Baseline Model** - Tests general pipeline functionality and tool span extraction
+
    - Purpose: Validates core distillation pipeline, tool-calling patterns, and integration points
    - Training data: Simple tool-calling examples (e.g., `tool.call{"name":"sum","args":{"a":1,"b":2}}`)
    - Use case: General pipeline validation, tool span detection, claims extraction testing

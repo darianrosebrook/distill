@@ -24,7 +24,6 @@ This directory contains architectural documentation, system design, and core int
 ### Dataset Management
 
 - **[CONTEXTUAL_DATASET_GENERATION.md](CONTEXTUAL_DATASET_GENERATION.md)** - Contextual dataset generation workflow
-- **[TRAINING_INTEGRATION_EXAMPLES.md](TRAINING_INTEGRATION_EXAMPLES.md)** - Training integration patterns and examples
 
 ## Development & Testing
 
@@ -42,15 +41,27 @@ This directory contains architectural documentation, system design, and core int
 ## Operations
 
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** - Deployment architecture and operational procedures
-- **[SECURITY_MEDIUM_AUDIT.md](SECURITY_MEDIUM_AUDIT.md)** - Security considerations and audit findings
+
+## Documentation Organization
+
+This repository organizes documentation into four categories:
+
+1. **Key Architectural Docs** (root or `docs/`) - Standard repository documentation covering architecture, workflows, and guides
+2. **Internal Documents** (`docs/internal/`) - Implementation plans, detailed analysis, and development notes
+3. **External Documentation** (`docs/external/`) - Sourced documentation from outside the repository
+4. **Archive** (`docs/archive/`) - Temporal documents, status reports, completion summaries, and potentially outdated content
 
 ## External Resources
 
 See [external/](external/) for public-facing documentation including Kimi K2 setup and integration guides.
 
-## Internal Documentation
+## Internal Development
 
-See [internal/](internal/) for additional implementation resources and architectural deep dives.
+See [internal/](internal/) for implementation plans, detailed technical analysis, and development notes.
+
+## Historical Documentation
+
+See [archive/](archive/) for temporal status reports, completion summaries, and historical documents.
 
 ## Related Documentation
 

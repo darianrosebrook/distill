@@ -581,3 +581,273 @@ class TestErrorHandling:
         # Should return error dict
         assert len(results) == 1
         assert "error" in results[0] or results[0].get("text") == ""
+
+
+class TestRateLimitingAndConcurrency:
+    """Test rate limiting, concurrency control, and thread safety."""
+
+    @pytest.fixture
+    def http_client(self):
+        """HTTP client fixture."""
+        return TeacherClient(backend="http", endpoint="http://test.com", api_key="test_key")
+
+    def test_concurrency_semaphore_initialization(self, http_client):
+        """Test that concurrency semaphore is initialized."""
+        assert hasattr(http_client, "_concurrency_sem")
+        assert http_client._concurrency_sem is not None
+        # Default should be tier concurrency (FREE tier = 1) capped at 64
+        assert http_client._concurrency_sem._value <= 64
+
+    def test_concurrency_semaphore_custom_limit(self):
+        """Test custom concurrency limit."""
+        client = TeacherClient(
+            backend="http", endpoint="http://test.com", api_key="test_key", max_concurrency=10
+        )
+        assert client._concurrency_sem._value == 10
+
+    def test_rate_state_initialization(self, http_client):
+        """Test that rate state is initialized."""
+        assert hasattr(http_client, "_rate_state")
+        assert http_client._rate_state is not None
+        assert hasattr(http_client._rate_state, "minute_start_ts")
+        assert hasattr(http_client._rate_state, "requests_this_minute")
+        assert hasattr(http_client._rate_state, "tokens_this_minute")
+        assert http_client._rate_state.requests_this_minute == 0
+        assert http_client._rate_state.tokens_this_minute == 0
+
+    def test_rate_state_reset_if_new_minute(self, http_client):
+        """Test rate state resets when entering new minute."""
+        import time
+        
+        # Set state to simulate old minute
+        http_client._rate_state.minute_start_ts = time.time() - 70  # 70 seconds ago
+        http_client._rate_state.requests_this_minute = 10
+        http_client._rate_state.tokens_this_minute = 1000
+        
+        # Reset should trigger
+        http_client._rate_state.reset_if_new_minute(time.time())
+        
+        assert http_client._rate_state.requests_this_minute == 0
+        assert http_client._rate_state.tokens_this_minute == 0
+
+    def test_rate_state_no_reset_same_minute(self, http_client):
+        """Test rate state doesn't reset within same minute."""
+        import time
+        
+        now = time.time()
+        http_client._rate_state.minute_start_ts = now - 30  # 30 seconds ago
+        http_client._rate_state.requests_this_minute = 5
+        http_client._rate_state.tokens_this_minute = 500
+        
+        # Reset should NOT trigger
+        http_client._rate_state.reset_if_new_minute(now)
+        
+        assert http_client._rate_state.requests_this_minute == 5
+        assert http_client._rate_state.tokens_this_minute == 500
+
+    @patch("requests.Session.post")
+    @patch("time.sleep")
+    def test_rate_state_updates_on_success(self, mock_sleep, mock_post, http_client):
+        """Test rate state updates after successful request."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "Test"}}],
+            "usage": {"total_tokens": 100, "prompt_tokens": 50, "completion_tokens": 50}
+        }
+        mock_response.headers = {
+            "x-ratelimit-limit-rpm": "500",
+            "x-ratelimit-limit-tpm": "3000000"
+        }
+        mock_post.return_value = mock_response
+        
+        initial_requests = http_client._rate_state.requests_this_minute
+        initial_tokens = http_client._rate_state.tokens_this_minute
+        
+        http_client.sample(["Test"])
+        
+        # Rate state should be updated
+        assert http_client._rate_state.requests_this_minute == initial_requests + 1
+        assert http_client._rate_state.tokens_this_minute == initial_tokens + 100
+        assert http_client._rate_state.rpm_limit == 500
+        assert http_client._rate_state.tpm_limit == 3000000
+
+    @patch("requests.Session.post")
+    @patch("time.sleep")
+    def test_proactive_throttling_at_rpm_limit(self, mock_sleep, mock_post, http_client):
+        """Test proactive throttling when RPM limit is reached."""
+        import time
+        
+        # Set up rate state to be at limit
+        with http_client._rate_lock:
+            http_client._rate_state.rpm_limit = 500
+            http_client._rate_state.requests_this_minute = 500  # At limit
+            http_client._rate_state.minute_start_ts = time.time() - 10  # Still in same minute
+        
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "Test"}}],
+            "usage": {"total_tokens": 10}
+        }
+        mock_response.headers = {}
+        mock_post.return_value = mock_response
+        
+        http_client.sample(["Test"])
+        
+        # Should have slept to wait for next minute
+        assert mock_sleep.called
+        # Sleep time should be approximately 50 seconds (60 - 10 seconds elapsed)
+
+    @patch("requests.Session.post")
+    @patch("time.sleep")
+    def test_proactive_throttling_at_tpm_limit(self, mock_sleep, mock_post, http_client):
+        """Test proactive throttling when TPM limit is reached."""
+        import time
+        
+        # Set up rate state to be at TPM limit
+        with http_client._rate_lock:
+            http_client._rate_state.tpm_limit = 3000000
+            http_client._rate_state.tokens_this_minute = 3000000  # At limit
+            http_client._rate_state.minute_start_ts = time.time() - 10
+        
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "Test"}}],
+            "usage": {"total_tokens": 10}
+        }
+        mock_response.headers = {}
+        mock_post.return_value = mock_response
+        
+        http_client.sample(["Test"])
+        
+        # Should have slept to wait for next minute
+        assert mock_sleep.called
+
+    def test_tier_lock_initialization(self, http_client):
+        """Test that tier lock is initialized."""
+        assert hasattr(http_client, "_tier_lock")
+        assert http_client._tier_lock is not None
+
+    def test_rate_lock_initialization(self, http_client):
+        """Test that rate lock is initialized."""
+        assert hasattr(http_client, "_rate_lock")
+        assert http_client._rate_lock is not None
+
+    def test_tier_locked_flag_with_override(self):
+        """Test tier_locked flag when MOONSHOT_TIER_OVERRIDE is set."""
+        with patch("models.teacher.teacher_client.os.getenv") as mock_getenv:
+            mock_getenv.side_effect = lambda key, default=None: "tier2" if key == "MOONSHOT_TIER_OVERRIDE" else None
+            
+            client = TeacherClient(backend="http", endpoint="http://test.com", api_key="test_key")
+            assert client._tier_locked is True
+            assert client._tier == APITier.TIER2
+
+    def test_tier_locked_flag_without_override(self, http_client):
+        """Test tier_locked flag when no override is set."""
+        assert http_client._tier_locked is False
+
+    def test_tier_monotone_upgrade(self, http_client):
+        """Test tier detection only upgrades, never downgrades."""
+        # Start at FREE
+        assert http_client._tier == APITier.FREE
+        
+        # Simulate TIER2 detection
+        mock_response = Mock()
+        mock_response.headers = {"x-ratelimit-limit-rpm": "500"}
+        http_client._update_tier_from_response(mock_response)
+        assert http_client._tier == APITier.TIER2
+        
+        # Try to downgrade to FREE (should not happen)
+        mock_response_free = Mock()
+        mock_response_free.headers = {"x-ratelimit-limit-rpm": "3"}  # FREE tier RPM
+        http_client._update_tier_from_response(mock_response_free)
+        # Should still be TIER2 (monotone upgrade only)
+        assert http_client._tier == APITier.TIER2
+        
+        # Upgrade to TIER3 should work
+        mock_response_tier3 = Mock()
+        mock_response_tier3.headers = {"x-ratelimit-limit-rpm": "5000"}
+        http_client._update_tier_from_response(mock_response_tier3)
+        assert http_client._tier == APITier.TIER3
+
+    def test_tier_detection_respects_locked_flag(self):
+        """Test tier detection is disabled when tier is locked."""
+        with patch("models.teacher.teacher_client.os.getenv") as mock_getenv:
+            mock_getenv.side_effect = lambda key, default=None: "tier2" if key == "MOONSHOT_TIER_OVERRIDE" else None
+            
+            client = TeacherClient(backend="http", endpoint="http://test.com", api_key="test_key")
+            assert client._tier_locked is True
+            assert client._tier == APITier.TIER2
+            
+            # Try to detect different tier (should be ignored)
+            mock_response = Mock()
+            mock_response.headers = {"x-ratelimit-limit-rpm": "10000"}  # TIER5
+            client._update_tier_from_response(mock_response)
+            # Should remain TIER2 (locked)
+            assert client._tier == APITier.TIER2
+
+    @patch("requests.Session.post")
+    @patch("time.sleep")
+    def test_retry_after_header_priority(self, mock_sleep, mock_post, http_client):
+        """Test that Retry-After header takes priority over tier backoff."""
+        # First request: 429 with Retry-After
+        mock_429_response = Mock()
+        mock_429_response.status_code = 429
+        mock_429_response.headers = {"Retry-After": "5.0"}  # 5 seconds
+        mock_429_response.json.return_value = {}
+        mock_429_response.text = "Rate limited"
+        
+        # Second request: success
+        mock_success_response = Mock()
+        mock_success_response.status_code = 200
+        mock_success_response.json.return_value = {
+            "choices": [{"message": {"content": "Success"}}],
+            "usage": {"total_tokens": 10}
+        }
+        mock_success_response.headers = {}
+        
+        mock_post.side_effect = [mock_429_response, mock_success_response]
+        
+        http_client.sample(["Test"])
+        
+        # Should have slept with Retry-After value (5.0s), not tier backoff
+        assert mock_sleep.called
+        sleep_calls = [call[0][0] for call in mock_sleep.call_args_list]
+        # Should have slept approximately 5 seconds (Retry-After)
+        assert any(4.9 <= sleep_time <= 5.1 for sleep_time in sleep_calls)
+
+    @patch("requests.Session.post")
+    @patch("time.sleep")
+    def test_retry_fallback_to_tier_backoff(self, mock_sleep, mock_post, http_client):
+        """Test fallback to tier-aware backoff when Retry-After missing."""
+        # Set tier to TIER2 (delay = 0.12s)
+        http_client._tier = APITier.TIER2
+        http_client._tier_limits = TIER_LIMITS[APITier.TIER2]
+        
+        # First request: 429 without Retry-After
+        mock_429_response = Mock()
+        mock_429_response.status_code = 429
+        mock_429_response.headers = {}  # No Retry-After
+        mock_429_response.json.return_value = {}
+        mock_429_response.text = "Rate limited"
+        
+        # Second request: success
+        mock_success_response = Mock()
+        mock_success_response.status_code = 200
+        mock_success_response.json.return_value = {
+            "choices": [{"message": {"content": "Success"}}],
+            "usage": {"total_tokens": 10}
+        }
+        mock_success_response.headers = {}
+        
+        mock_post.side_effect = [mock_429_response, mock_success_response]
+        
+        http_client.sample(["Test"])
+        
+        # Should have slept with tier backoff (0.12s * 2^0 = 0.12s)
+        assert mock_sleep.called
+        sleep_calls = [call[0][0] for call in mock_sleep.call_args_list]
+        # Should have slept approximately tier delay (0.12s)
+        assert any(0.1 <= sleep_time <= 0.2 for sleep_time in sleep_calls)

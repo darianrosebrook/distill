@@ -235,3 +235,12 @@ class TestIntegration:
         assert loss_dict["total"] >= 0
         assert len([k for k in loss_dict.keys() if k.startswith("layer_")]) == 6  # 2 layers × 3 metrics each
 
+
+
+
+
+
+
+
+
+

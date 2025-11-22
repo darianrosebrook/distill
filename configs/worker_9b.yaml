@@ -35,9 +35,16 @@ distillation:
   ce_teacher_weight: 0.3
   ce_ground_truth_weight: 0.2
   # Process-step supervision weights (replaces reasoning_content loss)
-  w_tool: 0.15      # Tool name selection loss weight
-  w_args: 0.15      # JSON argument loss weight
-  w_integr: 0.10    # Integration span loss weight
+  # Tool-name loss is conservative and additive - it nudges the model without dominating training
+  w_tool: 0.1       # Tool name selection loss weight (conservative, additive)
+  w_args: 0.5       # JSON argument loss weight
+  w_integr: 0.3     # Integration span loss weight
+  # Source-aware weighting for tool_name loss (optional)
+  tool_name_source_weights:
+    schema: 1.0     # Full weight for schema-matched
+    "mask+schema": 1.0  # Full weight for mask+schema
+    heuristic: 0.5  # Half weight for text-matched
+    original: 1.0   # Full weight for original labels
 kd:
   teacher_endpoint: "http://teacher.local"
   kd_temperature: 2.0

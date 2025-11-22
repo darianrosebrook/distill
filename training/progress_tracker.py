@@ -76,27 +76,52 @@ class CheckpointMetadata:
     checkpoint_path: Path
     created_at: float
     metrics: MetricsSnapshot
-    dataset_position: int  # Index in dataset when checkpoint saved
+    # Total samples processed (for telemetry/metrics only, not for seeking)
+    samples_seen: int
+    # Dataset fingerprint for validation
+    dataset_fingerprint: Optional[str] = None
+    dataset_len: Optional[int] = None  # Dataset length when checkpoint saved
     recovery_tags: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        return {
+        d = {
             'checkpoint_step': self.checkpoint_step,
             'checkpoint_path': str(self.checkpoint_path),
             'created_at': self.created_at,
             'metrics': self.metrics.to_dict(),
-            'dataset_position': self.dataset_position,
+            'samples_seen': self.samples_seen,
             'recovery_tags': self.recovery_tags,
         }
+        if self.dataset_fingerprint is not None:
+            d['dataset_fingerprint'] = self.dataset_fingerprint
+        if self.dataset_len is not None:
+            d['dataset_len'] = self.dataset_len
+        return d
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'CheckpointMetadata':
         """Create from dictionary."""
+        # Make a copy to avoid mutating the original
+        data = dict(data)
+        
         metrics_data = data.pop('metrics')
         metrics = MetricsSnapshot.from_dict(metrics_data)
         data['checkpoint_path'] = Path(data['checkpoint_path'])
         data['metrics'] = metrics
+        
+        # Backward compatibility: handle old 'dataset_position' field
+        if 'dataset_position' in data and 'samples_seen' not in data:
+            data['samples_seen'] = data.pop('dataset_position')
+        
+        # Remove any fields that don't exist in the dataclass
+        # (to avoid __init__ errors)
+        valid_fields = {
+            'checkpoint_step', 'checkpoint_path', 'created_at', 'metrics',
+            'samples_seen', 'dataset_fingerprint', 'dataset_len', 'recovery_tags'
+        }
+        data = {k: v for k, v in data.items() if k in valid_fields}
+        
         return cls(**data)
 
 
@@ -408,8 +433,10 @@ class ProgressTracker:
         self,
         step: int,
         checkpoint_path: Path,
-        dataset_position: int,
+        samples_seen: int,
         recovery_tags: Optional[List[str]] = None,
+        dataset_fingerprint: Optional[str] = None,
+        dataset_len: Optional[int] = None,
     ) -> None:
         """
         Record checkpoint metadata for recovery.
@@ -417,8 +444,10 @@ class ProgressTracker:
         Args:
             step: Training step number
             checkpoint_path: Path to checkpoint file
-            dataset_position: Current position in dataset
+            samples_seen: Total samples processed so far (for telemetry/metrics only)
             recovery_tags: Optional tags (e.g., "best_loss", "every_1k_steps")
+            dataset_fingerprint: Dataset fingerprint for validation (optional)
+            dataset_len: Dataset length when checkpoint saved (optional)
         """
         with self._lock:
             # Get latest metrics
@@ -436,7 +465,9 @@ class ProgressTracker:
                 checkpoint_path=checkpoint_path,
                 created_at=time.time(),
                 metrics=latest_metrics,
-                dataset_position=dataset_position,
+                samples_seen=samples_seen,
+                dataset_fingerprint=dataset_fingerprint,
+                dataset_len=dataset_len,
                 recovery_tags=recovery_tags or [],
             )
 

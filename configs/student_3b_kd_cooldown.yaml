@@ -1,0 +1,106 @@
+arch:
+  # 3B Student Model Configuration - Cooldown continuation from step 1125
+  d_model: 2560
+  n_layers: 20
+  n_heads: 20
+  n_kv_heads: 5
+  d_head: 128
+  vocab_size: 32000
+  rope_theta: 10000
+  rope_scaling: "dynamic"
+  norm: "rms"
+  mlp: "swiglu"
+  dropout: 0.0
+
+model:  # Alias for validation
+  d_model: 2560
+  n_layers: 20
+  n_heads: 20
+  n_kv_heads: 5
+  d_head: 128
+  vocab_size: 32000
+  rope_theta: 10000
+  rope_scaling: "dynamic"
+  dropout: 0.0
+
+init:
+  # Initialize model weights from checkpoint (new training run, scheduler starts fresh)
+  base_checkpoint: "models/student/checkpoints_3b_kd_test/checkpoint_step_1125.pt"
+
+# train.resume_from_checkpoint: Uncomment to truly resume (restore scheduler, optimizer, global_step)
+# train:
+#   resume_from_checkpoint: "models/student/checkpoints_3b_kd_test/checkpoint_step_1125.pt"
+
+optimizer:
+  name: adamw
+  lr: 1.0e-5  # 20x smaller than original peak (2e-4)
+  betas: [0.9, 0.95]
+  weight_decay: 0.1
+  # Short-run schedule: constant LR or tiny cosine decay
+  lr_schedule: "short_run_cosine"
+  warmup_steps: 0  # No warmup - model already trained
+  min_lr: 1.0e-5  # Floor LR (same as starting LR for constant)
+
+train:
+  seq_lengths: [1024]  # Same as original run
+  micro_batch_size: 2  # Keep same to maintain memory footprint
+  grad_accum: 8  # Keep same effective batch size (16)
+  steps: 300  # Short cooldown run
+  total_steps: 300
+  save_every: 100
+  log_every: 10  # More frequent logging for short run
+  memory_log_interval: 10  # Log memory every 10 steps
+  fp16: false  # MPS compatibility
+  grad_checkpointing: true
+  dataloader_workers: 0  # macOS+MPS: avoid fork deadlocks
+
+# Multi-device parallelization
+multi_device:
+  enabled: false
+  cpu_offload_optimizer: true  # Keep optimizer state on CPU
+  strategy: "alternate"
+
+training:  # Alias for validation
+  steps: 300
+  batch_size: 4
+  seq_length: 1024
+  grad_accum_steps: 8
+  lr: 1.0e-5
+  save_every: 100
+  checkpoint_cleanup:
+    max_checkpoints: 3
+    min_free_space_gb: 50.0
+
+io:
+  tokenizer_path: models/student/tokenizer
+  train_shards: [data/kd_mix_1500.jsonl]  # Same dataset
+  val_shards: []  # Still no validation set
+
+role: "worker"
+
+distillation:
+  type: "standard_kd"
+  # Keep same loss weights as original run
+  kl_weight: 0.0
+  ce_teacher_weight: 0.7
+  ce_ground_truth_weight: 0.3
+  w_tool: 0.0
+  w_args: 0.0
+  w_integr: 0.0
+
+kd:
+  teacher_endpoint: "https://api.moonshot.ai/v1"
+  kd_temperature: 2.0
+  teacher_logits_available: false
+
+curriculum:
+  schedule: []
+
+tracing:
+  log_dir: "runs"
+  run_name: "worker_3b_kd_cooldown_1125"  # Unique run name
+  use_tensorboard: false
+  use_wandb: false
+  json_log: true
+  console_log: true
+

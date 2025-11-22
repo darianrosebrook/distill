@@ -237,14 +237,20 @@ class TestCheckpointRecording:
         tracker.record_checkpoint(
             step=100,
             checkpoint_path=checkpoint_path,
-            dataset_position=3200,
+            samples_seen=3200,
             recovery_tags=["every_1k_steps"],
+            dataset_fingerprint="abc123",
+            dataset_len=10000,
         )
 
         # Verify checkpoint was recorded
         assert tracker.session.last_checkpoint_step == 100
         assert 100 in tracker.session.checkpoints
-        assert tracker.session.checkpoints[100].checkpoint_step == 100
+        checkpoint_meta = tracker.session.checkpoints[100]
+        assert checkpoint_meta.checkpoint_step == 100
+        assert checkpoint_meta.samples_seen == 3200
+        assert checkpoint_meta.dataset_fingerprint == "abc123"
+        assert checkpoint_meta.dataset_len == 10000
         assert tracker.checkpoint_manifest.exists()
 
     def test_get_recovery_checkpoint(self, temp_output_dir, sample_config):
@@ -274,13 +280,82 @@ class TestCheckpointRecording:
         tracker.record_checkpoint(
             step=100,
             checkpoint_path=checkpoint_path,
-            dataset_position=3200,
+            samples_seen=3200,
+            dataset_fingerprint="abc123",
+            dataset_len=10000,
         )
 
         # Retrieve checkpoint
         recovery_checkpoint = tracker.get_recovery_checkpoint()
         assert recovery_checkpoint is not None
         assert recovery_checkpoint.checkpoint_step == 100
+        assert recovery_checkpoint.samples_seen == 3200
+        assert recovery_checkpoint.dataset_fingerprint == "abc123"
+        assert recovery_checkpoint.dataset_len == 10000
+
+    def test_checkpoint_backward_compatibility(self, temp_output_dir, sample_config):
+        """Test backward compatibility with old dataset_position field."""
+        tracker = ProgressTracker(
+            output_dir=temp_output_dir,
+            config=sample_config,
+            total_steps=10000,
+        )
+
+        # Record checkpoint with new format
+        tracker.update_metrics(
+            step=100,
+            loss=2.5,
+            loss_components={"kd": 2.0, "ce": 0.5},
+            learning_rate=1e-4,
+            samples_processed=3200,
+            tokens_processed=102400,
+            throughput_samples_per_sec=32.0,
+            throughput_tokens_per_sec=1024.0,
+        )
+
+        checkpoint_path = temp_output_dir / "checkpoint_100.pt"
+        tracker.record_checkpoint(
+            step=100,
+            checkpoint_path=checkpoint_path,
+            samples_seen=3200,
+        )
+
+        # Save session to ensure file exists
+        tracker.save()
+        
+        # Get session file path and checkpoint manifest path
+        session_file = tracker.session_file
+        checkpoint_manifest = tracker.checkpoint_manifest
+        
+        # Ensure session file exists (save() should create it)
+        if not session_file.exists():
+            # If save() didn't create it, create it manually from session data
+            session_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(session_file, "w") as f:
+                json.dump(tracker.session.to_dict(), f, indent=2)
+        
+        tracker.close()
+
+        # Read session data
+        assert session_file.exists(), f"Session file should exist at {session_file}"
+        with open(session_file) as f:
+            session_data = json.load(f)
+        
+        # Replace samples_seen with dataset_position (old format)
+        checkpoint_data = session_data["checkpoints"]["100"]
+        checkpoint_data["dataset_position"] = checkpoint_data.pop("samples_seen")
+        with open(session_file, "w") as f:
+            json.dump(session_data, f)
+
+        # Reload tracker - should handle backward compat
+        tracker2 = ProgressTracker(
+            output_dir=temp_output_dir,
+            config=sample_config,
+            total_steps=10000,
+        )
+        recovery_checkpoint = tracker2.get_recovery_checkpoint()
+        assert recovery_checkpoint is not None
+        assert recovery_checkpoint.samples_seen == 3200  # Should be converted from dataset_position
 
 
 class TestAPIResponseRecovery:
@@ -431,7 +506,7 @@ class TestStatePersistence:
         tracker1.record_checkpoint(
             step=50,
             checkpoint_path=temp_output_dir / "checkpoint_50.pt",
-            dataset_position=1600,
+            samples_seen=1600,
         )
         tracker1.save()
 
@@ -447,4 +522,13 @@ class TestStatePersistence:
         assert tracker2.session.last_checkpoint_step == 50
         assert tracker2.session.samples_processed == 1600
         assert len(tracker2.session.checkpoints) == 1
+
+
+
+
+
+
+
+
+
 

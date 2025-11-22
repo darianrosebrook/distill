@@ -12,10 +12,12 @@ Usage:
 
 from infra.version_gate import check_training_versions
 import argparse
+import contextlib
 import math
 import os
 import random
 import sys
+import time
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
@@ -44,6 +46,11 @@ from training.progress_integration import (
     training_progress_context,
     get_recovery_checkpoint,
     calculate_metrics_from_step,
+)
+from training.multi_device_utils import (
+    create_multi_device_optimizer,
+    split_model_across_devices,
+    estimate_memory_savings,
 )
 
 
@@ -193,7 +200,7 @@ def compute_required_fields_present(
     elif "tool_names" in batch and isinstance(batch["tool_names"], list):
         # Fallback: use length of tool_names list if it's a list
         B = len(batch["tool_names"])
-    
+
     if B == 0:
         return torch.zeros(0, dtype=torch.bool, device=device)
 
@@ -961,6 +968,117 @@ def truncate_batch_to_shape(
     return truncated
 
 
+def _cleanup_old_checkpoints(
+    output_dir: Path,
+    current_step: int,
+    config: Dict[str, Any],
+    keep_latest: bool = True,
+) -> None:
+    """Clean up old checkpoints to prevent disk space issues.
+
+    Keeps:
+    - The latest checkpoint (latest.pt)
+    - Milestone checkpoints (10%, 25%, 50%, 75%, 90%, 100%)
+    - The most recent N checkpoints (configurable, default 3)
+
+    Args:
+        output_dir: Directory containing checkpoints
+        current_step: Current training step
+        config: Training configuration
+        keep_latest: Whether to always keep latest.pt
+    """
+    import shutil
+    import re
+    from pathlib import Path
+
+    # Get cleanup configuration
+    train_cfg = config.get("train", {})
+    checkpoint_cleanup = train_cfg.get("checkpoint_cleanup", {})
+    max_checkpoints = checkpoint_cleanup.get("max_checkpoints", 3)
+    min_free_space_gb = checkpoint_cleanup.get("min_free_space_gb", 50.0)
+
+    # Check disk space
+    try:
+        stat = shutil.disk_usage(output_dir)
+        free_space_gb = stat.free / (1024**3)
+
+        # If disk space is critically low, be more aggressive
+        if free_space_gb < min_free_space_gb:
+            max_checkpoints = max(1, max_checkpoints - 1)
+            print(
+                f"[distill_kd] Low disk space ({free_space_gb:.2f}GB free), "
+                f"reducing checkpoint retention to {max_checkpoints}"
+            )
+    except Exception:
+        pass  # Disk space check is best-effort
+
+    # Identify milestone checkpoints to always keep
+    total_steps = train_cfg.get("steps", 10000)
+    milestone_steps = [
+        int(total_steps * pct) for pct in [0.1, 0.25, 0.5, 0.75, 0.9, 1.0]
+    ]
+    milestone_steps = [s for s in milestone_steps if s <= current_step]
+
+    # Find all numbered checkpoint files
+    checkpoint_pattern = re.compile(r"checkpoint_step_(\d+)\.pt$")
+    checkpoints = []
+
+    for file_path in output_dir.glob("checkpoint_step_*.pt"):
+        match = checkpoint_pattern.match(file_path.name)
+        if match:
+            step = int(match.group(1))
+            checkpoints.append((step, file_path))
+
+    if len(checkpoints) <= max_checkpoints:
+        return  # No cleanup needed
+
+    # Sort by step number
+    checkpoints.sort(key=lambda x: x[0])
+
+    # Determine which checkpoints to keep
+    keep_steps = set()
+
+    # Always keep milestone checkpoints
+    keep_steps.update(milestone_steps)
+
+    # Keep the most recent N checkpoints (may overlap with milestones)
+    recent_checkpoints = checkpoints[-max_checkpoints:]
+    keep_steps.update(step for step, _ in recent_checkpoints)
+
+    # Ensure we always keep at least the current checkpoint
+    keep_steps.add(current_step)
+
+    # Delete checkpoints not in keep list
+    deleted_count = 0
+    freed_space_gb = 0.0
+
+    for step, checkpoint_path in checkpoints:
+        if step not in keep_steps:
+            try:
+                # Get file size before deletion
+                file_size_gb = checkpoint_path.stat().st_size / (1024**3)
+
+                checkpoint_path.unlink()
+                deleted_count += 1
+                freed_space_gb += file_size_gb
+
+                print(
+                    f"[distill_kd] Deleted old checkpoint: {checkpoint_path.name} "
+                    f"({file_size_gb:.2f}GB)"
+                )
+            except Exception as e:
+                print(
+                    f"[distill_kd] WARN: Failed to delete checkpoint "
+                    f"{checkpoint_path.name}: {e}"
+                )
+
+    if deleted_count > 0:
+        print(
+            f"[distill_kd] Checkpoint cleanup: deleted {deleted_count} old checkpoints, "
+            f"freed {freed_space_gb:.2f}GB. Keeping {len(keep_steps)} checkpoints."
+        )
+
+
 def save_checkpoint(
     model: nn.Module,
     optimizer: torch.optim.Optimizer,
@@ -973,6 +1091,7 @@ def save_checkpoint(
     data_shard_index: Optional[int] = None,
     dataset_fingerprint: Optional[str] = None,
     scaler: Optional[torch.cuda.amp.GradScaler] = None,
+    scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None,
 ):
     """Save training checkpoint.
 
@@ -1010,8 +1129,14 @@ def save_checkpoint(
         pass  # Disk space check is best-effort
 
     # Get model state dict (unwrap DDP if needed)
-    model_state = model.module.state_dict() if isinstance(
-        model, DDP) else model.state_dict()
+    model_for_state = model.module if isinstance(model, DDP) else model
+    model_state = model_for_state.state_dict()
+
+    # Convert model state dict to CPU for device-agnostic checkpoint
+    # This ensures checkpoints can be loaded on any device configuration
+    cpu_model_state = {k: v.cpu() if isinstance(
+        v, torch.Tensor) else v for k, v in model_state.items()}
+    model_state = cpu_model_state
 
     # Compute SHA256 hash of model state for reproducibility tracking
     state_sha256 = sha256_state_dict(model_state)
@@ -1057,6 +1182,47 @@ def save_checkpoint(
         except Exception as e:
             print(f"[distill_kd] WARN: Failed to capture scaler state: {e}")
 
+    # Capture scheduler state for resume-safe training
+    scheduler_state = None
+    if scheduler is not None:
+        try:
+            scheduler_state = scheduler.state_dict()
+        except Exception as e:
+            print(f"[distill_kd] WARN: Failed to capture scheduler state: {e}")
+
+    # Compute model architecture hash for validation
+    # Hash based on parameter names and shapes (not values)
+    model_arch_hash = None
+    try:
+        import hashlib
+        arch_buffer = []
+        for name, param in model_state.items():
+            arch_buffer.append(
+                f"{name}:{tuple(param.shape)}:{str(param.dtype)}")
+        arch_str = "|".join(sorted(arch_buffer))
+        model_arch_hash = hashlib.sha256(arch_str.encode("utf-8")).hexdigest()
+    except Exception as e:
+        print(
+            f"[distill_kd] WARN: Failed to compute model architecture hash: {e}")
+
+    # Capture device configuration metadata
+    # Detect actual parameter devices (may differ from config if model was split)
+    model_for_check = model.module if isinstance(model, DDP) else model
+    param_devices = {str(p.device) for p in model_for_check.parameters()}
+    # Check if optimizer is CPUOffloadOptimizer
+    try:
+        from training.multi_device_utils import CPUOffloadOptimizer
+        is_cpu_offload_optimizer = isinstance(optimizer, CPUOffloadOptimizer)
+    except ImportError:
+        is_cpu_offload_optimizer = False
+
+    device_config = {
+        "model_parallel": len(param_devices) > 1,
+        "cpu_offload": is_cpu_offload_optimizer,
+        "primary_device": str(next(iter(param_devices))) if param_devices else "unknown",
+        "all_devices": sorted(list(param_devices)),
+    }
+
     checkpoint = {
         "step": step,
         "model_state_dict": model_state,
@@ -1069,12 +1235,15 @@ def save_checkpoint(
         },
         "meta": {
             "sha256_state": state_sha256,
+            "model_arch_hash": model_arch_hash,
+            "device_config": device_config,
             "code_mode": code_mode_meta,
             "loss_components": loss_components,
             "rng_states": rng_states,
             "data_shard_index": data_shard_index,
             "dataset_fingerprint": dataset_fingerprint,
             "scaler_state_dict": scaler_state,
+            "scheduler_state_dict": scheduler_state,
         },
     }
 
@@ -1112,6 +1281,14 @@ def save_checkpoint(
         save_atomic(checkpoint, checkpoint_path)
 
         print(f"[distill_kd] Saved checkpoint: {checkpoint_path}")
+
+        # Clean up old checkpoints to prevent disk space issues
+        _cleanup_old_checkpoints(
+            output_dir=output_dir,
+            current_step=step,
+            config=config,
+            keep_latest=True,
+        )
     except Exception as e:
         print(
             f"[distill_kd] ERROR: Failed to save checkpoint at step {step}: {e}")
@@ -1184,7 +1361,18 @@ def train_step(
             )
 
     # Forward pass
-    with torch.cuda.amp.autocast(enabled=scaler is not None):
+    # Device-agnostic autocast handling:
+    # - CUDA: Use autocast when FP16 scaler is enabled
+    # - MPS/CPU: No autocast (full precision training)
+    # This matches the GradScaler logic above for consistency
+    use_autocast = (device.type == "cuda") and scaler is not None
+    if use_autocast:
+        autocast_ctx = torch.cuda.amp.autocast()
+    else:
+        # No autocast on CPU/MPS for v0 KD sanity run
+        autocast_ctx = contextlib.nullcontext()
+
+    with autocast_ctx:
         kd_cfg = cfg.get("distillation", {})
 
         # ====================================================================
@@ -1224,7 +1412,8 @@ def train_step(
             else:
                 # Get eval score separately (model doesn't support both flags simultaneously)
                 _, eval_score = model(
-                    input_ids, attention_mask, return_eval_score=True)  # [B, 1]
+                    # [B, 1]
+                    input_ids, attention_mask, return_eval_score=True)
         else:
             eval_score = None
 
@@ -2352,6 +2541,11 @@ def main():
                     help="Config file(s) to load")
     ap.add_argument("--resume", help="Resume from checkpoint path")
     ap.add_argument(
+        "--force-resume-with-changed-dataset",
+        action="store_true",
+        help="Force resume even if dataset fingerprint changed (resets dataset state)",
+    )
+    ap.add_argument(
         "--output-dir",
         default="models/student/checkpoints",
         help="Output directory for checkpoints",
@@ -2395,7 +2589,8 @@ def main():
         # Fallback: try configs/worker_9b.yaml tokenizer path
         tokenizer_path = cfg.get("tokenizer", {}).get("path")
     if not tokenizer_path:
-        print("[distill_kd] ERROR: tokenizer_path must be specified in config (io.tokenizer_path)")
+        print(
+            "[distill_kd] ERROR: tokenizer_path must be specified in config (io.tokenizer_path)")
         sys.exit(1)
 
     # Log provenance for reproducibility
@@ -2450,8 +2645,104 @@ def main():
     if args.local_rank >= 0:
         model = DDP(model, device_ids=[args.local_rank])
 
-    # Create optimizer
-    optimizer = create_optimizer(model, cfg)
+    # Multi-device support: Model parallelism and CPU offloading
+    multi_device_cfg = cfg.get("multi_device", {})
+    use_model_parallelism = multi_device_cfg.get("enabled", False)
+    use_cpu_offload = multi_device_cfg.get("cpu_offload_optimizer", True)
+
+    # Enforce constraint: CPU offload + model parallelism is not supported
+    if use_model_parallelism and use_cpu_offload:
+        raise RuntimeError(
+            "CPU offloading optimizer does not support model parallelism. "
+            "Either disable CPU offload (multi_device.cpu_offload_optimizer=false) "
+            "or disable model splitting (multi_device.enabled=false). "
+            "Model parallelism with training is experimental and requires standard optimizer."
+        )
+
+    if use_model_parallelism and device.type == "mps":
+        if is_main_process:
+            print("[distill_kd] Enabling model parallelism across MPS and CPU")
+            print(
+                "[distill_kd] WARN: Model parallelism training is experimental. CPU offload is disabled.")
+        model = split_model_across_devices(
+            model,
+            {
+                "strategy": multi_device_cfg.get("strategy", "alternate"),
+                "mps_device": device,
+                "cpu_device": torch.device("cpu"),
+                "split_point": multi_device_cfg.get("split_point"),
+            }
+        )
+
+    # Estimate memory savings from CPU offloading
+    if is_main_process and device.type == "mps":
+        memory_estimate = estimate_memory_savings(
+            model, use_cpu_offload=use_cpu_offload)
+        print(f"[distill_kd] Memory estimate:")
+        print(
+            f"  Model parameters: {memory_estimate['param_memory_gb']:.2f} GB")
+        print(
+            f"  Optimizer state: {memory_estimate['optimizer_memory_gb']:.2f} GB")
+        if use_cpu_offload:
+            print(
+                f"  MPS memory (with CPU offload): {memory_estimate['mps_memory_gb']:.2f} GB")
+            print(
+                f"  CPU memory (optimizer state): {memory_estimate['cpu_memory_gb']:.2f} GB")
+            print(f"  MPS savings: {memory_estimate['mps_savings_gb']:.2f} GB")
+        else:
+            print(
+                f"  MPS memory (no offload): {memory_estimate['mps_memory_gb']:.2f} GB")
+
+        # Check swap usage
+        try:
+            import subprocess
+            swap_output = subprocess.check_output(
+                ['sysctl', 'vm.swapusage'], text=True)
+            # Parse: "vm.swapusage: total = 19456.00M  used = 18377.00M  free = 1079.00M  (encrypted)"
+            if 'used =' in swap_output:
+                swap_used_mb = float(swap_output.split(
+                    'used =')[1].split('M')[0].strip())
+                swap_used_gb = swap_used_mb / 1024
+                if swap_used_gb > 5.0:
+                    print(
+                        f"[distill_kd] WARN: High swap usage detected: {swap_used_gb:.2f} GB")
+                    print(f"  This will cause significant performance degradation")
+                    print(f"  CPU offloading should reduce swap usage")
+                else:
+                    print(
+                        f"[distill_kd] Swap usage: {swap_used_gb:.2f} GB (normal)")
+        except Exception:
+            pass  # Skip swap check if it fails
+
+    # Create optimizer with optional CPU offloading
+    # Note: CPU offload + model parallelism is not supported (enforced above)
+    if use_cpu_offload and device.type == "mps":
+        opt_cfg = cfg.get("optimizer", {})
+        opt_name = opt_cfg.get("name", "adamw").lower()
+        lr = opt_cfg.get("lr", 2e-4)
+        betas = opt_cfg.get("betas", [0.9, 0.95])
+        weight_decay = opt_cfg.get("weight_decay", 0.1)
+
+        optimizer_class = torch.optim.AdamW if opt_name == "adamw" else torch.optim.Adam
+        optimizer = create_multi_device_optimizer(
+            model,
+            optimizer_class,
+            {
+                "lr": lr,
+                "betas": tuple(betas),
+                "weight_decay": weight_decay,
+            },
+            use_cpu_offload=True,
+            param_device=device if not use_model_parallelism else None,  # Auto-detect if model split
+        )
+        if is_main_process:
+            print("[distill_kd] Created optimizer with CPU offloading enabled")
+    else:
+        # Standard optimizer (no CPU offload)
+        # If model parallelism is enabled, this is experimental
+        if use_model_parallelism and is_main_process:
+            print("[distill_kd] WARN: Using standard optimizer with model parallelism (experimental)")
+        optimizer = create_optimizer(model, cfg)
 
     # Setup FP16 scaler
     train_cfg = cfg.get("train", {})
@@ -2459,14 +2750,131 @@ def main():
     # Create learning rate scheduler with warmup and cosine annealing
     # Based on our toy model optimizations for better convergence
     total_steps = train_cfg.get("steps", 10000)
+    opt_cfg = cfg.get("optimizer", {})
+    lr_schedule_type = opt_cfg.get("lr_schedule", "adaptive_cosine")
+    base_lr = opt_cfg.get("lr", 2e-4)
 
-    # Adaptive warmup: longer for larger models, shorter for smaller/fast training
-    model_size_factor = math.log(
-        max(1, sum(p.numel() for p in model.parameters()))) / 10
-    base_warmup_pct = 0.1  # 10% of training
-    adaptive_warmup_pct = min(
-        0.2, max(0.05, base_warmup_pct * model_size_factor))
-    warmup_steps = int(total_steps * adaptive_warmup_pct)
+    # Short-run schedule mode: fixed warmup, explicit decay
+    if lr_schedule_type == "short_run_cosine":
+        warmup_steps = opt_cfg.get("warmup_steps", 50)
+        min_lr = opt_cfg.get("min_lr", base_lr * 0.05)
+        min_lr_factor = min_lr / base_lr  # Relative to base LR
+
+        if is_main_process:
+            print(
+                f"[distill_kd] LR Schedule: short_run_cosine")
+            print(
+                f"[distill_kd] Warmup steps: {warmup_steps} (fixed, not adaptive)")
+            print(
+                f"[distill_kd] Decay: {base_lr:.2e} → {min_lr:.2e} ({min_lr_factor:.1%} of peak)")
+
+        def lr_lambda(step):
+            if step < warmup_steps:
+                # Linear warmup from 0 to base_lr
+                return step / max(1, warmup_steps)
+            else:
+                # Cosine decay from base_lr to min_lr
+                progress = (step - warmup_steps) / \
+                    max(1, total_steps - warmup_steps)
+                # Cosine decay: starts at 1.0, ends at min_lr_factor
+                cosine_decay = min_lr_factor + \
+                    (1.0 - min_lr_factor) * 0.5 * \
+                    (1 + torch.cos(torch.tensor(progress * 3.14159)))
+                return cosine_decay
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
+    # Constant LR schedule (for fine-tuning/cooldown)
+    elif lr_schedule_type == "constant":
+        warmup_steps = opt_cfg.get("warmup_steps", 0)
+
+        if is_main_process:
+            print(
+                f"[distill_kd] LR Schedule: constant (no decay)")
+            print(
+                f"[distill_kd] Warmup steps: {warmup_steps}")
+
+        def lr_lambda(step):
+            if step < warmup_steps:
+                return step / max(1, warmup_steps)
+            else:
+                return 1.0
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
+    # Default: adaptive warmup + cosine annealing (for long runs)
+    else:
+        # Adaptive warmup: longer for larger models, shorter for smaller/fast training
+        model_size_factor = math.log(
+            max(1, sum(p.numel() for p in model.parameters()))) / 10
+        base_warmup_pct = 0.1  # 10% of training
+        adaptive_warmup_pct = min(
+            0.2, max(0.05, base_warmup_pct * model_size_factor))
+        warmup_steps = int(total_steps * adaptive_warmup_pct)
+
+        if is_main_process:
+            print(
+                f"[distill_kd] LR Schedule: adaptive_cosine (default)")
+            print(
+                f"[distill_kd] Warmup steps: {warmup_steps} (adaptive, {warmup_steps/total_steps*100:.1f}% of total)")
+
+        def lr_lambda(step):
+            if step < warmup_steps:
+                # Linear warmup
+                return step / max(1, warmup_steps)
+            else:
+                # Cosine annealing with final LR floor
+                progress = (step - warmup_steps) / \
+                    max(1, total_steps - warmup_steps)
+                cosine_decay = 0.5 * \
+                    (1 + torch.cos(torch.tensor(progress * 3.14159)))
+                min_lr_factor = 0.01  # Don't decay below 1% of peak LR
+                return max(min_lr_factor, cosine_decay)
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
+    # Determine resume vs init semantics
+    # resume_from_checkpoint: True continuation (restore scheduler, optimizer, global_step)
+    # base_checkpoint only: Init weights only (new scheduler, new optimizer, start_step=0)
+    train_cfg = cfg.get("train", {})
+    resume_from_checkpoint = train_cfg.get("resume_from_checkpoint")
+
+    # Restore scheduler state ONLY if explicitly resuming (not just loading weights)
+    if resume_from_checkpoint:
+        # True resume: restore scheduler state to continue training
+        try:
+            from training.safe_checkpoint_loading import safe_load_checkpoint
+            checkpoint = safe_load_checkpoint(
+                resume_from_checkpoint, map_location="cpu")
+            scheduler_state = checkpoint.get(
+                "meta", {}).get("scheduler_state_dict")
+            if scheduler_state is not None:
+                try:
+                    scheduler.load_state_dict(scheduler_state)
+                    if is_main_process:
+                        print(
+                            "[distill_kd] Restored scheduler state from resume checkpoint")
+                        # Verify scheduler step matches checkpoint step
+                        checkpoint_step = checkpoint.get("step", 0)
+                        scheduler_last_epoch = scheduler.state_dict().get("last_epoch", -1)
+                        if checkpoint_step != scheduler_last_epoch + 1:
+                            print(
+                                f"[distill_kd] WARN: Scheduler step ({scheduler_last_epoch + 1}) "
+                                f"does not match checkpoint step ({checkpoint_step})"
+                            )
+                except Exception as e:
+                    print(
+                        f"[distill_kd] WARN: Failed to restore scheduler state: {e}")
+                    print("[distill_kd] Scheduler will start from beginning")
+        except Exception as e:
+            print(
+                f"[distill_kd] WARN: Could not load scheduler state from resume checkpoint: {e}")
+    elif base_checkpoint:
+        # Init from checkpoint: do NOT restore scheduler state
+        # This is a new training run starting from pretrained weights
+        if is_main_process:
+            print(
+                "[distill_kd] Initializing from checkpoint (new schedule, scheduler state NOT restored)")
 
     # Adaptive gradient clipping based on model size
     model_params = sum(p.numel() for p in model.parameters())
@@ -2479,27 +2887,26 @@ def main():
 
     if is_main_process:
         print(
-            f"[distill_kd] LR Schedule: {warmup_steps} warmup steps, {total_steps} total steps")
-        print(
             f"[distill_kd] Gradient Clipping: {grad_clip_norm} (adaptive for {model_params:,} params)"
         )
-
-    def lr_lambda(step):
-        if step < warmup_steps:
-            # Linear warmup
-            return step / max(1, warmup_steps)
-        else:
-            # Cosine annealing with final LR floor
-            progress = (step - warmup_steps) / \
-                max(1, total_steps - warmup_steps)
-            cosine_decay = 0.5 * \
-                (1 + torch.cos(torch.tensor(progress * 3.14159)))
-            min_lr_factor = 0.01  # Don't decay below 1% of peak LR
-            return max(min_lr_factor, cosine_decay)
-
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
     use_fp16 = train_cfg.get("fp16", False)
-    scaler = torch.cuda.amp.GradScaler() if use_fp16 and device.type == "cuda" else None
+    # Device-agnostic FP16/AMP handling:
+    # - CUDA: Full AMP support (GradScaler + autocast)
+    # - MPS/CPU: No AMP support (full precision training)
+    # This prevents issues when use_fp16=True is set but device doesn't support it
+    if use_fp16:
+        if device.type == "cuda":
+            scaler = torch.amp.GradScaler("cuda")
+        elif device.type == "mps":
+            # MPS doesn't support FP16 scaler yet, disable it
+            scaler = None
+            if is_main_process:
+                print(
+                    "[distill_kd] WARN: MPS doesn't support FP16 GradScaler, disabling FP16 scaling")
+        else:
+            scaler = None
+    else:
+        scaler = None
 
     # Automatic memory optimization for large models
     model_params = sum(p.numel() for p in model.parameters())
@@ -2531,46 +2938,158 @@ def main():
         torch.backends.cudnn.allow_tf32 = True
         print("[distill_kd] Enabled TF32 acceleration")
 
-    # Resume from checkpoint if specified
+    # Determine resume vs init semantics
+    # resume_from_checkpoint (config): True continuation (restore scheduler, optimizer, global_step)
+    # base_checkpoint (config): Init weights only (new scheduler, new optimizer, start_step=0)
+    # args.resume (CLI): Explicit resume path (overrides config)
+    train_cfg = cfg.get("train", {})
+    resume_from_checkpoint = train_cfg.get("resume_from_checkpoint")
     start_step = 0
+    restore_scheduler_state = False
 
     # Check for recovery checkpoint if no explicit resume specified
+    recovery_metadata = None
     if not args.resume:
         recovery_result = get_recovery_checkpoint(output_dir)
         if recovery_result:
-            checkpoint_path, dataset_position = recovery_result
+            checkpoint_path, recovery_metadata = recovery_result
             if is_main_process:
                 print(
                     f"[distill_kd] Found recovery checkpoint: {checkpoint_path}")
-                print(f"[distill_kd] Dataset position: {dataset_position}")
+                if recovery_metadata.get("samples_seen"):
+                    print(
+                        f"[distill_kd] Samples seen (telemetry): {recovery_metadata['samples_seen']}")
             args.resume = str(checkpoint_path)
 
+    # Determine which checkpoint to use and what to restore
+    checkpoint_to_resume = None
     if args.resume:
-        print(f"[distill_kd] Resuming from checkpoint: {args.resume}")
+        # CLI resume takes precedence
+        checkpoint_to_resume = args.resume
+        restore_scheduler_state = True  # CLI resume is always full resume
+        if is_main_process:
+            print(
+                f"[distill_kd] Resuming from CLI checkpoint: {checkpoint_to_resume}")
+    elif resume_from_checkpoint:
+        # Config-based resume
+        checkpoint_to_resume = resume_from_checkpoint
+        restore_scheduler_state = True  # Explicit resume_from_checkpoint is full resume
+        if is_main_process:
+            print(
+                f"[distill_kd] Resuming from config checkpoint: {checkpoint_to_resume}")
+    elif base_checkpoint:
+        # Init from checkpoint (weights only, new schedule)
+        checkpoint_to_resume = base_checkpoint
+        restore_scheduler_state = False  # base_checkpoint is init-only
+        if is_main_process:
+            print(
+                f"[distill_kd] Initializing weights from checkpoint: {checkpoint_to_resume}")
+            print(
+                "[distill_kd] Starting new training run (scheduler state NOT restored)")
+
+    if checkpoint_to_resume:
         from training.safe_checkpoint_loading import safe_load_checkpoint
         checkpoint = safe_load_checkpoint(
-            args.resume, map_location=str(device))
+            checkpoint_to_resume, map_location=str(device))
 
-        # Restore step number
-        if "step" in checkpoint:
-            start_step = checkpoint["step"]
-            print(f"[distill_kd] Resuming from step {start_step}")
-        else:
-            print(
-                "[distill_kd] WARN: Checkpoint missing 'step' field, starting from step 0")
-
-        # Restore optimizer state if available
-        if "optimizer_state_dict" in checkpoint:
-            try:
-                optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-                print("[distill_kd] Optimizer state restored from checkpoint")
-            except Exception as e:
+        # Restore step number only if resuming (not init)
+        if restore_scheduler_state:
+            if "step" in checkpoint:
+                start_step = checkpoint["step"]
+                print(f"[distill_kd] Resuming from step {start_step}")
+            else:
                 print(
-                    f"[distill_kd] WARN: Failed to restore optimizer state: {e}")
-                print("[distill_kd] Continuing with fresh optimizer state")
+                    "[distill_kd] WARN: Checkpoint missing 'step' field, starting from step 0")
         else:
-            print(
-                "[distill_kd] WARN: Checkpoint missing optimizer state, using fresh optimizer")
+            # Init from checkpoint: start from step 0
+            start_step = 0
+            if is_main_process:
+                print(
+                    "[distill_kd] Initializing from checkpoint, starting from step 0")
+
+        # Validate device configuration compatibility
+        checkpoint_device_config = checkpoint.get("meta", {}).get("device_config")
+        model_for_check = model.module if isinstance(model, DDP) else model
+        current_param_devices = {str(p.device) for p in model_for_check.parameters()}
+        try:
+            from training.multi_device_utils import CPUOffloadOptimizer
+            current_is_cpu_offload = isinstance(optimizer, CPUOffloadOptimizer)
+        except ImportError:
+            current_is_cpu_offload = False
+
+        device_config_mismatch = False
+        if checkpoint_device_config:
+            checkpoint_model_parallel = checkpoint_device_config.get("model_parallel", False)
+            checkpoint_cpu_offload = checkpoint_device_config.get("cpu_offload", False)
+            current_model_parallel = len(current_param_devices) > 1
+
+            if checkpoint_model_parallel != current_model_parallel:
+                device_config_mismatch = True
+                if is_main_process:
+                    print(
+                        f"[distill_kd] WARN: Device config mismatch - model_parallel: "
+                        f"checkpoint={checkpoint_model_parallel}, current={current_model_parallel}"
+                    )
+            if checkpoint_cpu_offload != current_is_cpu_offload:
+                device_config_mismatch = True
+                if is_main_process:
+                    print(
+                        f"[distill_kd] WARN: Device config mismatch - cpu_offload: "
+                        f"checkpoint={checkpoint_cpu_offload}, current={current_is_cpu_offload}"
+                    )
+
+        # Validate model architecture hash if available
+        checkpoint_arch_hash = checkpoint.get("meta", {}).get("model_arch_hash")
+        if checkpoint_arch_hash:
+            try:
+                import hashlib
+                current_arch_buffer = []
+                for name, param in model_for_check.named_parameters():
+                    current_arch_buffer.append(f"{name}:{tuple(param.shape)}:{str(param.dtype)}")
+                current_arch_str = "|".join(sorted(current_arch_buffer))
+                current_arch_hash = hashlib.sha256(current_arch_str.encode("utf-8")).hexdigest()
+                
+                if checkpoint_arch_hash != current_arch_hash:
+                    raise RuntimeError(
+                        f"Model architecture mismatch: checkpoint arch_hash={checkpoint_arch_hash[:16]}..., "
+                        f"current arch_hash={current_arch_hash[:16]}.... "
+                        f"Cannot load optimizer state with architecture mismatch."
+                    )
+            except Exception as e:
+                if is_main_process:
+                    print(f"[distill_kd] WARN: Could not validate model architecture hash: {e}")
+
+        # Restore optimizer state only if resuming (not init) and device config matches
+        if restore_scheduler_state:
+            if device_config_mismatch:
+                if is_main_process:
+                    print(
+                        "[distill_kd] WARN: Device config changed between runs. "
+                        "Skipping optimizer state restoration (weights loaded, optimizer reset)."
+                    )
+                    print(
+                        "[distill_kd] To force optimizer state load despite mismatch, "
+                        "use --force-load-optimizer-state flag (not recommended)."
+                    )
+            elif "optimizer_state_dict" in checkpoint:
+                try:
+                    # For CPU-offloaded optimizers, load state dict (it will move to CPU)
+                    # For regular optimizers, state dict may be on any device
+                    optimizer.load_state_dict(
+                        checkpoint["optimizer_state_dict"])
+                    print("[distill_kd] Optimizer state restored from checkpoint")
+                except Exception as e:
+                    print(
+                        f"[distill_kd] WARN: Failed to restore optimizer state: {e}")
+                    print("[distill_kd] Continuing with fresh optimizer state")
+            else:
+                print(
+                    "[distill_kd] WARN: Checkpoint missing optimizer state, using fresh optimizer")
+        else:
+            # Init from checkpoint: use fresh optimizer
+            if is_main_process:
+                print(
+                    "[distill_kd] Initializing from checkpoint, using fresh optimizer state")
 
         # Restore scaler state if using FP16 and available
         if use_fp16 and scaler is not None:
@@ -2645,8 +3164,39 @@ def main():
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         if "step" in checkpoint:
             start_step = checkpoint["step"]
-        if scaler and "scaler_state_dict" in checkpoint:
-            scaler.load_state_dict(checkpoint["scaler_state_dict"])
+        if scaler and "scaler_state_dict" in checkpoint.get("meta", {}):
+            scaler.load_state_dict(checkpoint["meta"]["scaler_state_dict"])
+
+        # Restore scheduler state ONLY if resuming (not init)
+        if restore_scheduler_state:
+            if "meta" in checkpoint and "scheduler_state_dict" in checkpoint["meta"]:
+                scheduler_state = checkpoint["meta"]["scheduler_state_dict"]
+                if scheduler_state is not None:
+                    try:
+                        scheduler.load_state_dict(scheduler_state)
+                        if is_main_process:
+                            print(
+                                "[distill_kd] Restored scheduler state from resume checkpoint")
+                            # Verify scheduler step matches checkpoint step
+                            scheduler_last_epoch = scheduler.state_dict().get("last_epoch", -1)
+                            if start_step != scheduler_last_epoch + 1:
+                                print(
+                                    f"[distill_kd] WARN: Scheduler step ({scheduler_last_epoch + 1}) "
+                                    f"does not match resume step ({start_step})"
+                                )
+                    except Exception as e:
+                        print(
+                            f"[distill_kd] WARN: Failed to restore scheduler state: {e}")
+                        print("[distill_kd] Scheduler will start from beginning")
+                else:
+                    if is_main_process:
+                        print(
+                            "[distill_kd] Checkpoint missing scheduler state, using fresh scheduler")
+        else:
+            # Init from checkpoint: scheduler starts fresh
+            if is_main_process:
+                print(
+                    "[distill_kd] Initializing from checkpoint, scheduler starts from beginning")
 
         # Restore RNG states if available for reproducibility
         if "meta" in checkpoint and "rng_states" in checkpoint["meta"]:
@@ -2696,7 +3246,9 @@ def main():
     max_seq_len = max(seq_lengths) if seq_lengths else 4096
 
     # Optimize data loading: prefetch and pin memory for better GPU utilization
-    num_workers = train_cfg.get("dataloader_workers", 4)
+    # On macOS/MPS, use num_workers=0 to avoid multiprocessing deadlocks with tokenizers
+    default_num_workers = 0 if device.type == "mps" else 4
+    num_workers = train_cfg.get("dataloader_workers", default_num_workers)
     prefetch_factor = train_cfg.get("prefetch_factor", 2)
 
     # Adaptive batch size based on sequence length and model size
@@ -2745,11 +3297,45 @@ def main():
         latent_curriculum=latent_curriculum,
     )
 
-    # Validate dataset fingerprint if available
-    if dataset.dataset_fingerprint:
+    # Validate dataset fingerprint on resume
+    current_dataset_fingerprint = dataset.dataset_fingerprint
+    current_dataset_len = len(dataset)
+
+    if current_dataset_fingerprint:
         print(
-            f"[distill_kd] Dataset fingerprint: {dataset.dataset_fingerprint}")
-        # Store fingerprint in checkpoint metadata for traceability
+            f"[distill_kd] Current dataset fingerprint: {current_dataset_fingerprint}")
+        print(f"[distill_kd] Current dataset length: {current_dataset_len}")
+
+        # Check if resuming and validate fingerprint
+        if recovery_metadata and recovery_metadata.get("dataset_fingerprint"):
+            saved_fingerprint = recovery_metadata["dataset_fingerprint"]
+            saved_dataset_len = recovery_metadata.get("dataset_len")
+
+            if saved_fingerprint != current_dataset_fingerprint:
+                error_msg = (
+                    f"[distill_kd] ERROR: Dataset fingerprint mismatch!\n"
+                    f"  Saved fingerprint: {saved_fingerprint}\n"
+                    f"  Current fingerprint: {current_dataset_fingerprint}\n"
+                    f"  This indicates the dataset file has changed.\n"
+                    f"  Resume would train on different data, which may cause issues.\n"
+                    f"  To force resume anyway, use --force-resume-with-changed-dataset"
+                )
+                if not args.force_resume_with_changed_dataset:
+                    print(error_msg)
+                    raise ValueError(
+                        "Dataset fingerprint mismatch. Use --force-resume-with-changed-dataset to override.")
+                else:
+                    print(f"[distill_kd] WARNING: {error_msg}")
+                    print(
+                        "[distill_kd] Proceeding with forced resume (dataset state reset)")
+            elif saved_dataset_len and saved_dataset_len != current_dataset_len:
+                print(
+                    f"[distill_kd] WARNING: Dataset length changed: "
+                    f"saved={saved_dataset_len}, current={current_dataset_len}"
+                )
+            else:
+                print("[distill_kd] Dataset fingerprint matches checkpoint ✓")
+
         if is_main_process:
             print(
                 "[distill_kd] Dataset fingerprint will be logged in checkpoint metadata")
@@ -2851,6 +3437,27 @@ def main():
     save_every = train_cfg.get("save_every", 2000)
     log_every = train_cfg.get("log_every", 50)
 
+    # Initialize memory monitor if enabled
+    memory_monitor = None
+    memory_log_interval = train_cfg.get("memory_log_interval", 10)
+    if memory_log_interval > 0:
+        try:
+            from training.memory_monitor import MemoryMonitor
+            memory_log_path = output_dir / "memory_metrics.jsonl"
+            memory_monitor = MemoryMonitor(
+                log_interval=memory_log_interval,
+                output_path=str(memory_log_path),
+                red_zone_mem_percent=90.0,
+                red_zone_swap_gb=5.0,
+            )
+            if is_main_process:
+                print(
+                    f"[distill_kd] Memory monitoring enabled (logs every {memory_log_interval} steps)")
+        except ImportError:
+            if is_main_process:
+                print(
+                    "[distill_kd] WARN: psutil not available, memory monitoring disabled")
+
     # Initialize training tracer with unique run name
     # Use config run_name if provided, otherwise generate from total_steps
     run_name = cfg.get("tracing", {}).get("run_name")
@@ -2903,6 +3510,9 @@ def main():
     qat_enabled = False
     qat_applied = False
 
+    # Track training start time for ETA calculation
+    training_start_time = time.time()
+
     # Track current data shard index for checkpointing
     current_shard_index = 0  # For single-shard datasets, this is 0
 
@@ -2940,20 +3550,20 @@ def main():
                         else:
                             model = apply_qat_to_model(model, qat_cfg, device)
 
-                    # Recreate optimizer with lower LR for QAT
-                    qat_lr = base_lr * qat_lr_multiplier
-                    print(
-                        f"[distill_kd] Adjusting LR for QAT: {base_lr} → {qat_lr}")
-                    optimizer = create_optimizer(
-                        model.module if isinstance(model, DDP) else model,
-                        {
-                            **cfg.get("optimizer", {}),
-                            "lr": qat_lr,
-                        },
-                    )
+                        # Recreate optimizer with lower LR for QAT (only once when QAT is first enabled)
+                        qat_lr = base_lr * qat_lr_multiplier
+                        print(
+                            f"[distill_kd] Adjusting LR for QAT: {base_lr} → {qat_lr}")
+                        optimizer = create_optimizer(
+                            model.module if isinstance(model, DDP) else model,
+                            {
+                                **cfg.get("optimizer", {}),
+                                "lr": qat_lr,
+                            },
+                        )
 
-                    qat_applied = True
-                    qat_enabled = True
+                        qat_applied = True
+                        qat_enabled = True
 
                     # Check QAT stability periodically (every 100 steps)
                     if qat_enabled and step % 100 == 0:
@@ -3010,6 +3620,10 @@ def main():
                     grad_accum_counter = (grad_accum_counter + 1) % grad_accum
                     step += 1
 
+                    # Log memory metrics if monitoring enabled
+                    if memory_monitor is not None:
+                        memory_monitor.log_step(step, device=device)
+
                     # Update progress metrics
                     loss_value, loss_components, lr = calculate_metrics_from_step(
                         loss_dict.get("total", torch.tensor(0.0)),
@@ -3025,8 +3639,16 @@ def main():
                         tokens_processed=step * effective_batch_size * max_seq_len,
                     )
 
-                    # Log learning rate and memory usage periodically
-                    if step % 100 == 0 and is_main_process:
+                    # Progress logging: more frequent early on, then every 100 steps
+                    # Early steps (1-100): log every 10 steps to confirm training is working
+                    # Later steps: log every 100 steps for less noise
+                    log_progress = False
+                    if step <= 100:
+                        log_progress = (step % 10 == 0) or (step == 1)
+                    else:
+                        log_progress = (step % 100 == 0)
+
+                    if log_progress and is_main_process:
                         current_lr = optimizer.param_groups[0]["lr"]
 
                         # Memory usage tracking
@@ -3039,16 +3661,40 @@ def main():
 
                         # Enhanced progress reporting for large models
                         progress_pct = step / total_steps * 100
-                        eta_hours = (total_steps - step) / 100 * \
-                            0.1  # Rough ETA based on steps/second
+                        # Rough ETA calculation based on steps completed
+                        if step > start_step:
+                            elapsed_time = time.time() - training_start_time
+                            steps_completed = step - start_step
+                            if elapsed_time > 0 and steps_completed > 0:
+                                steps_per_sec = steps_completed / elapsed_time
+                                eta_seconds = (
+                                    total_steps - step) / steps_per_sec
+                                eta_hours = eta_seconds / 3600
+                            else:
+                                eta_hours = 0
+                        else:
+                            eta_hours = 0
+
+                        # Build loss string with key components
+                        loss_total = loss_dict.get('total', 0)
+                        loss_str_parts = [f"loss={loss_total:.4f}"]
+                        if 'ce_teacher' in loss_dict:
+                            loss_str_parts.append(
+                                f"ce_teacher={loss_dict['ce_teacher']:.4f}")
+                        if 'ce_ground_truth' in loss_dict:
+                            loss_str_parts.append(
+                                f"ce_gt={loss_dict['ce_ground_truth']:.4f}")
+                        loss_str = ", ".join(loss_str_parts)
 
                         if is_large_model:
                             print(
-                                f"[distill_kd] Step {step}/{total_steps} ({progress_pct:.1f}%): loss={loss_dict.get('total', 0):.4f}, lr={current_lr:.2e}{memory_info}, ETA~{eta_hours:.1f}h"
+                                f"[distill_kd] Step {step}/{total_steps} ({progress_pct:.1f}%): {loss_str}, lr={current_lr:.2e}{memory_info}, ETA~{eta_hours:.1f}h",
+                                flush=True
                             )
                         else:
                             print(
-                                f"[distill_kd] Step {step}/{total_steps}: loss={loss_dict.get('total', 0):.4f}, lr={current_lr:.2e}{memory_info}"
+                                f"[distill_kd] Step {step}/{total_steps}: {loss_str}, lr={current_lr:.2e}{memory_info}",
+                                flush=True
                             )
                 except Exception as e:
                     print(
@@ -3093,6 +3739,45 @@ def main():
                         except Exception as cache_e:
                             print(
                                 f"[distill_kd] WARN: Failed to clear GPU cache: {cache_e}")
+                    elif device.type == "mps":
+                        try:
+                            # MPS memory cleanup
+                            import gc
+                            import torch
+
+                            # Force garbage collection
+                            collected = gc.collect()
+                            print(
+                                f"[distill_kd] Garbage collection freed {collected} objects")
+
+                            # MPS doesn't have explicit cache clearing like CUDA, but we can
+                            # try to free memory by clearing optimizer state if OOM occurred
+                            if "out of memory" in str(e).lower():
+                                print(
+                                    "[distill_kd] MPS OOM detected - attempting aggressive cleanup")
+                                # Clear optimizer state to free memory
+                                if hasattr(optimizer, 'state_dict'):
+                                    try:
+                                        # Clear optimizer state by reinitializing
+                                        # This is a last resort to free memory
+                                        print(
+                                            "[distill_kd] Clearing optimizer state to free MPS memory")
+                                        optimizer.state = {}  # Clear state dict
+                                    except Exception as opt_e:
+                                        print(
+                                            f"[distill_kd] WARN: Could not clear optimizer state: {opt_e}")
+
+                                # Clear any cached tensors in model components
+                                if hasattr(model, 'clear_cache'):
+                                    model.clear_cache()
+                                elif isinstance(model, DDP) and hasattr(model.module, 'clear_cache'):
+                                    model.module.clear_cache()
+
+                                print(
+                                    "[distill_kd] MPS memory cleanup completed")
+                        except Exception as cache_e:
+                            print(
+                                f"[distill_kd] WARN: Failed to clear MPS cache: {cache_e}")
 
                     # Track consecutive failures to prevent infinite loops
                     if not hasattr(train_step, "_consecutive_failures"):
@@ -3120,6 +3805,7 @@ def main():
                                 data_shard_index=current_shard_index,
                                 dataset_fingerprint=None,
                                 scaler=scaler,
+                                scheduler=scheduler,
                             )
                             print(
                                 "[distill_kd] Emergency checkpoint saved successfully")
@@ -3137,8 +3823,12 @@ def main():
                             optimizer.zero_grad()
 
                         # Clear any cached computations that might be corrupted
-                        if torch.cuda.is_available():
+                        if device.type == "cuda" and torch.cuda.is_available():
                             torch.cuda.empty_cache()
+                        elif device.type == "mps":
+                            # MPS doesn't have explicit cache clearing, but force GC
+                            import gc
+                            gc.collect()
 
                         print(
                             "[distill_kd] Cleared optimizer state and GPU cache after error")
@@ -3248,13 +3938,13 @@ def main():
 
                 should_save_checkpoint = False
                 is_regular_save = step % checkpoint_frequency == 0 and is_main_process
-                
+
                 # Always save checkpoint at milestones (10%, 25%, 50%, 75%, 90%, 100%)
                 total_steps = train_cfg.get("steps", 10000)
                 milestone_steps = [int(total_steps * pct)
                                    for pct in [0.1, 0.25, 0.5, 0.75, 0.9, 1.0]]
                 is_milestone = step in milestone_steps
-                
+
                 # Only save if we haven't already saved at this step
                 if (is_regular_save or is_milestone) and train_step._last_checkpoint_step != step:
                     should_save_checkpoint = True
@@ -3287,23 +3977,28 @@ def main():
                         data_shard_index=current_shard_index,
                         dataset_fingerprint=dataset.dataset_fingerprint,
                         scaler=scaler,
+                        scheduler=scheduler,
                     )
 
                     # Record checkpoint for recovery
-                    checkpoint_path = output_dir / f"checkpoint_{step}.pt"
+                    checkpoint_path = output_dir / f"checkpoint_step_{step}.pt"
+                    samples_seen = step * effective_batch_size  # Telemetry only, not for seeking
                     progress.record_checkpoint(
                         step=step,
                         checkpoint_path=checkpoint_path,
-                        dataset_position=step * effective_batch_size,
+                        samples_seen=samples_seen,
+                        dataset_fingerprint=dataset.dataset_fingerprint,
+                        dataset_len=len(dataset),
                     )
-                    
+
                     # Track last checkpoint step to prevent duplicate saves
                     train_step._last_checkpoint_step = step
 
         # Final checkpoint (only if not already saved at final step)
         if is_main_process:
             # Check if we already saved at the final step
-            last_checkpoint_step = getattr(train_step, "_last_checkpoint_step", -1)
+            last_checkpoint_step = getattr(
+                train_step, "_last_checkpoint_step", -1)
             if last_checkpoint_step != step:
                 # Capture RNG states for reproducibility
                 import random
@@ -3326,7 +4021,8 @@ def main():
                     loss_dict=loss_dict,
                     rng_states=rng_states,
                     data_shard_index=current_shard_index,
-                    dataset_fingerprint=dataset.dataset_fingerprint if hasattr(dataset, "dataset_fingerprint") else None,
+                    dataset_fingerprint=dataset.dataset_fingerprint if hasattr(
+                        dataset, "dataset_fingerprint") else None,
                     scaler=scaler,
                 )
 

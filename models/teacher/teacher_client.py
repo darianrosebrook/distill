@@ -70,7 +70,38 @@ TIER_LIMITS = {
 
 
 class TeacherClient:
-    """Client for querying teacher models for knowledge distillation."""
+    """
+    Client for querying teacher models for knowledge distillation.
+
+    Thread Safety:
+        This client is thread-safe for single-process usage. Multiple threads
+        can safely share one TeacherClient instance and make concurrent requests.
+        Concurrency is controlled via an internal semaphore based on API tier limits.
+
+    Rate Limiting:
+        The client implements proactive rate limiting by tracking RPM/TPM limits
+        from API response headers. When limits are approached, requests are throttled
+        to avoid 429 errors. Retry logic prioritizes Retry-After headers, falling
+        back to tier-aware exponential backoff.
+
+    Tier Detection:
+        API tier is auto-detected from rate limit headers. Tier detection is
+        monotone (upgrade-only) to prevent oscillation. Manual override via
+        MOONSHOT_TIER_OVERRIDE environment variable disables auto-detection.
+
+    Usage:
+        # HTTP endpoint
+        client = TeacherClient.from_endpoint("https://api.moonshot.ai/v1")
+
+        # With custom concurrency limit
+        client = TeacherClient.from_endpoint(
+            "https://api.moonshot.ai/v1",
+            max_concurrency=32
+        )
+
+        # Sample prompts
+        results = client.sample(["What is 2+2?", "Explain quantum computing"])
+    """
 
     def __init__(self, backend: str = "http", **kwargs):
         """
@@ -78,7 +109,13 @@ class TeacherClient:
 
         Args:
             backend: "http" or "hf" (HuggingFace)
-            **kwargs: Backend-specific arguments
+            **kwargs: Backend-specific arguments:
+                - endpoint: API endpoint URL (for http backend)
+                - api_key: API key (or set MOONSHOT_API_KEY env var)
+                - timeout: Request timeout in seconds (default: 600)
+                - max_retries: Maximum retry attempts (default: 5)
+                - retry_backoff_factor: Exponential backoff multiplier (default: 2.0)
+                - max_concurrency: Maximum concurrent requests (default: tier limit, capped at 64)
         """
         self.backend = backend
         self._model = None
@@ -143,6 +180,7 @@ class TeacherClient:
         timeout: int = 600,
         max_retries: int = 5,
         retry_backoff_factor: float = 2.0,
+        max_concurrency: Optional[int] = None,
     ):
         """
         Create client from HTTP endpoint.
@@ -153,6 +191,7 @@ class TeacherClient:
             timeout: Request timeout in seconds (default 600s for kimi-k2-thinking long responses)
             max_retries: Maximum retry attempts
             retry_backoff_factor: Exponential backoff multiplier
+            max_concurrency: Maximum concurrent requests (default: tier limit, capped at 64)
         """
         return cls(
             backend="http",
@@ -161,6 +200,7 @@ class TeacherClient:
             timeout=timeout,
             max_retries=max_retries,
             retry_backoff_factor=retry_backoff_factor,
+            max_concurrency=max_concurrency,
         )
 
     def _load_api_key_from_env(self) -> Optional[str]:
@@ -581,13 +621,11 @@ class TeacherClient:
                     if "rate" in k.lower() or "limit" in k.lower() or "retry" in k.lower()
                 }
                 if all_rate_headers:
-                    print(
-                        f"[TeacherClient] Rate limit related headers: {', '.join(f'{k}={v}' for k, v in all_rate_headers.items())}"
-                    )
+                    header_str = ', '.join(f'{k}={v}' for k, v in all_rate_headers.items())
+                    print(f"[TeacherClient] Rate limit related headers: {header_str}")
                 elif any(rate_limit_headers.values()):
-                    print(
-                        f"[TeacherClient] Rate limit headers: {', '.join(f'{k}={v}' for k, v in rate_limit_headers.items() if v)}"
-                    )
+                    header_str = ', '.join(f'{k}={v}' for k, v in rate_limit_headers.items() if v)
+                    print(f"[TeacherClient] Rate limit headers: {header_str}")
                 else:
                     print("[TeacherClient] No rate limit headers found in response")
 

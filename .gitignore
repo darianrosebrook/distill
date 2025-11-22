@@ -118,13 +118,25 @@ artifacts/
 artifacts/onnx/
 artifacts/coreml/
 
-# Data Files (large datasets)
-data/*.jsonl
-data/*.json
-data/*.parquet
-data/*.arrow
+# Data Files (large datasets) - kept in separate private repository
+# All data files are private to protect paid API-generated content
+data/**/*.jsonl
+data/**/*.json
+data/**/*.parquet
+data/**/*.arrow
+data/**/*.ndjson
+data/**/*.all_samples
+*.all_samples
 data/cache/
 data/**/cache/
+data/kd_cache/
+data/kd_cache_test/
+data/logits/
+data/_snapshot_*/
+data/_backup_*/
+data/checkpoints/
+data/checkpoints_test/
+data/test_checkpoints/
 *.npz
 *.npy
 *.np
@@ -204,16 +216,33 @@ apps/tools/caws/
 
 # Documentation Archive and Project Management
 docs-status/
-external/
-internal/
+/external/
+/internal/
+
+# Documentation organization (temporal and internal docs)
+docs/archive/
+docs/internal/
+docs/external/
+docs/reports/
 
 # Smoke test artifacts
 **/report.smoke.json
 **/results.smoke.jsonlmutants/
 
+# Reports directory - temporal reports moved to archive
+reports/readiness/*.json
+reports/readiness/*.jsonl
+reports/readiness/*.md
+reports/readiness/*.txt
+reports/*.json
+reports/*.md
+
 # Large generated files
-reports/readiness/todos.json
 mutants/training/distill_kd.py
+
+# Root-level data files
+*.jsonl
+*.ndjson
 
 
 mutants/

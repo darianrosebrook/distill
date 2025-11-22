@@ -1365,7 +1365,7 @@ During v3 implementation, we identified that the original multi-model approach w
 - ✅ **ANE Acceleration**: Hardware acceleration infrastructure operational with CoreML inference
 - ✅ **Real Inference**: CoreML Mistral inference enabled and functional
 - ✅ **Ollama Removal**: Ollama references removed from production code (deprecated in embedding providers)
-- ✅ **Type Migration**: All orchestration types migrated to `agent-agency-contracts`
+- ✅ **Type Migration**: All orchestration types use standardized contracts (see `runtime/orchestration/`)
 - ✅ **Memory Integration**: Memory system integrated into autonomous executor
 - ✅ **Council Integration**: All judge types use CoreML Mistral inference
 - ⚠️ **Embedding Migration**: CoreML-based embeddings planned (Ollama providers deprecated, pending CoreML implementation)

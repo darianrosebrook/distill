@@ -1,0 +1,17 @@
+# Data Directory
+# 
+# This directory contains private datasets generated from paid API calls.
+# The actual data files are tracked in a separate private git repository.
+#
+# To set up your data repository:
+# 1. Create a private git repository (e.g., distill-data-private)
+# 2. Copy your data files there
+# 3. Use git submodule to link it (see below), OR
+# 4. Keep data local-only and source from your private storage
+#
+# Example git submodule setup:
+#   git submodule add <private-repo-url> data/private
+#   git submodule update --init --recursive
+#
+# The infrastructure (schemas, generators, scripts) is tracked in this repo.
+# Only the actual dataset files (.jsonl, .json) are kept private.

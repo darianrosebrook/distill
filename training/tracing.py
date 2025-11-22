@@ -169,6 +169,9 @@ class TrainingTracer:
 
         # JSON log
         if self.json_log_path:
+            # Ensure directory exists (may have been deleted during training)
+            self.json_log_path.parent.mkdir(parents=True, exist_ok=True)
+            
             log_entry = {
                 "step": step,
                 "timestamp": timestamp,

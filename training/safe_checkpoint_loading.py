@@ -47,6 +47,7 @@ def safe_load_checkpoint(
             "optimizer_state_dict",
             "loss",
             "meta",
+            "scheduler_state_dict",  # May be in meta dict
         }
     
     # Default required keys for standard training checkpoints

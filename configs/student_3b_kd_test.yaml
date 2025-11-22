@@ -34,14 +34,24 @@ optimizer:
 
 train:
   seq_lengths: [1024]  # Single context length for first 3B KD run
-  micro_batch_size: 4
-  grad_accum: 4
+  micro_batch_size: 2  # Reduced from 4 to avoid MPS OOM (was hitting 75GB/81GB limit)
+  grad_accum: 8  # Increased from 4 to maintain effective batch size (2*8=16 vs 4*4=16)
   steps: 1500
   total_steps: 1500
   save_every: 100
   log_every: 50
-  fp16: true
+  fp16: false  # Disabled: MPS doesn't support FP16 scaler properly, causes memory issues
   grad_checkpointing: true
+  dataloader_workers: 0  # macOS+MPS: avoid fork deadlocks with HF tokenizers
+
+# Multi-device parallelization for Apple Silicon (CPU + MPS)
+# CPU offloading saves ~71GB MPS memory by keeping optimizer state on CPU
+# Model parallelism splits layers across MPS and CPU (slower but uses less MPS memory)
+multi_device:
+  enabled: false  # Set to true to enable model parallelism (splits layers across devices)
+  cpu_offload_optimizer: true  # Keep optimizer state on CPU (saves ~71GB MPS memory)
+  strategy: "alternate"  # "alternate" | "first_half_mps" | "custom"
+  # split_point: 10  # Only used if strategy="custom"
 
 training:  # Alias for validation
   steps: 1500
@@ -50,6 +60,9 @@ training:  # Alias for validation
   grad_accum_steps: 4
   lr: 2.0e-4
   save_every: 100
+  checkpoint_cleanup:
+    max_checkpoints: 3  # Keep most recent N checkpoints (plus milestones)
+    min_free_space_gb: 50.0  # Reduce retention if free space drops below this
 
 io:
   tokenizer_path: models/student/tokenizer

@@ -42,7 +42,8 @@ def sha256_state_dict(state_dict: Dict[str, torch.Tensor]) -> str:
 
         # Write actual tensor data as bytes
         # Convert to CPU and NumPy for serialization
-        if tensor.is_cuda:
+        # Handle both CUDA and MPS tensors (MPS tensors can't be converted to numpy directly)
+        if tensor.device.type in ("cuda", "mps"):
             tensor_cpu = tensor.cpu()
         else:
             tensor_cpu = tensor
@@ -62,10 +63,3 @@ def sha256_state_dict(state_dict: Dict[str, torch.Tensor]) -> str:
 
     content = buffer.getvalue()
     return hashlib.sha256(content).hexdigest()
-
-
-
-
-
-
-

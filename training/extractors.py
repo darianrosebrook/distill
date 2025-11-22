@@ -65,7 +65,10 @@ def extract_tool_name_span(
     tool_call = extract_tool_call(teacher_text, tool_names)
     if tool_call:
         tool_name = tool_call.get("name", "")
-        if tool_name:
+        # Ensure tool_name is a string, not a dict
+        if isinstance(tool_name, dict):
+            tool_name = tool_name.get("name", "") if isinstance(tool_name, dict) else str(tool_name)
+        if tool_name and isinstance(tool_name, str):
             # Find tool name in text
             # Look for pattern: "name": "tool_name"
             pattern = rf'"name"\s*:\s*"{re.escape(tool_name)}"'
