@@ -1,8 +1,9 @@
 teacher:
-  endpoint: "http://teacher.local"
-  temperature: 1.5
+  endpoint: "https://api.moonshot.cn/v1"  # Moonshot AI API (requires MOONSHOT_API_KEY env var)
+  model: "kimi-k2-thinking"  # kimi-k2-thinking model for deep reasoning
+  temperature: 1.0  # Recommended 1.0 for kimi-k2-thinking best performance
   top_p: 0.95
-  max_tokens: 1024
+  max_tokens: 16384  # ≥16K recommended for full reasoning_content + content
 losses:
   ce_on_teacher: true
   kl_div: true

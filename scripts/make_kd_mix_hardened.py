@@ -541,9 +541,9 @@ def main():
             f"[make_kd_mix_hardened] Recommended delay: {tier_limits.delay}s")
         print(
             f"[make_kd_mix_hardened] Concurrency limit: {tier_limits.concurrency}")
-        # Use tier concurrency limit, but cap at reasonable number for stability
-        max_workers = min(tier_limits.concurrency,
-                          50) if tier_limits.concurrency else 1
+        # Use tier-aware concurrency (90% of max, leaves 10% headroom for safety)
+        # For Tier 2: 100 * 0.9 = 90 concurrent requests
+        max_workers = min(tier_limits.concurrency - 10, 90) if tier_limits.concurrency else 1
         if max_workers > 1:
             print(
                 f"[make_kd_mix_hardened] Using {max_workers} concurrent workers for faster generation")

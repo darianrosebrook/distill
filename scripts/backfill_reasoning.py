@@ -62,8 +62,9 @@ class ReasoningBackfiller:
         if hasattr(self.client, "get_tier"):
             tier_obj = self.client.get_tier()
             tier_limits = self.client.get_tier_limits()
-            # Use tier concurrency limit, but cap at reasonable number for stability
-            self.max_workers = min(tier_limits.concurrency, 50) if tier_limits.concurrency else 1
+            # Use tier-aware concurrency (90% of max, leaves 10% headroom for safety)
+            # For Tier 2: 100 * 0.9 = 90 concurrent requests
+            self.max_workers = min(tier_limits.concurrency - 10, 90) if tier_limits.concurrency else 1
             if self.max_workers > 1:
                 print(f"[ReasoningBackfiller] Using {self.max_workers} concurrent workers")
 

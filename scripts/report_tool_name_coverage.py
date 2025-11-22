@@ -207,7 +207,9 @@ def generate_report(
         "|-----------|-------|",
     ])
     
-    for tool_name, count in stats["tool_name_counts"].most_common(10):
+    # Convert to sorted list
+    tool_name_items = sorted(stats["tool_name_counts"].items(), key=lambda x: -x[1])[:10]
+    for tool_name, count in tool_name_items:
         report_lines.append(f"| `{tool_name}` | {count:,} |")
     
     if len(stats["tool_name_counts"]) > 10:

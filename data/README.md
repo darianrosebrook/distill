@@ -90,3 +90,10 @@ python -m scripts.verify_contextual_set \
 - [`docs/CONTEXTUAL_DATASET_GENERATION.md`](../docs/CONTEXTUAL_DATASET_GENERATION.md) - Generation guide
 - [`docs/DATASET_CARD_CONTEXTUAL.md`](../docs/DATASET_CARD_CONTEXTUAL.md) - Dataset schema
 - [`scripts/README.md`](../scripts/README.md) - Generation scripts
+
+## Version v1.1
+
+**Promoted**: 2025-11-22 01:48:52  
+**Dataset**: `worker_production_tools_v1.jsonl`  
+**Status**: ⚠️ Check coverage report
+

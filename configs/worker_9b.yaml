@@ -26,7 +26,7 @@ train:
   grad_checkpointing: true
 io:
   tokenizer_path: models/student/tokenizer  # HuggingFace tokenizer path (e.g., "meta-llama/Llama-2-7b-hf" or local path)
-  train_shards: [data/kd_mix.jsonl]
+  train_shards: [data/worker_production_train.jsonl]  # Canonical training file (v1.1 with tool-name inference)
   val_shards: [data/val.jsonl]
 role: "worker"
 distillation:
@@ -46,7 +46,8 @@ distillation:
     heuristic: 0.5  # Half weight for text-matched
     original: 1.0   # Full weight for original labels
 kd:
-  teacher_endpoint: "http://teacher.local"
+  teacher_endpoint: "https://api.moonshot.cn/v1"  # Moonshot AI API (requires MOONSHOT_API_KEY env var)
+  teacher_model: "kimi-k2-thinking"  # kimi-k2-thinking model for deep reasoning
   kd_temperature: 2.0
   teacher_logits_available: false
 curriculum:

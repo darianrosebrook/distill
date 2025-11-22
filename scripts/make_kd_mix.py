@@ -185,8 +185,8 @@ def main():
         tier_limits = client.get_tier_limits()
         if tier and tier_limits:
             max_concurrency = tier_limits.concurrency
-            # Use 80% of max to be safe
-            concurrency = max(1, int(max_concurrency * 0.8))
+            # Use 90% of max to optimize for Tier 2+ (leaves 10% headroom for safety)
+            concurrency = max(1, int(max_concurrency * 0.9))
             print(
                 f"[make_kd_mix] Auto-detected concurrency: {concurrency} (from tier {tier.value} limit: {max_concurrency})")
         else:
